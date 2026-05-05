@@ -27,6 +27,36 @@ func TestTenantScopedDBRawRejectsZeroTenantID(t *testing.T) {
 	}
 }
 
+func TestTenantScopedDBRawRejectsEmptyStatement(t *testing.T) {
+	gormDB, err := gorm.Open(postgres.New(postgres.Config{
+		DSN:                  "host=127.0.0.1 user=invalid dbname=invalid sslmode=disable",
+		PreferSimpleProtocol: true,
+	}), &gorm.Config{DisableAutomaticPing: true})
+	if err != nil {
+		t.Fatalf("open inert gorm db: %v", err)
+	}
+
+	tenantDB := db.NewTenantScopedDB(gormDB)
+	result := tenantDB.Raw(context.Background(), "   ", uuid.New())
+	if result.Error == nil || result.Error.Error() != "raw statement empty" {
+		t.Fatalf("Raw error = %v, want empty statement", result.Error)
+	}
+}
+
+func TestTenantPluginInitializeRegistersCallbacks(t *testing.T) {
+	gormDB, err := gorm.Open(postgres.New(postgres.Config{
+		DSN:                  "host=127.0.0.1 user=invalid dbname=invalid sslmode=disable",
+		PreferSimpleProtocol: true,
+	}), &gorm.Config{DisableAutomaticPing: true})
+	if err != nil {
+		t.Fatalf("open inert gorm db: %v", err)
+	}
+
+	if err := (db.TenantPlugin{}).Initialize(gormDB); err != nil {
+		t.Fatalf("initialize tenant plugin: %v", err)
+	}
+}
+
 func TestTenantFromContextRejectsMissingTenant(t *testing.T) {
 	if _, ok := db.TenantFromContext(context.Background()); ok {
 		t.Fatal("empty context unexpectedly had tenant")

@@ -667,10 +667,10 @@ export function TenantSwitcher() {
     <Popover label="Acme Operations">
       <div className="grid gap-2">
         <TextInput label="Search tenants" placeholder="acme" />
-        <button className="rounded-[var(--radius-md)] px-2 py-2 text-left text-[13px] hover:bg-bg-code">
+        <div className="rounded-[var(--radius-md)] px-2 py-2 text-left text-[13px] hover:bg-bg-code">
           <TenantGlyph className="mr-2 inline h-4 w-4 text-context-tenant" />
           Acme Operations <IdentifierPill value="acme" label="Tenant slug" />
-        </button>
+        </div>
         <Button size="sm" variant="ghost">
           Create tenant
         </Button>
@@ -751,7 +751,7 @@ export function KeyRotationTimeline() {
 
 export function AuditEntry({ action, resource }: { action: string; resource: string }) {
   return (
-    <article className="flex items-center gap-3 border-b border-border-subtle py-3 text-[13px]">
+    <article className="grid gap-2 border-b border-border-subtle py-3 text-[13px] sm:flex sm:items-center sm:gap-3">
       <Avatar name="Cypra Admin" sub="00000000-0000-0000-0000-00000000cafe" size="sm" />
       <span className="flex-1">
         <span className="font-medium">Cypra Admin</span> <Tag variant="info">{action}</Tag>
@@ -1054,14 +1054,24 @@ export function SaveBar({ dirtyCount }: { dirtyCount: number }) {
   );
 }
 
-export function SidebarNav({ collapsed = false }: { collapsed?: boolean }) {
+export function SidebarNav({
+  collapsed = false,
+  className,
+  label = "Dashboard navigation",
+}: {
+  collapsed?: boolean;
+  className?: string;
+  label?: string;
+}) {
   const items = ["Overview", "Users", "Projects", "Auth methods", "Members", "Audit", "Settings"];
   return (
     <aside
       className={cn(
         "flex min-h-screen flex-col border-r border-border-subtle bg-bg-surface p-3",
         collapsed ? "w-14" : "w-60",
+        className,
       )}
+      aria-label={label}
     >
       <div className="mb-4 flex items-center gap-2 px-2">
         <OidcGlyph className="h-5 w-5 text-accent-primary" />
@@ -1075,7 +1085,7 @@ export function SidebarNav({ collapsed = false }: { collapsed?: boolean }) {
           </div>
         </div>
       )}
-      <nav className="grid gap-1">
+      <nav className="grid gap-1" aria-label={label}>
         {items.map((item) => (
           <a
             key={item}

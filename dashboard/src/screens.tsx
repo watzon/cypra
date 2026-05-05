@@ -364,7 +364,7 @@ export function TenantList() {
           />
         ) : (
           <div className="overflow-hidden rounded-[var(--radius-md)] border border-border-subtle">
-            <table className="w-full border-collapse text-left text-[13px]">
+            <table className="w-full border-collapse text-left text-[13px]" data-responsive="stack">
               <thead className="bg-bg-code text-text-secondary">
                 <tr>
                   <th className="px-4 py-3 font-medium">Tenant</th>
@@ -2290,6 +2290,7 @@ export function ShortcutOverlay({ open, onClose }: { open: boolean; onClose: () 
       className="fixed inset-0 z-30 grid place-items-center bg-[var(--bg-overlay)] p-4"
       role="dialog"
       aria-modal="true"
+      aria-label="Keyboard shortcuts"
     >
       <Card
         className="w-[520px]"

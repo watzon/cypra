@@ -76,6 +76,9 @@ jobs:
       - name: Run canonical demo dry-run smoke
         run: bunx playwright test tests/e2e/canonical-demo/canonical-demo.spec.ts
 
+      - name: Run Lighthouse baseline
+        run: bun run lighthouse:baseline
+
   openid-conformance:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest

@@ -36,3 +36,22 @@ func TestArgon2idRejectsInvalidHash(t *testing.T) {
 		t.Fatalf("invalid hash error = %v, want %v", err, cypra.ErrInvalidHash)
 	}
 }
+
+func TestArgon2idRejectsMalformedPHCParts(t *testing.T) {
+	badHashes := []string{
+		"$argon2id$v=19$m=65536,t=3$bad$hash",
+		"$argon2id$v=19$m=bad,t=3,p=4$c2FsdA$aGFzaA",
+		"$argon2id$v=19$m=65536,t=bad,p=4$c2FsdA$aGFzaA",
+		"$argon2id$v=19$m=65536,t=3,p=bad$c2FsdA$aGFzaA",
+		"$argon2id$v=19$m=65536,t=3,p=4$%%%$aGFzaA",
+		"$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$%%%",
+		"$argon2id$v=19$m=65536,t=3,p=4$$aGFzaA",
+		"$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$",
+	}
+
+	for _, hash := range badHashes {
+		if err := cypra.VerifyPassword(hash, "password"); !errors.Is(err, cypra.ErrInvalidHash) {
+			t.Fatalf("%q error = %v, want %v", hash, err, cypra.ErrInvalidHash)
+		}
+	}
+}

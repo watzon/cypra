@@ -11,6 +11,8 @@
     "dev": "bun run --filter dashboard dev",
     "format": "prettier --check .",
     "format:write": "prettier --write .",
+    "go:coverage": "node scripts/check-go-coverage.mjs",
+    "lighthouse:baseline": "node scripts/check-lighthouse-baseline.mjs",
     "lint": "bun run --filter dashboard lint && bun run lint:colors",
     "lint:colors": "node scripts/check-no-hardcoded-colors.mjs",
     "test": "bun run --filter dashboard test",

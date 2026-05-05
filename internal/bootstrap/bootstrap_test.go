@@ -3,11 +3,15 @@ package bootstrap_test
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"log/slog"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/watzon/cypra/internal/bootstrap"
 	"github.com/watzon/cypra/internal/dbtest"
 )
@@ -78,5 +82,54 @@ func TestBootstrapRevokeRefusesAfterAdminExists(t *testing.T) {
 	}
 	if _, err := service.RevokeSetupToken(ctx); !errors.Is(err, bootstrap.ErrBootstrapUnavailable) {
 		t.Fatalf("revoke after admin error = %v, want unavailable", err)
+	}
+}
+
+func TestBootstrapRejectsNilAndExpiredSetupTokens(t *testing.T) {
+	harness := dbtest.New(t)
+	service := bootstrap.NewService(harness.SQL, nil)
+	ctx := context.Background()
+	now := time.Unix(100, 0).UTC()
+	service.SetNow(func() time.Time { return now })
+
+	if _, err := service.CreateFirstInstanceAdmin(ctx, uuid.Nil, "admin@example.com", "Admin"); !errors.Is(err, bootstrap.ErrInvalidSetupToken) {
+		t.Fatalf("nil setup token error = %v, want invalid", err)
+	}
+
+	token, err := service.MintSetupToken(ctx)
+	if err != nil {
+		t.Fatalf("mint setup token: %v", err)
+	}
+	service.SetNow(func() time.Time { return now.Add(bootstrap.SetupTokenTTL + time.Second) })
+	if _, err := service.RedeemSetupToken(ctx, token); !errors.Is(err, bootstrap.ErrInvalidSetupToken) {
+		t.Fatalf("expired setup token error = %v, want invalid", err)
+	}
+}
+
+func TestBootstrapPropagatesDatabaseErrors(t *testing.T) {
+	db, err := sql.Open("pgx", "postgres://invalid")
+	if err != nil {
+		t.Fatalf("open db handle: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close db handle: %v", err)
+	}
+	service := bootstrap.NewService(db, nil)
+	ctx := context.Background()
+
+	if _, err := service.IsFirstBoot(ctx); err == nil {
+		t.Fatal("IsFirstBoot unexpectedly succeeded on closed db")
+	}
+	if _, err := service.MintSetupToken(ctx); err == nil {
+		t.Fatal("MintSetupToken unexpectedly succeeded on closed db")
+	}
+	if _, err := service.RedeemSetupToken(ctx, "token"); err == nil {
+		t.Fatal("RedeemSetupToken unexpectedly succeeded on closed db")
+	}
+	if _, err := service.CreateFirstInstanceAdmin(ctx, uuid.New(), "admin@example.com", "Admin"); err == nil {
+		t.Fatal("CreateFirstInstanceAdmin unexpectedly succeeded on closed db")
+	}
+	if _, err := service.RevokeSetupToken(ctx); err == nil {
+		t.Fatal("RevokeSetupToken unexpectedly succeeded on closed db")
 	}
 }

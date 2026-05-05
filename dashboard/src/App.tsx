@@ -85,6 +85,7 @@ export function App() {
   const [route, setRoute] = useState<Route>(() => parseRoute(window.location.pathname));
   const [commandOpen, setCommandOpen] = useState(false);
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const bootVersion = useMemo(() => "dev", []);
   const versionQuery = useQuery({
     queryKey: ["version"],
@@ -110,6 +111,10 @@ export function App() {
         event.preventDefault();
         setShortcutsOpen(true);
       }
+      if (event.shiftKey && event.key === "?") {
+        event.preventDefault();
+        setShortcutsOpen(true);
+      }
       if (event.key === "Escape") {
         setCommandOpen(false);
         setShortcutsOpen(false);
@@ -130,21 +135,68 @@ export function App() {
   return (
     <div className="min-h-screen bg-bg-canvas text-text-primary">
       <div className="flex">
-        <SidebarNav />
+        <SidebarNav
+          className="hidden md:flex lg:hidden"
+          collapsed
+          label="Compact dashboard navigation"
+        />
+        <SidebarNav className="hidden lg:flex" label="Expanded dashboard navigation" />
         <main className="min-h-screen flex-1 p-4 md:p-6">
+          <button
+            type="button"
+            className="mb-3 inline-flex h-10 items-center justify-center rounded-[var(--radius-md)] border border-border-default bg-bg-surface px-3 text-[13px] md:hidden"
+            aria-expanded={mobileNavOpen}
+            aria-controls="mobile-dashboard-nav"
+            onClick={() => setMobileNavOpen(true)}
+          >
+            Open navigation
+          </button>
           <MobileBlockedBanner />
           <div className="mx-auto mt-4 max-w-[1280px]">{renderRoute(route)}</div>
         </main>
       </div>
+      {mobileNavOpen ? (
+        <div
+          className="fixed inset-0 z-40 bg-[var(--bg-overlay)] md:hidden"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Dashboard navigation"
+        >
+          <div
+            id="mobile-dashboard-nav"
+            className="flex h-full max-w-[280px] flex-col bg-bg-surface shadow-[var(--shadow-lg)]"
+          >
+            <button
+              type="button"
+              className="m-3 h-10 rounded-[var(--radius-md)] border border-border-default text-[13px] text-text-secondary"
+              onClick={() => setMobileNavOpen(false)}
+            >
+              Close navigation
+            </button>
+            <SidebarNav label="Mobile dashboard navigation" />
+          </div>
+        </div>
+      ) : null}
       <CommandOverlay open={commandOpen} onClose={() => setCommandOpen(false)} />
       <ShortcutOverlay open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
       <FooterHelp onHelp={() => setShortcutsOpen(true)} />
       <VersionToast bootVersion={bootVersion} currentVersion={versionQuery.data?.version} />
       <div className="sr-only" role="status" aria-live="polite">
-        {route.kind}
+        {routeTitle(route)}
       </div>
     </div>
   );
+}
+
+function routeTitle(route: Route) {
+  if (route.kind === "setup") return "Set up Cypra";
+  if (route.kind === "gallery") return "Primitive gallery";
+  if (route.kind === "dashboard") return "Dashboard";
+  if (route.kind === "account") return "Account";
+  if (route.kind === "tenant-list") return "Tenants";
+  if (route.kind === "tenant-detail") return route.slug;
+  if (route.kind === "placeholder") return route.title;
+  return `Error ${route.code}`;
 }
 
 function renderRoute(route: Route) {

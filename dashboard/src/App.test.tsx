@@ -10,7 +10,9 @@ import {
   Button,
   IdentifierPill,
   MaskedSecret,
+  MobileBlockedBanner,
   PrimitiveGallery,
+  Skeleton,
   StatusPip,
   TextInput,
 } from "./components";
@@ -243,6 +245,38 @@ describe("App", () => {
     );
   });
 
+  it("opens shortcut help from shift+? and footer help", async () => {
+    renderApp("/dashboard");
+
+    await userEvent.keyboard("{Shift>}?{/Shift}");
+    expect(screen.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    await userEvent.click(screen.getByRole("button", { name: "Show keyboard shortcuts" }));
+
+    expect(screen.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeInTheDocument();
+  });
+
+  it("renders responsive dashboard navigation controls", async () => {
+    renderApp("/dashboard/tenants?state=demo", dashboardFetchMock());
+
+    expect(screen.getByRole("button", { name: "Open navigation" })).toHaveAttribute(
+      "aria-controls",
+      "mobile-dashboard-nav",
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Open navigation" }));
+
+    expect(screen.getByRole("dialog", { name: "Dashboard navigation" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Close navigation" })).toBeInTheDocument();
+    expect(await screen.findByRole("table")).toHaveAttribute("data-responsive", "stack");
+  });
+
+  it("announces route titles in the live region", () => {
+    renderApp("/dashboard/instance/diagnostics", dashboardFetchMock());
+
+    expect(screen.getByRole("status")).toHaveTextContent("Diagnostics");
+  });
+
   it("renders the searchable tenant list", async () => {
     renderApp("/dashboard/tenants", dashboardFetchMock());
 
@@ -421,6 +455,8 @@ describe("primitives", () => {
   it("copies identifier pills", async () => {
     render(<IdentifierPill value="client_0123456789abcdef" label="Client ID" />);
 
+    expect(screen.getByLabelText("Client ID: client_0123456789abcdef")).toBeInTheDocument();
+
     const copyButtons = screen.getAllByRole("button", { name: "Copy Client ID" });
     const copyButton = copyButtons[0];
     await userEvent.click(copyButton);
@@ -432,6 +468,21 @@ describe("primitives", () => {
     render(<StatusPip variant="pending" label="Pending" />);
 
     expect(screen.getByText("Pending")).toBeInTheDocument();
+  });
+
+  it("keeps skeletons static and shows the mobile blocked banner copy", () => {
+    const { container } = render(
+      <>
+        <Skeleton />
+        <MobileBlockedBanner />
+      </>,
+    );
+
+    expect(container.querySelector(".animate-pulse")).not.toBeInTheDocument();
+    expect(container.querySelector(".animate-shimmer")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("Cypra dashboard is optimized for desktop. Some features may be cramped."),
+    ).toBeInTheDocument();
   });
 
   it("renders backup codes with confirmation gate", async () => {

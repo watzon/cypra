@@ -4,7 +4,7 @@ GO ?= go
 BUN ?= bun
 DOCKER_COMPOSE ?= docker compose
 
-.PHONY: dev build build-frontend build-go test test-go test-frontend lint lint-go lint-frontend format format-check typecheck typecheck-go typecheck-frontend ci ci-pipeline image-size install
+.PHONY: dev build build-frontend build-go test test-go test-frontend test-go-coverage lint lint-go lint-frontend format format-check typecheck typecheck-go typecheck-frontend ci ci-pipeline image-size lighthouse-baseline install
 
 dev:
 	$(DOCKER_COMPOSE) -f deploy/docker-compose.yml up -d postgres
@@ -24,10 +24,13 @@ build-go:
 	mkdir -p bin
 	$(GO) build -trimpath -ldflags "-s -w" -o bin/cypra ./cmd/cypra
 
-test: build-frontend test-go test-frontend
+test: build-frontend test-go test-go-coverage test-frontend
 
 test-go:
 	$(GO) test ./...
+
+test-go-coverage:
+	$(BUN) run go:coverage
 
 test-frontend:
 	$(BUN) run test
@@ -64,3 +67,6 @@ ci-pipeline: install build lint format-check typecheck test
 
 image-size: build-go
 	@wc -c < bin/cypra | awk '{ printf "bin/cypra: %d bytes\n", $$1 }'
+
+lighthouse-baseline:
+	$(BUN) run lighthouse:baseline

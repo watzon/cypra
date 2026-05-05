@@ -92,6 +92,36 @@ func TestRefreshTokenFamilyProperty(t *testing.T) {
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_refresh_tokens WHERE family_id = $1 AND revoked_at IS NULL`, 0, current.FamilyID)
 }
 
+func TestRefreshMintWithParentUsesExistingFamily(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID, clientID, userID := seedRefreshGraph(t, harness)
+	service := sessions.NewRefreshService(harness.SQL)
+	now := time.Unix(100, 0).UTC()
+	service.SetNow(func() time.Time { return now })
+
+	root, err := service.Mint(context.Background(), tenantID, clientID, userID, []string{"openid"}, nil, now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("mint root refresh: %v", err)
+	}
+	child, err := service.Mint(context.Background(), tenantID, clientID, userID, []string{"openid"}, &root.ID, now.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("mint child refresh: %v", err)
+	}
+	if child.FamilyID != root.FamilyID || child.ParentID == nil || *child.ParentID != root.ID {
+		t.Fatalf("child = %#v root = %#v", child, root)
+	}
+}
+
+func TestRefreshConsumeUnknownTokenReportsReuse(t *testing.T) {
+	harness := dbtest.New(t)
+	service := sessions.NewRefreshService(harness.SQL)
+	service.SetNow(func() time.Time { return time.Unix(100, 0).UTC() })
+
+	if _, err := service.Consume(context.Background(), "missing", time.Unix(200, 0).UTC()); !errors.Is(err, sessions.ErrRefreshReuseDetected) {
+		t.Fatalf("unknown token error = %v, want reuse detected", err)
+	}
+}
+
 func seedRefreshGraph(t *testing.T, harness *dbtest.Harness) (uuid.UUID, uuid.UUID, uuid.UUID) {
 	t.Helper()
 	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")

@@ -46,3 +46,31 @@ a {
     transition-duration: 0ms !important;
   }
 }
+
+@media (max-width: 767px) {
+  table[data-responsive="stack"],
+  table[data-responsive="stack"] thead,
+  table[data-responsive="stack"] tbody,
+  table[data-responsive="stack"] tr,
+  table[data-responsive="stack"] th,
+  table[data-responsive="stack"] td {
+    display: block;
+  }
+
+  table[data-responsive="stack"] thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+
+  table[data-responsive="stack"] tr {
+    border-bottom: 1px solid var(--border-subtle);
+    padding: var(--space-3);
+  }
+
+  table[data-responsive="stack"] td {
+    padding: var(--space-1) 0;
+  }
+}
