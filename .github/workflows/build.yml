@@ -70,6 +70,9 @@ jobs:
       - name: Run CI pipeline
         run: make ci-pipeline
 
+      - name: Run example e2e harness smoke
+        run: bunx playwright test tests/e2e/examples-smoke.spec.ts
+
   openid-conformance:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest

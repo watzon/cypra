@@ -11,6 +11,7 @@ dashboard/node_modules/
 
 bin/cypra
 coverage/
+test-results/
 *.coverprofile
 
 .DS_Store
