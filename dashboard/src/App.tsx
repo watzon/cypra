@@ -10,6 +10,8 @@ import {
   DashboardOverview,
   ErrorPage,
   FooterHelp,
+  InstanceAdminsScreen,
+  InstanceDiagnosticsScreen,
   OverviewStates,
   AuditLogScreen,
   PlaceholderPage,
@@ -168,6 +170,10 @@ function renderRoute(route: Route) {
     return <OverviewStates />;
   if (route.kind === "placeholder" && route.title === "Instance audit")
     return <AuditLogScreen scope="instance" />;
+  if (route.kind === "placeholder" && route.title === "Instance admins")
+    return <InstanceAdminsScreen />;
+  if (route.kind === "placeholder" && route.title === "Diagnostics")
+    return <InstanceDiagnosticsScreen />;
   if (route.kind === "placeholder") return <PlaceholderPage title={route.title} />;
   return <ErrorPage code="404" />;
 }

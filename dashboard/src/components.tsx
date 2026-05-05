@@ -61,7 +61,7 @@ export function Button({
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] border font-medium transition duration-[var(--dur-instant)] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-50",
+        "inline-flex items-center justify-center gap-2 rounded-[var(--radius-md)] border font-medium transition duration-[var(--dur-instant)] active:scale-[0.985] disabled:cursor-not-allowed disabled:opacity-100 disabled:saturate-50",
         size === "sm" && "h-7 px-3 text-[13px]",
         size === "md" && "h-9 px-4 text-[14px]",
         size === "lg" && "h-11 px-5 text-[14px]",
@@ -89,7 +89,7 @@ export function Button({
       )}
       <span className={cn(loading && "sr-only")}>{children}</span>
       {kbd ? (
-        <kbd className="ml-1 rounded bg-bg-code px-1.5 py-0.5 text-[12px] text-text-secondary">
+        <kbd className="ml-1 rounded bg-bg-code px-1.5 py-0.5 text-[12px] text-text-primary">
           {kbd}
         </kbd>
       ) : null}
@@ -700,8 +700,10 @@ export function ContextBadge({
 
 export function StatusPip({ variant, label }: { variant: StatusVariant; label: string }) {
   return (
-    <span className={cn("inline-flex items-center gap-2 text-[13px]", statusClass[variant])}>
-      <StatusSigil variant={variant} />
+    <span className="inline-flex items-center gap-2 text-[13px] text-text-primary">
+      <span className={statusClass[variant]}>
+        <StatusSigil variant={variant} />
+      </span>
       {label}
     </span>
   );
@@ -1083,7 +1085,7 @@ export function SidebarNav({ collapsed = false }: { collapsed?: boolean }) {
           </a>
         ))}
         <Tooltip label="Missing instance permission">
-          <span className="inline-flex cursor-not-allowed items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-[13px] text-text-disabled">
+          <span className="inline-flex cursor-not-allowed items-center gap-2 rounded-[var(--radius-md)] px-3 py-2 text-[13px] text-text-secondary">
             <Icons.Lock className="h-4 w-4" />
             {collapsed ? null : "Diagnostics"}
           </span>

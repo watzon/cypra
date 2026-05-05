@@ -53,6 +53,48 @@ export interface UserRecord {
   enrolled_methods?: string[];
 }
 
+export interface ProviderConfigRecord {
+  kind: string;
+  configured: boolean;
+  healthy: boolean;
+  message?: string;
+}
+
+export interface EmailProviderConfigInput {
+  kind: string;
+  from_address: string;
+  from_name: string;
+  config: string;
+}
+
+export interface UpstreamProviderConfigInput {
+  client_id: string;
+  client_secret: string;
+  enabled: boolean;
+}
+
+export interface InstanceAdminRecord {
+  id: string;
+  email: string;
+  role: "owner" | "admin";
+  created_at: string;
+  last_seen_at?: string;
+}
+
+export interface InstanceDiagnosticsRecord {
+  health: Record<string, boolean>;
+  version: VersionResponse & { build_date?: string };
+  migrations: { current: number; pending: string[] };
+  master_key_rotation: { phase: string; rows_done: number; rows_total: number; eta?: string };
+  storage: {
+    kind: string;
+    bucket?: string;
+    endpoint?: string;
+    region?: string;
+    credentials_present: boolean;
+  };
+}
+
 export async function getVersion(): Promise<VersionResponse> {
   const response = await fetch("/api/v1/version");
   if (!response.ok) {
@@ -142,4 +184,90 @@ export async function listUsers(): Promise<UserRecord[]> {
     throw new Error("user.list_invalid");
   }
   return payload as UserRecord[];
+}
+
+export async function getEmailProviderConfig(): Promise<ProviderConfigRecord> {
+  return fetchJSON<ProviderConfigRecord>("/api/v1/provider-config/email", "provider.email_failed");
+}
+
+export async function saveEmailProviderConfig(
+  input: EmailProviderConfigInput,
+): Promise<ProviderConfigRecord> {
+  return putJSON<ProviderConfigRecord>(
+    "/api/v1/provider-config/email",
+    input,
+    "provider.email_save_failed",
+    { "X-Cypra-Tenant-Role": "admin" },
+  );
+}
+
+export async function getUpstreamProviderConfig(): Promise<ProviderConfigRecord> {
+  return fetchJSON<ProviderConfigRecord>(
+    "/api/v1/provider-config/upstream",
+    "provider.upstream_failed",
+  );
+}
+
+export async function saveUpstreamProviderConfig(
+  input: UpstreamProviderConfigInput,
+): Promise<ProviderConfigRecord> {
+  return putJSON<ProviderConfigRecord>(
+    "/api/v1/provider-config/upstream",
+    input,
+    "provider.upstream_save_failed",
+    { "X-Cypra-Tenant-Role": "admin" },
+  );
+}
+
+export async function listInstanceAdmins(): Promise<InstanceAdminRecord[]> {
+  return fetchJSON<InstanceAdminRecord[]>("/api/v1/instance/admins", "instance.admins_failed", {
+    "X-Cypra-Instance-Admin": "true",
+  });
+}
+
+export async function demoteInstanceAdmin(id: string): Promise<void> {
+  const response = await fetch(`/api/v1/instance/admins/${id}`, {
+    method: "DELETE",
+    headers: { "X-Cypra-Instance-Admin": "true" },
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? "instance_admin.demote_failed");
+  }
+}
+
+export async function getInstanceDiagnostics(): Promise<InstanceDiagnosticsRecord> {
+  return fetchJSON<InstanceDiagnosticsRecord>(
+    "/api/v1/instance/diagnostics",
+    "instance.diagnostics_failed",
+    { "X-Cypra-Instance-Admin": "true" },
+  );
+}
+
+async function fetchJSON<T>(url: string, fallbackError: string, headers?: HeadersInit): Promise<T> {
+  const response = await fetch(url, { headers });
+  if (!response.ok) {
+    throw new Error(response.status === 403 ? "auth.forbidden" : fallbackError);
+  }
+  return (await response.json()) as T;
+}
+
+async function putJSON<T>(
+  url: string,
+  body: unknown,
+  fallbackError: string,
+  headers?: HeadersInit,
+): Promise<T> {
+  const requestHeaders = new Headers(headers);
+  requestHeaders.set("Content-Type", "application/json");
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: requestHeaders,
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new Error(payload.error ?? fallbackError);
+  }
+  return (await response.json()) as T;
 }

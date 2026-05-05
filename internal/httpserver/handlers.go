@@ -109,8 +109,33 @@ func (s *Server) deleteTenant(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "tenant.id_invalid")
 		return
 	}
-	_, err = s.DB.ExecContext(r.Context(), `UPDATE tenants SET deleted_at = now() WHERE id = $1`, id)
+	tx, err := s.DB.BeginTx(r.Context(), nil)
 	if err != nil {
+		writeError(w, http.StatusInternalServerError, "db.error")
+		return
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err = tx.ExecContext(r.Context(), `UPDATE sessions SET revoked_at = now() WHERE tenant_id = $1 AND revoked_at IS NULL`, id); err != nil {
+		writeError(w, http.StatusInternalServerError, "tenant.delete_failed")
+		return
+	}
+	if _, err = tx.ExecContext(r.Context(), `UPDATE oidc_refresh_tokens SET revoked_at = now(), revoke_reason = 'tenant_delete' WHERE tenant_id = $1 AND revoked_at IS NULL`, id); err != nil {
+		writeError(w, http.StatusInternalServerError, "tenant.delete_failed")
+		return
+	}
+	if _, err = tx.ExecContext(r.Context(), `UPDATE oidc_clients SET deleted_at = now() WHERE tenant_id = $1 AND deleted_at IS NULL`, id); err != nil {
+		writeError(w, http.StatusInternalServerError, "tenant.delete_failed")
+		return
+	}
+	if _, err = tx.ExecContext(r.Context(), `UPDATE oidc_signing_keys SET state = 'sunsetting', sunset_until = COALESCE(sunset_until, now() + interval '30 days') WHERE tenant_id = $1 AND state <> 'sunsetting'`, id); err != nil {
+		writeError(w, http.StatusInternalServerError, "tenant.delete_failed")
+		return
+	}
+	if _, err = tx.ExecContext(r.Context(), `UPDATE tenants SET deleted_at = now(), settings = settings || jsonb_build_object('deletion_scheduled_at', now(), 'deletion_cancellable_until', now() + interval '7 days') WHERE id = $1`, id); err != nil {
+		writeError(w, http.StatusInternalServerError, "db.error")
+		return
+	}
+	if err = tx.Commit(); err != nil {
 		writeError(w, http.StatusInternalServerError, "db.error")
 		return
 	}

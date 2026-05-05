@@ -1,0 +1,48 @@
+groups:
+  - name: cypra
+    rules:
+      - alert: CypraHighErrorRate
+        expr: rate(cypra_http_request_duration_seconds_count{status=~"5.."}[5m]) > 0.05
+        for: 10m
+        labels: { severity: page }
+        annotations: { summary: "Cypra HTTP 5xx rate is elevated" }
+      - alert: CypraHighAuthFailureRate
+        expr: rate(cypra_auth_attempts_total{outcome="fail"}[5m]) > 5
+        for: 10m
+        labels: { severity: warn }
+        annotations: { summary: "Authentication failures are elevated" }
+      - alert: CypraSigningKeyNearExpiry
+        expr: cypra_signing_key_age_seconds{state="active"} > 5184000
+        for: 15m
+        labels: { severity: warn }
+        annotations: { summary: "A signing key is older than the rotation window" }
+      - alert: CypraRefreshTokenReuseDetected
+        expr: increase(cypra_oidc_refresh_reuse_detected_total[5m]) > 0
+        for: 0m
+        labels: { severity: page }
+        annotations: { summary: "Refresh token reuse was detected" }
+      - alert: CypraMasterKeyNotSet
+        expr: cypra_master_key_rotation_phase{phase="done"} == 0
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: "Master key is unavailable or rotation is stuck" }
+      - alert: CypraMigrationsPending
+        expr: cypra_migrations_pending > 0
+        for: 5m
+        labels: { severity: warn }
+        annotations: { summary: "Database migrations are pending" }
+      - alert: CypraStorageWriteFailures
+        expr: rate(cypra_storage_operation_duration_seconds_count{outcome="fail"}[5m]) > 0
+        for: 5m
+        labels: { severity: warn }
+        annotations: { summary: "Storage writes are failing" }
+      - alert: CypraDBConnectionSaturation
+        expr: cypra_db_pool_in_use / (cypra_db_pool_open_connections > 0) > 0.8
+        for: 10m
+        labels: { severity: warn }
+        annotations: { summary: "Database pool is saturated" }
+      - alert: CypraEmailOutboxStuck
+        expr: cypra_email_outbox_pending > 100 and rate(cypra_email_send_total{outcome="ok"}[10m]) == 0
+        for: 15m
+        labels: { severity: warn }
+        annotations: { summary: "Email outbox is stuck" }

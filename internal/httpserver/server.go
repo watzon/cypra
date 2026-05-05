@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/watzon/cypra/internal/botmitigation"
 	"github.com/watzon/cypra/internal/db"
 	"github.com/watzon/cypra/internal/migrate"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"gorm.io/datatypes"
 )
 
@@ -63,6 +65,7 @@ func New(opts Options) (*Server, error) {
 	if opts.BotVerifier == nil {
 		opts.BotVerifier = botmitigation.NoopVerifier{}
 	}
+	opts.BotVerifier = botmitigation.InstrumentedVerifier{Name: "noop", Next: opts.BotVerifier}
 	if len(opts.GoogleSecret) == 0 {
 		opts.GoogleSecret = []byte("dev-google-oauth-state-secret")
 	}
@@ -77,10 +80,11 @@ func New(opts Options) (*Server, error) {
 func (s *Server) Router() http.Handler {
 	r := chi.NewRouter()
 	r.Use(s.requestID)
+	r.Use(s.traceRequests)
 	r.Use(s.logRequests)
 	r.Get("/healthz", s.healthz)
 	r.Get("/readyz", s.readyz)
-	r.Get("/metrics", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("# cypra metrics\n")) })
+	r.Get("/metrics", s.metrics)
 	r.Group(func(public chi.Router) {
 		public.Use(s.tenantResolver)
 		public.Get("/static/hostedlogin/passkey.js", s.hostedStaticPasskey)
@@ -137,8 +141,18 @@ func (s *Server) Router() http.Handler {
 		})
 		api.Route("/instance", func(rt chi.Router) {
 			rt.Use(auth.RequireInstanceAdmin)
+			rt.Get("/admins", s.listInstanceAdmins)
+			rt.Delete("/admins/{id}", s.demoteInstanceAdmin)
+			rt.Get("/diagnostics", s.instanceDiagnostics)
 			rt.Patch("/admins/me", s.patchInstanceAdminMe)
 			rt.Post("/invite", s.instanceInvite)
+		})
+		api.Route("/provider-config", func(rt chi.Router) {
+			rt.Use(auth.RequireTenantRole)
+			rt.Get("/email", s.emailProviderConfig)
+			rt.Put("/email", s.saveEmailProviderConfig)
+			rt.Get("/upstream", s.upstreamProviderConfig)
+			rt.Put("/upstream", s.saveUpstreamProviderConfig)
 		})
 		api.Route("/tenants", func(rt chi.Router) {
 			rt.Use(auth.RequireInstanceAdmin)
@@ -159,6 +173,8 @@ func (s *Server) Router() http.Handler {
 			rt.Patch("/me", s.patchUserMe)
 			rt.Get("/", s.listUsers)
 			rt.Post("/", s.createUser)
+			rt.Get("/{id}/export", s.exportUserDSR)
+			rt.Delete("/{id}", s.deleteUserDSR)
 		})
 		api.Route("/pats", func(rt chi.Router) {
 			rt.Use(auth.RequireTenantRole)
@@ -229,6 +245,17 @@ func (s *Server) requestID(next http.Handler) http.Handler {
 		}
 		w.Header().Set("X-Request-Id", reqID)
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), requestIDKey{}, reqID)))
+	})
+}
+
+func (s *Server) traceRequests(next http.Handler) http.Handler {
+	if os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT") == "" {
+		return next
+	}
+	traced := otelhttp.NewHandler(next, "cypra.http")
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Server-Timing", "otel;desc=\"otlp-http enabled\"")
+		traced.ServeHTTP(w, r)
 	})
 }
 

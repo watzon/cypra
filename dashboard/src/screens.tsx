@@ -2,14 +2,24 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import {
+  demoteInstanceAdmin,
+  getEmailProviderConfig,
+  getInstanceDiagnostics,
   getReady,
+  getUpstreamProviderConfig,
+  listInstanceAdmins,
   listPersonalAccessTokens,
   listProjects,
   listTenants,
   listUsers,
+  saveEmailProviderConfig,
   saveTenantBranding,
+  saveUpstreamProviderConfig,
+  type InstanceAdminRecord,
+  type InstanceDiagnosticsRecord,
   type PersonalAccessTokenRecord,
   type ProjectRecord,
+  type ProviderConfigRecord,
   type TenantRecord,
   type UserRecord,
 } from "@/api";
@@ -110,6 +120,42 @@ const demoUsers: UserRecord[] = [
     enrolled_methods: ["password"],
   },
 ];
+
+const demoEmailProvider: ProviderConfigRecord = {
+  kind: "terminal",
+  configured: false,
+  healthy: true,
+  message: "Terminal email is available for local development.",
+};
+
+const demoUpstreamProvider: ProviderConfigRecord = {
+  kind: "google",
+  configured: false,
+  healthy: false,
+  message: "Google OAuth credentials are not configured yet.",
+};
+
+const demoInstanceAdmins: InstanceAdminRecord[] = [
+  {
+    id: "00000000-0000-0000-0000-00000000root",
+    email: "root@example.com",
+    role: "owner",
+    created_at: "2026-05-01",
+    last_seen_at: "2026-05-05",
+  },
+];
+
+const demoDiagnostics: InstanceDiagnosticsRecord = {
+  health: { db: true, storage: true, email: true },
+  version: { version: "dev", commit: "test", build_date: "local" },
+  migrations: { current: 4, pending: [] },
+  master_key_rotation: { phase: "done", rows_done: 0, rows_total: 0 },
+  storage: {
+    kind: "local-disk",
+    endpoint: "file://****/cypra-storage",
+    credentials_present: true,
+  },
+};
 
 export function SetupWizard({ token }: { token: string }) {
   const [step, setStep] = useState<"token" | "passkey" | "backup" | "done">("token");
@@ -1324,6 +1370,216 @@ export function AuditLogScreen({ scope }: { scope: "tenant" | "instance" }) {
   );
 }
 
+export function InstanceAdminsScreen() {
+  const adminsQuery = useQuery({
+    queryKey: ["instance-admins"],
+    queryFn: listInstanceAdmins,
+    retry: false,
+  });
+  const admins = adminsQuery.data ?? demoInstanceAdmins;
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [demote, setDemote] = useState<InstanceAdminRecord | null>(null);
+  const [demoteError, setDemoteError] = useState("");
+  if (adminsQuery.error?.message === "auth.forbidden") return <ErrorPage code="403" />;
+  if (adminsQuery.isLoading) return <LoadingState />;
+  return (
+    <div>
+      <PageHeader
+        title="Instance admins"
+        subtitle="Install-level operators outside the tenant model."
+      />
+      <Card
+        title="Admin access"
+        subtitle="Invite admins, review last-seen timestamps, and protect the last-admin recovery path."
+        actions={
+          <Button variant="primary" onClick={() => setInviteOpen(true)}>
+            Invite admin
+          </Button>
+        }
+      >
+        <div className="overflow-hidden rounded-[var(--radius-md)] border border-border-subtle">
+          <table className="w-full text-left text-[13px]">
+            <thead className="bg-bg-code text-text-secondary">
+              <tr>
+                <th className="px-4 py-3 font-medium">Email</th>
+                <th className="px-4 py-3 font-medium">Role</th>
+                <th className="px-4 py-3 font-medium">Last seen</th>
+                <th className="px-4 py-3 font-medium">Created</th>
+                <th className="px-4 py-3 font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {admins.map((admin) => {
+                const lastAdmin = admins.length === 1;
+                return (
+                  <tr key={admin.id} className="border-t border-border-subtle">
+                    <td className="px-4 py-3">{admin.email}</td>
+                    <td className="px-4 py-3">
+                      <Tag variant="context-instance">{admin.role}</Tag>
+                    </td>
+                    <td className="px-4 py-3 text-text-secondary">
+                      {admin.last_seen_at ?? "never"}
+                    </td>
+                    <td className="px-4 py-3 text-text-secondary">{admin.created_at}</td>
+                    <td className="px-4 py-3">
+                      <Tooltip
+                        label={
+                          lastAdmin
+                            ? "This is the last instance admin. Invite another admin before demoting."
+                            : "Demote instance admin"
+                        }
+                      >
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          disabled={lastAdmin}
+                          onClick={() => setDemote(admin)}
+                        >
+                          Demote
+                        </Button>
+                      </Tooltip>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+        <Card
+          className="mt-4"
+          title="Pending admin invites"
+          subtitle="Instance-admin pending invitations use the install-branded admin-invite template."
+        >
+          <div className="flex items-center justify-between text-[13px]">
+            <span>ops@example.com</span>
+            <Tag variant="pending">instance_admin</Tag>
+            <span className="text-text-secondary">expires in 6 days</span>
+            <Button size="sm" variant="destructive">
+              Revoke
+            </Button>
+          </div>
+        </Card>
+      </Card>
+      <Modal
+        title="Invite instance admin"
+        open={inviteOpen}
+        onClose={() => setInviteOpen(false)}
+        footer={
+          <Button variant="primary" onClick={() => setInviteOpen(false)}>
+            Send invite
+          </Button>
+        }
+      >
+        <TextInput label="Email" type="email" placeholder="admin@example.com" />
+      </Modal>
+      <Modal
+        title="Demote instance admin"
+        open={demote !== null}
+        onClose={() => setDemote(null)}
+        footer={
+          <Button
+            variant="destructive"
+            onClick={() =>
+              void (async () => {
+                if (!demote) return;
+                try {
+                  await demoteInstanceAdmin(demote.id);
+                  setDemote(null);
+                } catch (error) {
+                  setDemoteError(
+                    error instanceof Error ? error.message : "instance_admin.demote_failed",
+                  );
+                }
+              })()
+            }
+          >
+            Demote admin
+          </Button>
+        }
+      >
+        <p className="text-[14px] text-text-secondary">
+          {demote?.email} will lose instance-admin access.
+        </p>
+        {demoteError ? <Toast variant="error" message={demoteError} /> : null}
+      </Modal>
+    </div>
+  );
+}
+
+export function InstanceDiagnosticsScreen() {
+  const diagnosticsQuery = useQuery({
+    queryKey: ["instance-diagnostics"],
+    queryFn: getInstanceDiagnostics,
+    refetchInterval: 5_000,
+    retry: false,
+  });
+  const diagnostics = diagnosticsQuery.data ?? demoDiagnostics;
+  if (diagnosticsQuery.error?.message === "auth.forbidden") return <ErrorPage code="403" />;
+  if (diagnosticsQuery.isLoading) return <LoadingState />;
+  return (
+    <div>
+      <PageHeader
+        title="Diagnostics"
+        subtitle="Read-only instance health, version, migration, master-key, and storage status."
+      />
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card title="Health" subtitle="Polled every 5 seconds.">
+          {Object.entries(diagnostics.health).map(([name, ok]) => (
+            <StatusPip
+              key={name}
+              variant={ok ? "success" : "error"}
+              label={`${name}: ${ok ? "reachable" : "unhealthy"}`}
+            />
+          ))}
+        </Card>
+        <Card title="Version">
+          <IdentifierPill
+            value={`${diagnostics.version.version}-${diagnostics.version.commit}`}
+            label="Version"
+          />
+          <p className="mt-2 text-[13px] text-text-secondary">
+            Build date: {diagnostics.version.build_date ?? "unknown"}
+          </p>
+        </Card>
+        <Card title="Migration state">
+          <StatusPip
+            variant={diagnostics.migrations.pending.length === 0 ? "success" : "warn"}
+            label={`${String(diagnostics.migrations.pending.length)} pending`}
+          />
+          <p className="mt-2 text-[13px] text-text-secondary">
+            Current schema version: {diagnostics.migrations.current}
+          </p>
+        </Card>
+        <Card title="Master-key rotation">
+          <StatusPip
+            variant={diagnostics.master_key_rotation.phase === "done" ? "success" : "pending"}
+            label={diagnostics.master_key_rotation.phase}
+          />
+          <p className="mt-2 text-[13px] text-text-secondary">
+            {diagnostics.master_key_rotation.rows_done} /{" "}
+            {diagnostics.master_key_rotation.rows_total} rows rewrapped
+          </p>
+        </Card>
+        <Card
+          title="Storage backend"
+          subtitle="Bootstrap-only environment values. Cypra never writes storage config to the DB."
+        >
+          <div className="grid gap-2 text-[13px]">
+            <span>Kind: {diagnostics.storage.kind}</span>
+            <span>Bucket: {diagnostics.storage.bucket ?? "not applicable"}</span>
+            <span>Endpoint: {diagnostics.storage.endpoint ?? "local"}</span>
+            <span>Region: {diagnostics.storage.region ?? "not applicable"}</span>
+            <StatusPip
+              variant={diagnostics.storage.credentials_present ? "success" : "error"}
+              label="credentials present"
+            />
+          </div>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
 function TenantSettings({ tenant, active }: { tenant: TenantRecord; active: string }) {
   const tabs = ["branding", "email", "upstream", "members", "api-tokens", "danger"];
   return (
@@ -1344,10 +1600,14 @@ function TenantSettings({ tenant, active }: { tenant: TenantRecord; active: stri
         ))}
       </nav>
       {active === "branding" ? <BrandingTab tenant={tenant} /> : null}
+      {active === "email" ? <EmailProviderScreen /> : null}
+      {active === "upstream" ? <UpstreamProviderScreen /> : null}
       {active === "api-tokens" ? <ApiTokensTab /> : null}
       {active === "members" ? <MembersTab /> : null}
-      {active === "danger" ? <TenantDangerPlaceholder tenant={tenant} /> : null}
+      {active === "danger" ? <TenantDangerScreen tenant={tenant} /> : null}
       {active !== "branding" &&
+      active !== "email" &&
+      active !== "upstream" &&
       active !== "api-tokens" &&
       active !== "members" &&
       active !== "danger" ? (
@@ -1490,22 +1750,323 @@ function BrandingTab({ tenant }: { tenant: TenantRecord }) {
   );
 }
 
-function TenantDangerPlaceholder({ tenant }: { tenant: TenantRecord }) {
+function EmailProviderScreen() {
+  const providerQuery = useQuery({
+    queryKey: ["provider-config", "email"],
+    queryFn: getEmailProviderConfig,
+    retry: false,
+  });
+  const provider = providerQuery.data ?? demoEmailProvider;
+  const [kind, setKind] = useState(provider.kind || "terminal");
+  const [fromAddress, setFromAddress] = useState("");
+  const [fromName, setFromName] = useState("");
+  const [config, setConfig] = useState("");
+  const [testing, setTesting] = useState(false);
+  const [dirty, setDirty] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saving, setSaving] = useState(false);
+  return (
+    <ProviderSettingsShell
+      title="Email provider"
+      provider={provider}
+      diagnostic="Send test email"
+      testing={testing}
+      onDiagnostic={() => {
+        setTesting(true);
+        window.setTimeout(() => setTesting(false), 500);
+      }}
+    >
+      {!provider.configured ? (
+        <Card
+          highlighted
+          title="Recommended: Resend free tier"
+          subtitle="Resend is the fastest production path; terminal email remains useful for local development."
+        />
+      ) : null}
+      <SettingsRow
+        label="Provider kind"
+        helper="Terminal is local-only. SMTP and Resend are production-capable."
+        control={
+          <select
+            aria-label="Email provider kind"
+            className="h-10 rounded-[var(--radius-md)] border border-border-default bg-bg-surface px-3 text-[14px]"
+            value={kind}
+            onChange={(event) => {
+              setKind(event.target.value);
+              setDirty(true);
+            }}
+          >
+            <option value="terminal">terminal</option>
+            <option value="smtp">smtp</option>
+            <option value="resend">resend</option>
+          </select>
+        }
+      />
+      <SettingsRow
+        label="From address"
+        helper="Used by magic-link, password-reset, verification, and invite templates."
+        control={
+          <TextInput
+            label="From address"
+            placeholder="auth@example.com"
+            value={fromAddress}
+            onChange={(event) => {
+              setFromAddress(event.target.value);
+              setDirty(true);
+            }}
+          />
+        }
+      />
+      <SettingsRow
+        label="From name"
+        helper="Tenant-branded sender name."
+        control={
+          <TextInput
+            label="From name"
+            placeholder="Cypra Auth"
+            value={fromName}
+            onChange={(event) => {
+              setFromName(event.target.value);
+              setDirty(true);
+            }}
+          />
+        }
+      />
+      {kind === "smtp" ? (
+        <TextInput
+          label="SMTP URL"
+          placeholder="smtp://user:pass@smtp.example.com:587"
+          value={config}
+          onChange={(event) => {
+            setConfig(event.target.value);
+            setDirty(true);
+          }}
+        />
+      ) : null}
+      {kind === "resend" ? (
+        <MaskedSecret name="resend_api_key" value="re_************************" />
+      ) : null}
+      {saveError ? <Toast variant="error" message={saveError} /> : null}
+      {dirty ? <SaveBar dirtyCount={1} /> : null}
+      {dirty ? (
+        <Button
+          variant="primary"
+          loading={saving}
+          onClick={() =>
+            void (async () => {
+              setSaving(true);
+              setSaveError("");
+              try {
+                await saveEmailProviderConfig({
+                  kind,
+                  from_address: fromAddress,
+                  from_name: fromName,
+                  config,
+                });
+                setDirty(false);
+              } catch (error) {
+                setSaveError(error instanceof Error ? error.message : "provider.email_save_failed");
+              } finally {
+                setSaving(false);
+              }
+            })()
+          }
+        >
+          Save email provider
+        </Button>
+      ) : null}
+    </ProviderSettingsShell>
+  );
+}
+
+function UpstreamProviderScreen() {
+  const providerQuery = useQuery({
+    queryKey: ["provider-config", "upstream"],
+    queryFn: getUpstreamProviderConfig,
+    retry: false,
+  });
+  const provider = providerQuery.data ?? demoUpstreamProvider;
+  const [dirty, setDirty] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [clientID, setClientID] = useState("");
+  const [clientSecret, setClientSecret] = useState("");
+  const [enabled, setEnabled] = useState(provider.configured);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  return (
+    <ProviderSettingsShell
+      title="Google upstream"
+      provider={provider}
+      diagnostic="Try OAuth round-trip"
+      testing={testing}
+      onDiagnostic={() => {
+        setTesting(true);
+        window.setTimeout(() => setTesting(false), 500);
+      }}
+    >
+      <SettingsRow
+        label="Google client ID"
+        helper="Encrypted at rest before persistence."
+        control={
+          <TextInput
+            label="Google client ID"
+            placeholder="123.apps.googleusercontent.com"
+            value={clientID}
+            onChange={(event) => {
+              setClientID(event.target.value);
+              setDirty(true);
+            }}
+          />
+        }
+      />
+      <SettingsRow
+        label="Google client secret"
+        helper="Stored through the encrypted provider-config path."
+        control={
+          <TextInput
+            label="Google client secret"
+            type="password"
+            value={clientSecret}
+            onChange={(event) => {
+              setClientSecret(event.target.value);
+              setDirty(true);
+            }}
+          />
+        }
+      />
+      <SettingsRow
+        label="Enabled"
+        helper="Changes apply to the next sign-in attempt."
+        control={
+          <Switch
+            label="Google enabled"
+            checked={enabled}
+            onChange={(next) => {
+              setEnabled(next);
+              setDirty(true);
+            }}
+          />
+        }
+      />
+      {saveError ? <Toast variant="error" message={saveError} /> : null}
+      {dirty ? <SaveBar dirtyCount={1} /> : null}
+      {dirty ? (
+        <Button
+          variant="primary"
+          loading={saving}
+          onClick={() =>
+            void (async () => {
+              setSaving(true);
+              setSaveError("");
+              try {
+                await saveUpstreamProviderConfig({
+                  client_id: clientID,
+                  client_secret: clientSecret,
+                  enabled,
+                });
+                setDirty(false);
+              } catch (error) {
+                setSaveError(
+                  error instanceof Error ? error.message : "provider.upstream_save_failed",
+                );
+              } finally {
+                setSaving(false);
+              }
+            })()
+          }
+        >
+          Save Google upstream
+        </Button>
+      ) : null}
+    </ProviderSettingsShell>
+  );
+}
+
+function ProviderSettingsShell({
+  title,
+  provider,
+  diagnostic,
+  testing,
+  onDiagnostic,
+  children,
+}: {
+  title: string;
+  provider: ProviderConfigRecord;
+  diagnostic: string;
+  testing: boolean;
+  onDiagnostic: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-4">
+      <Card
+        title={title}
+        subtitle={provider.message ?? "Provider health and configuration state."}
+        actions={
+          <StatusPip
+            variant={provider.healthy ? "success" : "warn"}
+            label={provider.configured ? "Configured" : "Unconfigured"}
+          />
+        }
+      >
+        <Button variant="secondary" loading={testing} onClick={onDiagnostic}>
+          {diagnostic}
+        </Button>
+      </Card>
+      <Card title="Configuration">{children}</Card>
+    </div>
+  );
+}
+
+function TenantDangerScreen({ tenant }: { tenant: TenantRecord }) {
+  const [suspended, setSuspended] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [value, setValue] = useState("");
   return (
-    <Card
-      title="Danger"
-      subtitle="Phase 10 hydrates suspend and delete workflows. The delete CTA is wired now."
-    >
-      <TextInput
-        label="Type tenant slug to confirm"
-        value={value}
-        onChange={(event) => setValue(event.target.value)}
-      />
-      <Button className="mt-4" variant="destructive" disabled={value !== tenant.slug}>
-        Delete tenant
-      </Button>
-    </Card>
+    <div className="grid gap-4">
+      <Card
+        title={suspended ? "Tenant suspended" : "Suspend tenant"}
+        subtitle="Reversible. Blocks new sign-ins, ends active sessions, and leaves data intact."
+      >
+        <Button
+          variant={suspended ? "primary" : "destructive"}
+          onClick={() => setSuspended((current) => !current)}
+        >
+          {suspended ? "Resume tenant" : "Suspend tenant"}
+        </Button>
+      </Card>
+      <Card
+        title={deleting ? "Deletion scheduled" : "Delete tenant"}
+        subtitle="Irreversible after the 7-day cancellation window. Signing keys sunset for 30 days so JWKS consumers can recover cleanly."
+      >
+        {deleting ? (
+          <div className="grid gap-3">
+            <Toast
+              variant="warn"
+              message="Tenant deletion scheduled. 7 days remain before cascade; JWKS serves sunsetting keys for 30 days."
+            />
+            <Button variant="secondary" onClick={() => setDeleting(false)}>
+              Cancel deletion
+            </Button>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            <TextInput
+              label="Type tenant slug to confirm"
+              value={value}
+              onChange={(event) => setValue(event.target.value)}
+            />
+            <Button
+              variant="destructive"
+              disabled={value !== tenant.slug}
+              onClick={() => setDeleting(true)}
+            >
+              Schedule deletion
+            </Button>
+          </div>
+        )}
+      </Card>
+    </div>
   );
 }
 

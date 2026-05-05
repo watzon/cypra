@@ -101,6 +101,66 @@ function dashboardFetchMock() {
         ),
       );
     }
+    if (url === "/api/v1/provider-config/email") {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            kind: "terminal",
+            configured: false,
+            healthy: true,
+            message: "Resend is recommended for production; terminal email is available locally.",
+          }),
+          { status: 200 },
+        ),
+      );
+    }
+    if (url === "/api/v1/provider-config/upstream") {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            kind: "google",
+            configured: false,
+            healthy: false,
+            message: "Google OAuth credentials are not configured.",
+          }),
+          { status: 200 },
+        ),
+      );
+    }
+    if (url === "/api/v1/instance/admins") {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: "00000000-0000-0000-0000-00000000adm1",
+              email: "root@example.com",
+              role: "owner",
+              created_at: "2026-05-01",
+              last_seen_at: "2026-05-05",
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+    }
+    if (url === "/api/v1/instance/diagnostics") {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify({
+            health: { db: true, storage: true, email: true },
+            version: { version: "dev", commit: "test", build_date: "local" },
+            migrations: { current: 4, pending: [] },
+            master_key_rotation: { phase: "done", rows_done: 0, rows_total: 0 },
+            storage: {
+              kind: "local-disk",
+              endpoint: "file://****/cypra-storage",
+              credentials_present: true,
+            },
+          }),
+          { status: 200 },
+        ),
+      );
+    }
     if (url.includes("/branding")) {
       return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
     }
@@ -257,6 +317,60 @@ describe("App", () => {
       ["/dashboard/tenants/acme/signing-keys", "Signing keys"],
       ["/dashboard/tenants/acme/audit", "Tenant audit"],
       ["/dashboard/tenants/acme/settings/api-tokens", "API tokens"],
+    ] as const;
+
+    for (const [route, heading] of routes) {
+      renderApp(route, dashboardFetchMock());
+      await screen.findByRole("heading", { name: heading });
+
+      const results = await axe.run(document.body);
+
+      expect(results.violations, route).toEqual([]);
+      cleanup();
+    }
+  });
+
+  it("renders Phase 10 provider, danger, and instance routes", async () => {
+    const fetchMock = dashboardFetchMock();
+    renderApp("/dashboard/tenants/acme/settings/email", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "Email provider" })).toBeInTheDocument();
+    expect(screen.getByText("Recommended: Resend free tier")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Send test email" })).toBeInTheDocument();
+
+    cleanup();
+    renderApp("/dashboard/tenants/acme/settings/upstream", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "Google upstream" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try OAuth round-trip" })).toBeInTheDocument();
+
+    cleanup();
+    renderApp("/dashboard/tenants/acme/settings/danger", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "Suspend tenant" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Schedule deletion" })).toBeDisabled();
+
+    cleanup();
+    renderApp("/dashboard/instance/admins", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "Instance admins" })).toBeInTheDocument();
+    expect(screen.getByText("root@example.com")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Demote" })).toBeDisabled();
+
+    cleanup();
+    renderApp("/dashboard/instance/diagnostics", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "Diagnostics" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Storage backend" })).toBeInTheDocument();
+  });
+
+  it("has no axe violations on Phase 10 dashboard routes", async () => {
+    const routes = [
+      ["/dashboard/tenants/acme/settings/email", "Email provider"],
+      ["/dashboard/tenants/acme/settings/upstream", "Google upstream"],
+      ["/dashboard/tenants/acme/settings/danger", "Suspend tenant"],
+      ["/dashboard/instance/admins", "Instance admins"],
+      ["/dashboard/instance/diagnostics", "Diagnostics"],
     ] as const;
 
     for (const [route, heading] of routes) {
