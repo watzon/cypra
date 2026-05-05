@@ -145,6 +145,10 @@ func (s *Server) oidcRevoke(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) oidcConsent(w http.ResponseWriter, r *http.Request) {
+	if strings.HasPrefix(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded") {
+		s.hostedConsentDecision(w, r)
+		return
+	}
 	tenant, ok := TenantFromContext(r.Context())
 	if !ok {
 		writeOIDCError(w, http.StatusNotFound, "invalid_request")

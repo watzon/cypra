@@ -1,0 +1,32 @@
+{{ define "content" }}
+<h1>Sign in</h1>
+<p>Use an enabled method for this tenant.</p>
+{{ if .Error }}
+<p class="error">{{ .Error }}</p>
+{{ end }}
+<form
+  class="stack"
+  hx-post="/login/password"
+  hx-target="#login-result"
+  hx-swap="innerHTML"
+  method="post"
+>
+  <label
+    >Email <input name="email" type="email" autocomplete="email" required value="{{ .Email }}"
+  /></label>
+  <label
+    >Password <input name="password" type="password" autocomplete="current-password" required
+  /></label>
+  <button type="submit">Continue</button>
+</form>
+<div class="stack" style="margin-top: 12px">
+  <button class="secondary" data-passkey-action="get" data-rp-id="{{ .RPID }}">Use passkey</button>
+  <form hx-post="/login/magic-link" hx-target="#login-result" hx-swap="innerHTML" method="post">
+    <input name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
+    <button class="secondary" type="submit">Send magic link</button>
+  </form>
+  <a class="button secondary" href="/signup">Create account</a>
+</div>
+<div id="login-result" role="status" aria-live="polite"></div>
+<div class="bot-slot" data-verifier="noop"></div>
+{{ end }}{{ template "base" . }}

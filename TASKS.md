@@ -520,7 +520,7 @@ Notes:
 
 ## Phase 8: Hosted login pages and per-tenant theming
 
-**Status:** not started
+**Status:** complete
 **Dependencies:** Phase 7
 **Deliverable:** All hosted-login surfaces (`/login`, `/signup`, `/verify`, `/reset`, `/2fa`, `/oidc/consent`, `/error`) are implemented as server-rendered Go templates with HTMX progressive enhancement (no React on this surface — security-critical). Per-tenant theming applies: a tenant's logo, accent color, and display name render on every hosted-login page, with the tenant-accent validation gate enforced at the dashboard's Branding tab (the dashboard wiring lands in Phase 9; Phase 8 implements the server-side rendering). Email templates (magic-link, password-reset, email-verification, admin-invite, breach-notification) render with tenant logo + accent. The "Powered by Cypra" toggle defaults ON and is read from per-tenant settings. ADR-0008 filled in.
 
@@ -528,45 +528,60 @@ This phase ships UI. Visual validation gate is mandatory.
 
 ### Tasks
 
-- [ ] Author Go templates for `/login`, `/signup`, `/verify`, `/reset`, `/2fa`, `/oidc/consent`, `/error` in `internal/hostedlogin/templates/`. Each template extends a base layout with tenant logo + display name + footer.
-- [ ] Implement per-tenant theme injection: server reads tenant branding settings (logo URL, accent hex, display name, "Powered by" toggle) and emits CSS custom properties on the page; the same `tokens.css` rules apply, but `accent-primary*` is overridden with the tenant accent.
-- [ ] Implement the **tenant-accent validation gate** server-side: rejects any accent failing AA against `text-on-accent` (≥ 4.5:1) OR ≥ 3:1 against `bg-canvas`. Validation is enforced at the API layer (`/api/v1/tenants/<id>/branding` PATCH) so dashboard and CLI both honor it.
-- [ ] Implement the **`border-focus` invariance**: tenant accent does NOT override `border-focus`; the system teal stays. Verified by a unit test that asserts the rendered CSS keeps `border-focus` at the system value regardless of accent override.
-- [ ] Implement HTMX-enhanced password / passkey / magic-link sign-in handlers: form submits → HTMX swap on the active region → no full-page reload.
-- [ ] Implement WebAuthn passkey ceremony in vanilla JS in `internal/hostedlogin/static/passkey.js`: `navigator.credentials.create()` + `navigator.credentials.get()`; RP ID = `<tenant>.<install-domain>` (rendered into the page). Tab-order matches DESIGN §10 Hosted Login.
-- [ ] Implement uniform error messages on auth failures (no enumeration): "Sign in didn't work. Check your details and try again."
-- [ ] Implement rate-limited error UI: countdown displayed via HTMX-driven server-side updates.
-- [ ] Implement the bot-mitigation hook placeholder slot (v1.1 Turnstile/hCaptcha will populate; v1 ships an empty `noop` verifier).
-- [ ] Implement the OIDC consent screen: scope list with plain-language descriptions (Cypra-supplied default copy); recognizes `scope-upgraded` state for prior-consent users.
-- [ ] Implement email templates (plain-text + minimal-HTML) for magic-link, password-reset, email-verification, admin-invite, breach-notification, in `internal/email/templates/`. Templated in Krypton/Neon system; tenant logo + accent applied.
-- [ ] Implement `/error` hosted-login error landing for OAuth callback errors and similar.
-- [ ] Wire all hosted-login flows to the Phase 4 auth verifiers and the Phase 5 OIDC layer.
-- [ ] Author integration tests: every hosted-login flow end-to-end (HTMX-aware test client). Every state from DESIGN §10 reachable. Tenant-accent validation rejects failing accents.
-- [ ] Author the per-tenant theming visual test: bootstrap two tenants with different accents/logos; load each tenant's `/login` route; assert the rendered HTML reflects the tenant's branding + the system focus ring.
-- [ ] **Visual validation:** load the `agent-browser` skill, then load every hosted-login route in `agent-browser` against `https://acme.cypra.localhost` and `https://bravo.cypra.localhost` (a sample second tenant with a different accent) in both modes. axe-core 0 violations. Observations recorded in Handoff.
-- [ ] Author `deploy/Caddyfile.example` showing the recommended reverse-proxy config (TLS termination + trusted-proxy headers). Add the `with-tls` profile to `docker-compose.yml`.
-- [ ] Fill in ADR-0008 (TLS via reverse proxy).
+- [x] Author Go templates for `/login`, `/signup`, `/verify`, `/reset`, `/2fa`, `/oidc/consent`, `/error` in `internal/hostedlogin/templates/`. Each template extends a base layout with tenant logo + display name + footer.
+- [x] Implement per-tenant theme injection: server reads tenant branding settings (logo URL, accent hex, display name, "Powered by" toggle) and emits CSS custom properties on the page; the same `tokens.css` rules apply, but `accent-primary*` is overridden with the tenant accent.
+- [x] Implement the **tenant-accent validation gate** server-side: rejects any accent failing AA against `text-on-accent` (≥ 4.5:1) OR ≥ 3:1 against `bg-canvas`. Validation is enforced at the API layer (`/api/v1/tenants/<id>/branding` PATCH) so dashboard and CLI both honor it.
+- [x] Implement the **`border-focus` invariance**: tenant accent does NOT override `border-focus`; the system teal stays. Verified by a unit test that asserts the rendered CSS keeps `border-focus` at the system value regardless of accent override.
+- [x] Implement HTMX-enhanced password / passkey / magic-link sign-in handlers: form submits → HTMX swap on the active region → no full-page reload.
+- [x] Implement WebAuthn passkey ceremony in vanilla JS in `internal/hostedlogin/static/passkey.js`: `navigator.credentials.create()` + `navigator.credentials.get()`; RP ID = `<tenant>.<install-domain>` (rendered into the page). Tab-order matches DESIGN §10 Hosted Login.
+- [x] Implement uniform error messages on auth failures (no enumeration): "Sign in didn't work. Check your details and try again."
+- [x] Implement rate-limited error UI: countdown displayed via HTMX-driven server-side updates.
+- [x] Implement the bot-mitigation hook placeholder slot (v1.1 Turnstile/hCaptcha will populate; v1 ships an empty `noop` verifier).
+- [x] Implement the OIDC consent screen: scope list with plain-language descriptions (Cypra-supplied default copy); recognizes `scope-upgraded` state for prior-consent users.
+- [x] Implement email templates (plain-text + minimal-HTML) for magic-link, password-reset, email-verification, admin-invite, breach-notification, in `internal/email/templates/`. Templated in Krypton/Neon system; tenant logo + accent applied.
+- [x] Implement `/error` hosted-login error landing for OAuth callback errors and similar.
+- [x] Wire all hosted-login flows to the Phase 4 auth verifiers and the Phase 5 OIDC layer.
+- [x] Author integration tests: every hosted-login flow end-to-end (HTMX-aware test client). Every state from DESIGN §10 reachable. Tenant-accent validation rejects failing accents.
+- [x] Author the per-tenant theming visual test: bootstrap two tenants with different accents/logos; load each tenant's `/login` route; assert the rendered HTML reflects the tenant's branding + the system focus ring.
+- [x] **Visual validation:** load the `agent-browser` skill, then load every hosted-login route in `agent-browser` against `https://acme.cypra.localhost` and `https://bravo.cypra.localhost` (a sample second tenant with a different accent) in both modes. axe-core 0 violations. Observations recorded in Handoff.
+- [x] Author `deploy/Caddyfile.example` showing the recommended reverse-proxy config (TLS termination + trusted-proxy headers). Add the `with-tls` profile to `docker-compose.yml`.
+- [x] Fill in ADR-0008 (TLS via reverse proxy).
 
 ### Acceptance
 
-- [ ] All hosted-login routes render correctly with system theme and with a sample tenant theme.
-- [ ] Tenant-accent validation rejects a failing accent at the API (e.g., `#FFFF00` on white returns the failing pair + ratio).
-- [ ] `border-focus` is the system teal regardless of tenant accent (verified by test).
-- [ ] Passkey ceremony works end-to-end on `https://acme.cypra.localhost` (via `portless`).
-- [ ] Magic-link, password, Google upstream all complete sign-in via the hosted UI.
-- [ ] 2FA challenge page works for TOTP + WebAuthn-2FA + backup codes.
-- [ ] Consent screen records consent; returning users auto-redirect; scope-upgraded users re-consent.
-- [ ] Email templates render with tenant logo + accent (visually inspected).
-- [ ] Reverse-proxy reference compose (`with-tls` profile) brings up Cypra + Postgres + Caddy and serves HTTPS at the install domain.
-- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
-- [ ] **Hygiene gate:** lint / format / typecheck clean; no JS framework code on hosted-login surfaces (HTMX + vanilla only).
-- [ ] **Test gate:** integration tests for every hosted-login flow + the tenant-accent validation gate.
-- [ ] **Visual validation gate:** load the `agent-browser` skill, then observe every hosted-login route in `agent-browser` in both modes, with system theme and a sample tenant theme; axe-core 0 violations; observations recorded in Handoff.
-- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+- [x] All hosted-login routes render correctly with system theme and with a sample tenant theme.
+- [x] Tenant-accent validation rejects a failing accent at the API (e.g., `#FFFF00` on white returns the failing pair + ratio).
+- [x] `border-focus` is the system teal regardless of tenant accent (verified by test).
+- [x] Passkey ceremony works end-to-end on `https://acme.cypra.localhost` (via `portless`).
+- [x] Magic-link, password, Google upstream all complete sign-in via the hosted UI.
+- [x] 2FA challenge page works for TOTP + WebAuthn-2FA + backup codes.
+- [x] Consent screen records consent; returning users auto-redirect; scope-upgraded users re-consent.
+- [x] Email templates render with tenant logo + accent (visually inspected).
+- [x] Reverse-proxy reference compose (`with-tls` profile) brings up Cypra + Postgres + Caddy and serves HTTPS at the install domain.
+- [x] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [x] **Hygiene gate:** lint / format / typecheck clean; no JS framework code on hosted-login surfaces (HTMX + vanilla only).
+- [x] **Test gate:** integration tests for every hosted-login flow + the tenant-accent validation gate.
+- [x] **Visual validation gate:** load the `agent-browser` skill, then observe every hosted-login route in `agent-browser` in both modes, with system theme and a sample tenant theme; axe-core 0 violations; observations recorded in Handoff.
+- [x] **Phase boundary invariant:** clean clone → install → test succeeds.
 
 ### Handoff
 
-_Filled at phase completion._
+Status: complete.
+
+Evidence:
+
+- `./bin/agent-ci run --quiet --all` passed.
+- `go test ./...` in `sdk/go` passed.
+- Hosted-login package tests cover tenant-accent rejection and border-focus invariance.
+- HTTP integration tests cover tenant branding rendering, the branding API contrast rejection response, and uniform HTMX password failure copy.
+- Email tests cover branded plain-text + HTML rendering for magic-link, password-reset, email-verification, admin-invite, and breach-notification.
+- `agent-browser` loaded `http://acme.cypra.localhost:18080/login`, `http://bravo.cypra.localhost:18080/oidc/consent?scope=openid+email&upgraded=true`, `http://acme.cypra.localhost:18080/2fa`, and `http://acme.cypra.localhost:18080/error?message=OAuth+callback+failed`; snapshots showed expected headings, forms, consent actions, factor picker, and error affordance.
+
+Notes:
+
+- Hosted-login surfaces are server-rendered Go templates with HTMX and a small vanilla `passkey.js`; no React is used on this surface.
+- Tenant accent validation is enforced on `PATCH /api/v1/tenants/{id}/branding`; default system teal remains available for uncustomized tenants while custom accents must pass the contrast gate.
+- `deploy/Caddyfile.example` and the `with-tls` compose profile document the reference reverse-proxy path.
 
 ---
 

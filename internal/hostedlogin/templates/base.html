@@ -1,0 +1,70 @@
+{{ define "base" }}<!doctype html>
+<html lang="en" data-mode="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ .Title }} - {{ .Theme.DisplayName }}</title>
+    <script src="https://unpkg.com/htmx.org@2.0.4" defer></script>
+    <script src="/static/hostedlogin/passkey.js" defer></script>
+    <style>
+      :root {
+        --bg-canvas: #FAFAFA;
+        --bg-surface: #FFFFFF;
+        --bg-code: #F4F4F5;
+        --border-default: #E4E4E7;
+        --border-focus: #0D9488;
+        --text-primary: #09090B;
+        --text-secondary: #52525B;
+        --text-on-accent: #FFFFFF;
+        --accent-primary: {{ .Theme.Accent }};
+        --radius-md: 6px;
+        --font-neon: "Monaspace Neon", ui-monospace, Menlo, Consolas, monospace;
+        --font-krypton: "Monaspace Krypton", ui-monospace, Menlo, Consolas, monospace;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg-canvas: #0A0A0B;
+          --bg-surface: #111113;
+          --bg-code: #161618;
+          --border-default: #2A2A2F;
+          --border-focus: #2DD4BF;
+          --text-primary: #F4F4F5;
+          --text-secondary: #A1A1AA;
+          --text-on-accent: #0A0A0B;
+        }
+      }
+      body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg-canvas); color: var(--text-primary); font-family: var(--font-neon); }
+      main { width: min(100% - 32px, 440px); border: 1px solid var(--border-default); border-radius: 10px; background: var(--bg-surface); padding: 32px; }
+      .brand { display: grid; gap: 12px; margin-bottom: 24px; }
+      .logo { max-height: 40px; max-width: 180px; }
+      h1 { font-size: 24px; line-height: 32px; margin: 0; }
+      p { color: var(--text-secondary); line-height: 22px; }
+      label { display: grid; gap: 8px; margin: 16px 0; font-size: 13px; font-weight: 600; }
+      input, select { height: 40px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-surface); color: var(--text-primary); padding: 0 12px; font: inherit; }
+      input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--border-focus); outline-offset: 2px; }
+      button, .button { display: inline-flex; align-items: center; justify-content: center; min-height: 40px; border: 1px solid var(--accent-primary); border-radius: var(--radius-md); background: var(--accent-primary); color: var(--text-on-accent); padding: 0 16px; font: inherit; font-weight: 600; text-decoration: none; }
+      .secondary { border-color: var(--border-default); background: var(--bg-code); color: var(--text-primary); }
+      .stack { display: grid; gap: 12px; }
+      .error { color: #DC2626; }
+      .footer { margin-top: 24px; color: var(--text-secondary); font-size: 12px; }
+      .scope { border: 1px solid var(--border-default); border-radius: var(--radius-md); padding: 12px; }
+      .new { color: var(--accent-primary); font-family: var(--font-krypton); }
+    </style>
+  </head>
+  <body>
+    <main>
+      <div class="brand">
+        {{ if .Theme.LogoURL }}<img
+          class="logo"
+          src="{{ .Theme.LogoURL }}"
+          alt="{{ .Theme.DisplayName }}"
+        />{{ end }}
+        <strong>{{ .Theme.DisplayName }}</strong>
+      </div>
+      {{ template "content" . }} {{ if .Theme.PoweredBy }}
+      <div class="footer">Powered by Cypra</div>
+      {{ end }}
+    </main>
+  </body>
+</html>
+{{ end }}

@@ -35,6 +35,18 @@ services:
       timeout: 5s
       retries: 12
 
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["with-tls"]
+    depends_on:
+      - cypra
+    ports:
+      - "443:443"
+    volumes:
+      - ./Caddyfile.example:/etc/caddy/Caddyfile:ro
+      - cypra-caddy:/data
+
 volumes:
   cypra-postgres:
   cypra-storage:
+  cypra-caddy:

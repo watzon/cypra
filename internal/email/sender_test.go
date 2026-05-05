@@ -24,6 +24,20 @@ func TestRenderKnownTemplate(t *testing.T) {
 	}
 }
 
+func TestRenderBrandedTemplates(t *testing.T) {
+	templates := []string{"magic-link", "password-reset", "email-verification", "admin-invite", "breach-notification"}
+	payload := json.RawMessage(`{"tenant_display_name":"Acme","tenant_accent":"#0D9488","tenant_logo_url":"https://cdn.example/logo.svg","magic_link_url":"https://example.com","reset_url":"https://example.com","verify_url":"https://example.com","invite_url":"https://example.com","message":"Rotate your credentials."}`)
+	for _, name := range templates {
+		message, err := email.Render(name, "user@example.com", payload)
+		if err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		if message.HTML == "" || message.Text == "" || !strings.Contains(message.HTML, "Acme") {
+			t.Fatalf("%s did not render branded text and html: %+v", name, message)
+		}
+	}
+}
+
 func TestResendSenderPostsMessage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") != "Bearer test-key" {

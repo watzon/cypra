@@ -1,0 +1,8 @@
+{{ define "content" }}
+<h1>Reset password</h1>
+<form class="stack" hx-post="/reset" hx-target="#reset-result" hx-swap="innerHTML" method="post">
+  <label>Email <input name="email" type="email" autocomplete="email" required /></label>
+  <button type="submit">Send reset link</button>
+</form>
+<div id="reset-result" role="status" aria-live="polite"></div>
+{{ end }}{{ template "base" . }}

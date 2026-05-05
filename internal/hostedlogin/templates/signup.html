@@ -1,0 +1,12 @@
+{{ define "content" }}
+<h1>Create account</h1>
+<form class="stack" hx-post="/signup" hx-target="#signup-result" hx-swap="innerHTML" method="post">
+  <label>Email <input name="email" type="email" autocomplete="email" required /></label>
+  <label
+    >Password <input name="password" type="password" autocomplete="new-password" required
+  /></label>
+  <button type="submit">Continue</button>
+</form>
+<p><a href="/login">I already have an account</a></p>
+<div id="signup-result" role="status" aria-live="polite"></div>
+{{ end }}{{ template "base" . }}
