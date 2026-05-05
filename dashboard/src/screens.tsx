@@ -171,6 +171,12 @@ export function SetupWizard({ token }: { token: string }) {
     "CYPRA-I99Y",
     "CYPRA-J00Y",
   ];
+  const nextEnv = [
+    "CYPRA_ISSUER=https://acme.cypra.localhost",
+    "CYPRA_CLIENT_ID=client_cypra_acme_console",
+    "CYPRA_CLIENT_SECRET=copy-from-project-detail",
+    "AUTH_SECRET=dev-secret-change-me",
+  ].join("\n");
   return (
     <main className="mx-auto grid min-h-screen w-full max-w-[560px] place-content-center gap-6 p-4">
       <PageHeader
@@ -208,15 +214,23 @@ export function SetupWizard({ token }: { token: string }) {
         </div>
       ) : null}
       {step === "done" ? (
-        <EmptyState
-          title="Instance admin created."
-          body="Your install is ready. Continue to the dashboard."
-          action={
-            <Button variant="primary" onClick={() => history.pushState(null, "", "/dashboard")}>
-              Open dashboard
-            </Button>
-          }
-        />
+        <div className="grid gap-4">
+          <EmptyState
+            title="Instance admin created."
+            body="Your install is ready. Create tenant acme, configure providers, then paste these env vars into the Next.js example."
+            action={
+              <Button variant="primary" onClick={() => history.pushState(null, "", "/dashboard")}>
+                Open dashboard
+              </Button>
+            }
+          />
+          <Card
+            title="Next step: create your first tenant"
+            subtitle="Canonical demo path: tenant acme, Console App project, terminal email, Google upstream stub, then Next.js."
+          >
+            <CodeBlock code={nextEnv} />
+          </Card>
+        </div>
       ) : null}
     </main>
   );

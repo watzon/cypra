@@ -313,10 +313,12 @@ export function Tag({
     <span
       className={cn(
         "inline-flex items-center gap-1.5 rounded-[var(--radius-pill)] border border-border-default bg-bg-code px-2 py-0.5 text-[11px] font-semibold uppercase tracking-[0.06em]",
-        color,
+        "text-text-primary",
       )}
     >
-      <StatusSigil variant={variant in statusClass ? (variant as StatusVariant) : "info"} />
+      <span className={color}>
+        <StatusSigil variant={variant in statusClass ? (variant as StatusVariant) : "info"} />
+      </span>
       {children}
     </span>
   );
@@ -870,7 +872,10 @@ export function CodeBlock({ code }: { code: string }) {
         <span className="text-[12px] text-text-tertiary">shell</span>
         <Switch label="Copy as cURL" checked={curl} onChange={setCurl} />
       </div>
-      <pre className="overflow-x-auto rounded-[var(--radius-md)] bg-bg-code p-3 font-mono text-[13px] text-text-identifier">
+      <pre
+        className="overflow-x-auto rounded-[var(--radius-md)] bg-bg-code p-3 font-mono text-[13px] text-text-identifier"
+        tabIndex={0}
+      >
         <code>{shown}</code>
       </pre>
     </Card>

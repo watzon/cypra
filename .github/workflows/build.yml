@@ -73,6 +73,9 @@ jobs:
       - name: Run example e2e harness smoke
         run: bunx playwright test tests/e2e/examples-smoke.spec.ts
 
+      - name: Run canonical demo dry-run smoke
+        run: bunx playwright test tests/e2e/canonical-demo/canonical-demo.spec.ts
+
   openid-conformance:
     if: github.event_name == 'schedule'
     runs-on: ubuntu-latest

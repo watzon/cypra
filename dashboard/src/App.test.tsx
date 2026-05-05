@@ -203,6 +203,17 @@ describe("App", () => {
     expect(screen.getByLabelText("Setup token: cypra_setup_test")).toBeInTheDocument();
   });
 
+  it("surfaces canonical demo env stanzas after setup", async () => {
+    renderApp("/setup/cypra_setup_test");
+
+    await userEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await userEvent.click(screen.getByRole("button", { name: "Enroll passkey" }));
+    await userEvent.click(screen.getByRole("button", { name: "Go to dashboard" }));
+
+    expect(screen.getByText("Next step: create your first tenant")).toBeInTheDocument();
+    expect(screen.getByText(/CYPRA_ISSUER=https:\/\/acme\.cypra\.localhost/)).toBeInTheDocument();
+  });
+
   it("renders the primitive gallery", () => {
     renderApp("/__cypra/gallery");
 
