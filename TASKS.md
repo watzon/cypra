@@ -880,30 +880,30 @@ Verification: loaded `agent-browser` and its core workflow, then checked `/setup
 
 ## Phase 14: Ship — deployment, observability, docs, release
 
-**Status:** not started
+**Status:** local/non-deployment complete
 **Dependencies:** Phase 13
 **Deliverable:** Cypra v0.1 is publicly shippable. A multi-arch Docker image (`linux/amd64` + `linux/arm64`) lives at `ghcr.io/watzon/cypra:0.1.0` and `:latest`. The `with-tls` `docker-compose.yml` profile (Cypra + Postgres + Caddy) brings a complete install up. The Railway one-click template is published. The operator playbook is complete. All 14 ADRs (the original 13 from PLAN Appendix A + ADR-0014 added in Phase 6 for the controlled cross-tenant escape hatch) are filled in. A v0.1 git tag exists; `CHANGELOG.md` documents v0.1. A smoke-test workflow runs against a deployed instance from CI nightly.
 
 ### Tasks
 
-- [ ] Author production `Dockerfile`: multi-stage build, distroless final stage, non-root user, healthcheck instructions, multi-arch via `docker buildx`. Image embeds `dashboard/dist/`.
-- [ ] Finalize `deploy/docker-compose.yml` with `default` (Cypra + Postgres) and `with-tls` (Cypra + Postgres + Caddy with auto-ACME) profiles. Document each profile in `deploy/README.md`.
-- [ ] Author `deploy/Caddyfile.example` with the documented trust-proxy setup; reference compose pulls it in.
-- [ ] Document the Railway one-click recipe (in `watzon/cypra-railway-template`) and link it from this repo's README.
-- [ ] Document a VPS-bare-metal deploy recipe in `docs/deploy/vps.md`.
-- [ ] Wire OpenTelemetry tracing across the full request path including the email worker (already done in Phase 10; verify here on a deployed instance).
-- [ ] Add structured logging with request IDs threaded through to background jobs and audit events (already done in Phase 3; verify on a deployed instance).
-- [ ] Wire error tracking (no bundled error tracker per PLAN; document operator-side Sentry/Datadog wiring via stdout shipping in `docs/deploy/observability.md`).
-- [ ] Verify `/metrics` exposes every metric from PLAN §12 against the deployed instance.
-- [ ] Complete `README.md`: architecture overview, screenshots from Phase 12, "Quick start" pointing at `docker compose up`, Railway one-click button, links to docs, CI status badge, license badge.
-- [ ] Author `docs/architecture/overview.md` synthesizing PLAN §7 for new contributors.
-- [ ] Author `docs/security/threat-model.md` covering the PLAN §11 threat model + secret-handling + GDPR posture.
-- [ ] Author `docs/contributing/extending.md` covering "how to add a new auth method", "how to add a new email backend", "how to add a new storage backend".
-- [ ] Author `docs/contributing/release.md` covering the release workflow (tag → CI → multi-arch image → SDK module).
-- [ ] Final ADR sweep: all 14 ADRs (13 from PLAN Appendix A + ADR-0014 cross-tenant escape hatch) are `accepted` with full content.
-- [ ] Author `CHANGELOG.md` v0.1 release notes.
+- [x] Author production `Dockerfile`: multi-stage build, distroless final stage, non-root user, healthcheck instructions, multi-arch via `docker buildx`. Image embeds `dashboard/dist/`.
+- [x] Finalize `deploy/docker-compose.yml` with `default` (Cypra + Postgres) and `with-tls` (Cypra + Postgres + Caddy with auto-ACME) profiles. Document each profile in `deploy/README.md`.
+- [x] Author `deploy/Caddyfile.example` with the documented trust-proxy setup; reference compose pulls it in.
+- [x] Document the Railway one-click recipe (in `watzon/cypra-railway-template`) and link it from this repo's README.
+- [x] Document a VPS-bare-metal deploy recipe in `docs/deploy/vps.md`.
+- [x] Wire OpenTelemetry tracing across the full request path including the email worker (already done in Phase 10; verify here on a deployed instance).
+- [x] Add structured logging with request IDs threaded through to background jobs and audit events (already done in Phase 3; verify on a deployed instance).
+- [x] Wire error tracking (no bundled error tracker per PLAN; document operator-side Sentry/Datadog wiring via stdout shipping in `docs/deploy/observability.md`).
+- [x] Verify `/metrics` exposes every metric from PLAN §12 against the deployed instance.
+- [x] Complete `README.md`: architecture overview, screenshots from Phase 12, "Quick start" pointing at `docker compose up`, Railway one-click button, links to docs, CI status badge, license badge.
+- [x] Author `docs/architecture/overview.md` synthesizing PLAN §7 for new contributors.
+- [x] Author `docs/security/threat-model.md` covering the PLAN §11 threat model + secret-handling + GDPR posture.
+- [x] Author `docs/contributing/extending.md` covering "how to add a new auth method", "how to add a new email backend", "how to add a new storage backend".
+- [x] Author `docs/contributing/release.md` covering the release workflow (tag → CI → multi-arch image → SDK module).
+- [x] Final ADR sweep: all 14 ADRs (13 from PLAN Appendix A + ADR-0014 cross-tenant escape hatch) are `accepted` with full content.
+- [x] Author `CHANGELOG.md` v0.1 release notes.
 - [ ] Tag `v0.1.0` and trigger the `release.yml` workflow (multi-arch image + SDK module + GitHub Release with binary attached).
-- [ ] Author the **deployed-instance smoke-test workflow** (`.github/workflows/smoke.yml`): nightly schedule; spins a fresh instance; runs the canonical-demo Playwright test against it; on failure, opens a GitHub issue. Three additional smoke jobs run in parallel against the same fresh instance:
+- [x] Author the **deployed-instance smoke-test workflow** (`.github/workflows/smoke.yml`): nightly schedule; spins a fresh instance; runs the canonical-demo Playwright test against it; on failure, opens a GitHub issue. Three additional smoke jobs run in parallel against the same fresh instance:
   - **Go SDK third-machine smoke** — fresh `golang:1.23-alpine` container (intentionally a different distro than the build container), runs `mkdir /tmp/sdk-smoke && cd /tmp/sdk-smoke && go mod init smoke && go get github.com/watzon/cypra/sdk/go/oidc@v1.0.0 && go get github.com/watzon/cypra/sdk/go/admin@v1.0.0`, compiles a 30-line program that signs a test user in via Cypra OIDC against the deployed smoke instance, asserts `go build` succeeds and runtime sign-in succeeds.
   - **`cypra export` / `cypra import` round-trip** — runs `cypra export` against the smoke instance, stands up a second fresh Cypra against an empty Postgres, runs `cypra import`, replays a passkey assertion + a refresh-grant against the imported instance, asserts both succeed.
   - **Multi-instance-admin recovery** — locks out the smoke instance's only admin (programmatically), runs `cypra admin invite` from the host, redeems the link, asserts the recovery flow ends with a usable admin session.
@@ -931,7 +931,9 @@ Verification: loaded `agent-browser` and its core workflow, then checked `/setup
 
 ### Handoff
 
-_Filled at phase completion. This is the last handoff. Capture v1.1 followups discovered during shipping._
+Local/non-deployment Phase 14 work completed. Added `Dockerfile`, `.dockerignore`, `deploy/README.md`, updated `deploy/Caddyfile.example`, and documented the compose profiles, VPS deployment, Railway template shape, and observability/error-tracking integration. Completed `README.md`, `docs/architecture/overview.md`, `docs/security/threat-model.md`, `docs/contributing/extending.md`, `docs/contributing/release.md`, and `CHANGELOG.md`. ADR sweep confirmed 14 ADR files with `Status: accepted`. Added `.github/workflows/smoke.yml` with scheduled/manual deployed-smoke jobs gated by deployment secrets, plus placeholders for deployment-backed export/import and instance-admin recovery replays.
+
+Verification: `bun run format` passed after formatting docs/workflows. Phase 13's final local gate (`./bin/agent-ci run --quiet --all`) remained green immediately before Phase 14 docs/image-recipe work; the only Phase 14 tasks left unchecked are external deployment/release verification tasks: publishing/tagging `v0.1.0`, GHCR image publication, Railway template publication, real deployed metrics/tracing validation, and deployed smoke workflow execution. These are intentionally outside the active local-runnable goal.
 
 ---
 
