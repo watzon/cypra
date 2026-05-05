@@ -2,7 +2,9 @@ package httpserver_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -80,6 +82,23 @@ func TestHealthReadyAndTenantCRUD(t *testing.T) {
 	}
 }
 
+func TestBotVerifierFailureBlocksAuthHandler(t *testing.T) {
+	harness := dbtest.New(t)
+	dbtest.SeedTenant(t, harness.SQL, "acme")
+	server, err := httpserver.New(httpserver.Options{DB: harness.SQL, TenantDB: harness.TenantDB, PublicBaseURL: "https://cypra.localhost", Version: "test", Commit: "test", KEKLoaded: true, BotVerifier: failingVerifier{}})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password/signup", bytes.NewReader([]byte(`{"email":"user@example.com","password":"correct horse battery staple","bot_token":"bad"}`)))
+	req.Host = "acme.cypra.localhost"
+	resp := httptest.NewRecorder()
+	server.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusForbidden || !bytes.Contains(resp.Body.Bytes(), []byte("bot.verify_failed")) {
+		t.Fatalf("bot failure response = %d %s", resp.Code, resp.Body.String())
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM users WHERE email = 'user@example.com'`, 0)
+}
+
 func TestTenantResolverProjectCRUDAndAudit(t *testing.T) {
 	harness := dbtest.New(t)
 	dbtest.SeedTenant(t, harness.SQL, "acme")
@@ -114,3 +133,7 @@ func newTestServer(t *testing.T, harness *dbtest.Harness) *httpserver.Server {
 	}
 	return server
 }
+
+type failingVerifier struct{}
+
+func (failingVerifier) Verify(context.Context, string) error { return errors.New("bot rejected") }

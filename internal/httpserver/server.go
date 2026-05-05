@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/watzon/cypra/internal/audit"
 	"github.com/watzon/cypra/internal/auth"
+	"github.com/watzon/cypra/internal/botmitigation"
 	"github.com/watzon/cypra/internal/db"
 	"github.com/watzon/cypra/internal/migrate"
 	"gorm.io/datatypes"
@@ -33,6 +34,9 @@ type Options struct {
 	DevOpenAPI    bool
 	StorageReady  func(context.Context) error
 	KEKLoaded     bool
+	MasterKey     []byte
+	BotVerifier   botmitigation.Verifier
+	GoogleSecret  []byte
 }
 
 type Server struct {
@@ -51,6 +55,12 @@ func New(opts Options) (*Server, error) {
 	}
 	if opts.StorageReady == nil {
 		opts.StorageReady = func(context.Context) error { return nil }
+	}
+	if opts.BotVerifier == nil {
+		opts.BotVerifier = botmitigation.NoopVerifier{}
+	}
+	if len(opts.GoogleSecret) == 0 {
+		opts.GoogleSecret = []byte("dev-google-oauth-state-secret")
 	}
 	return &Server{Options: opts, installHost: base.Host, audit: audit.NewWriter(opts.DB)}, nil
 }
@@ -71,6 +81,32 @@ func (s *Server) Router() http.Handler {
 			api.Get("/openapi.json", s.openapi)
 		}
 		api.Get("/audit/export", audit.ExportHandler(s.DB))
+		api.Route("/auth", func(rt chi.Router) {
+			rt.Post("/password/signup", s.authPasswordSignup)
+			rt.Post("/password/signin", s.authPasswordSignin)
+			rt.Post("/password/reset", s.authPasswordReset)
+			rt.Post("/magic-link/issue", s.authMagicLinkIssue)
+			rt.Post("/magic-link/verify", s.authMagicLinkVerify)
+			rt.Post("/invite/redeem", s.authInviteRedeem)
+			rt.Post("/passkey/register", s.authPasskeyRegister)
+			rt.Post("/passkey/assert", s.authPasskeyAssert)
+			rt.Post("/totp/enroll", s.authTOTPEnroll)
+			rt.Post("/totp/verify", s.authTOTPVerify)
+			rt.Post("/webauthn2fa/enroll", s.authWebAuthn2FAEnroll)
+			rt.Post("/webauthn2fa/verify", s.authWebAuthn2FAVerify)
+			rt.Post("/backup-codes/regenerate", s.authBackupCodesRegenerate)
+			rt.Post("/backup-codes/consume", s.authBackupCodesConsume)
+			rt.Post("/google/start", s.authGoogleStart)
+			rt.Post("/google/callback", s.authGoogleCallback)
+		})
+		api.Route("/admin", func(rt chi.Router) {
+			rt.Use(auth.RequireTenantRole)
+			rt.Post("/invite", s.adminInvite)
+		})
+		api.Route("/instance", func(rt chi.Router) {
+			rt.Use(auth.RequireInstanceAdmin)
+			rt.Post("/invite", s.instanceInvite)
+		})
 		api.Route("/tenants", func(rt chi.Router) {
 			rt.Use(auth.RequireInstanceAdmin)
 			rt.Get("/", s.listTenants)

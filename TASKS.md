@@ -253,58 +253,70 @@ Verification: `./bin/agent-ci run --quiet --all` passed after loading `agent-ci`
 
 ## Phase 4: Auth methods, email providers, storage backends
 
-**Status:** not started
+**Status:** complete
 **Dependencies:** Phase 3
 **Deliverable:** Every PLAN-mandated end-user auth method works server-side: email + password (Argon2id), magic link, passkey (WebAuthn with **per-tenant RP ID**), Google OAuth upstream (with mandatory `state` + `nonce`). Two-factor: TOTP + WebAuthn second factor. Backup codes (Argon2id-hashed; immediate invalidation on regenerate). Email providers `terminal` / `smtp` / `resend` are wired via the `Sender` interface; tenants without a configured provider cannot issue mail-dependent flows (handlers return `tenant.email_provider_required` and the admin dashboard surfaces a hard-block in Phase 9). Storage backends `local-disk` (HMAC-signed proxy URLs at `/storage/*`) and `s3-compatible` (AWS SDK v2 presigned URLs) implement the `Storage` interface. ADRs 0007, 0012 filled in.
 
 ### Tasks
 
-- [ ] Implement password verifier in `internal/auth/password`: Argon2id verify; password-reset flow with `password_reset_tokens` (single-use, atomic consume); competing-credential revocation (when a password is set via passkey-flow, all live `password_reset_tokens` for the user are `revoked_at`).
-- [ ] Implement magic-link verifier in `internal/auth/magiclink`: token issuance (32 bytes random, hashed), email dispatch via outbox, atomic consume on `/verify-magic-link?token=`.
-- [ ] Implement the **invite endpoint** at `POST /api/v1/admin/invite` (tenant-admin authority, body `{ email, role, redirect_url? }`) and `POST /api/v1/instance/invite` (instance-admin authority, body `{ email, role, redirect_url? }`, writes a `pending_invitations` row with `tenant_id = NULL`). Token is 32 bytes random, hashed in DB, single-use, 7-day expiry. Enqueues to `email_outbox` using the `admin-invite` template. Idempotency: re-inviting the same email when an unredeemed row exists rotates the token and resets the expiry rather than creating a second row (enforced by the partial unique index on `pending_invitations`).
-- [ ] Implement the **invite redemption flow**: `GET /invite?token=…` on the hosted-login surface (the rendered page lands in Phase 8 — Phase 4 ships the API endpoint + redemption state machine: validate → pin to a session-bound continuation token → on continuation: optional set-password → mandatory passkey enrolment → role binding → audit event). `POST /api/v1/auth/invite/redeem` consumes the token; the matching `pending_invitations` row's `redeemed_at` and `redeemed_by_user_id` are set atomically. Invite redemption is the **single mechanism** behind every "invite teammate", "invite admin", and second-instance-admin onboarding flow downstream — no other phase introduces a parallel invite mechanism.
-- [ ] Implement passkey (WebAuthn) flow in `internal/auth/webauthn` using `go-webauthn/webauthn`: registration + assertion. **RP ID is per-tenant** (`<tenant>.<install-domain>`), enforced at registration time and checked at assertion time. `rp_id` column on `passkey_credentials` is set at registration; assertions present credentials with that `rp_id` only.
-- [ ] Implement TOTP enrollment + verification in `internal/auth/totp`: secret generation (160-bit), envelope-encryption at rest, ±1-step verification window, QR-code provisioning URI generation.
-- [ ] Implement WebAuthn second-factor in `internal/auth/webauthn2fa`: same library, separate credential set tagged as 2FA-only.
-- [ ] Implement backup codes in `internal/auth/backupcodes`: 10-code generation, Argon2id-hash storage, atomic consume, regeneration immediately invalidates all unconsumed codes. Separate tables for `user_backup_codes` and `instance_admin_backup_codes` per PLAN §8.
-- [ ] Implement upstream Google OAuth in `internal/auth/upstream/google`: OAuth client setup; `state` is a signed nonce + return-URL bundle, validated on callback; `nonce` is included in the auth request and echoed in the upstream `id_token`, validated on receipt.
-- [ ] Implement the `Sender` interface in `internal/email`: backends `terminal` (stdout), `smtp` (`net/smtp`), `resend` (Resend Go SDK). Per-tenant `email_provider_configs` resolution. Mail-dependent handlers return `tenant.email_provider_required` if no enabled config exists.
-- [ ] Implement email templates in `internal/email/templates/`: magic-link, password-reset, email-verification, admin-invite (tenant-scoped + instance-scoped variants), breach-notification. Plain-text + minimal-HTML variants. Tenant logo + accent applied via Go-template variables. Instance-scoped admin-invite uses the install's branding rather than a tenant's.
-- [ ] Implement the `Storage` interface in `internal/storage`: `Put`, `Get`, `Delete`, `SignedURL(key, ttl)`. Default TTL 5 min, max 1 h.
-- [ ] Implement `local-disk` backend in `internal/storage/localdisk`: filesystem path; `SignedURL` returns `https://<host>/storage/<base64url(payload)>.<HMAC-SHA256>` where payload encodes `{key, exp}`. Verified at the `/storage/*` chi handler.
-- [ ] Implement `s3-compatible` backend in `internal/storage/s3compat`: AWS SDK v2 client; native `s3.PresignClient.PresignGetObject`; bucket + endpoint + creds from env.
-- [ ] Author integration tests for every auth method using `testcontainers-go` Postgres + a stub email/storage backend.
-- [ ] Author the per-tenant RP ID test: register a passkey under `acme.cypra.localhost`; attempt assertion under `bravo.cypra.localhost` with the same credential id; assert the WebAuthn library refuses the assertion (RP ID mismatch is enforced by `go-webauthn/webauthn`).
-- [ ] Author the upstream-OAuth state-tampering test: tamper with the `state` parameter on callback; assert `auth.upstream_state_mismatch` is returned.
-- [ ] Author the backup-code immediate-invalidation test: regenerate codes; assert all previously-issued unconsumed codes are now `used_at IS NOT NULL` (or rejected on consume).
-- [ ] Wire all auth methods into `/api/v1/auth/...` handlers (used by hosted login in Phase 8 — handler-only at Phase 4).
-- [ ] Define the **bot-mitigation `Verifier` interface** in `internal/botmitigation/verifier.go` (`type Verifier interface { Verify(ctx, token string) error }`) and ship a `noop` implementation. **Wire the interface into every sign-in / sign-up / magic-link / invite-redemption handler at Phase 4 (not Phase 10).** Phase 10's job is to wire the interface to Prometheus + ship the operator playbook around it; the *seam* must exist now so the v1.1 Turnstile/hCaptcha switch doesn't require touching every handler.
-- [ ] Enrol every Phase 4 handler (auth methods, invite endpoints, invite redemption) with the tenant-isolation fuzzer harness.
-- [ ] Fill in ADR-0007 (storage abstraction) and ADR-0012 (upstream OAuth state/nonce).
+- [x] Implement password verifier in `internal/auth/password`: Argon2id verify; password-reset flow with `password_reset_tokens` (single-use, atomic consume); competing-credential revocation (when a password is set via passkey-flow, all live `password_reset_tokens` for the user are `revoked_at`).
+- [x] Implement magic-link verifier in `internal/auth/magiclink`: token issuance (32 bytes random, hashed), email dispatch via outbox, atomic consume on `/verify-magic-link?token=`.
+- [x] Implement the **invite endpoint** at `POST /api/v1/admin/invite` (tenant-admin authority, body `{ email, role, redirect_url? }`) and `POST /api/v1/instance/invite` (instance-admin authority, body `{ email, role, redirect_url? }`, writes a `pending_invitations` row with `tenant_id = NULL`). Token is 32 bytes random, hashed in DB, single-use, 7-day expiry. Enqueues to `email_outbox` using the `admin-invite` template. Idempotency: re-inviting the same email when an unredeemed row exists rotates the token and resets the expiry rather than creating a second row (enforced by the partial unique index on `pending_invitations`).
+- [x] Implement the **invite redemption flow**: `GET /invite?token=…` on the hosted-login surface (the rendered page lands in Phase 8 — Phase 4 ships the API endpoint + redemption state machine: validate → pin to a session-bound continuation token → on continuation: optional set-password → mandatory passkey enrolment → role binding → audit event). `POST /api/v1/auth/invite/redeem` consumes the token; the matching `pending_invitations` row's `redeemed_at` and `redeemed_by_user_id` are set atomically. Invite redemption is the **single mechanism** behind every "invite teammate", "invite admin", and second-instance-admin onboarding flow downstream — no other phase introduces a parallel invite mechanism.
+- [x] Implement passkey (WebAuthn) flow in `internal/auth/webauthn` using `go-webauthn/webauthn`: registration + assertion. **RP ID is per-tenant** (`<tenant>.<install-domain>`), enforced at registration time and checked at assertion time. `rp_id` column on `passkey_credentials` is set at registration; assertions present credentials with that `rp_id` only.
+- [x] Implement TOTP enrollment + verification in `internal/auth/totp`: secret generation (160-bit), envelope-encryption at rest, ±1-step verification window, QR-code provisioning URI generation.
+- [x] Implement WebAuthn second-factor in `internal/auth/webauthn2fa`: same library, separate credential set tagged as 2FA-only.
+- [x] Implement backup codes in `internal/auth/backupcodes`: 10-code generation, Argon2id-hash storage, atomic consume, regeneration immediately invalidates all unconsumed codes. Separate tables for `user_backup_codes` and `instance_admin_backup_codes` per PLAN §8.
+- [x] Implement upstream Google OAuth in `internal/auth/upstream/google`: OAuth client setup; `state` is a signed nonce + return-URL bundle, validated on callback; `nonce` is included in the auth request and echoed in the upstream `id_token`, validated on receipt.
+- [x] Implement the `Sender` interface in `internal/email`: backends `terminal` (stdout), `smtp` (`net/smtp`), `resend` (Resend Go SDK). Per-tenant `email_provider_configs` resolution. Mail-dependent handlers return `tenant.email_provider_required` if no enabled config exists.
+- [x] Implement email templates in `internal/email/templates/`: magic-link, password-reset, email-verification, admin-invite (tenant-scoped + instance-scoped variants), breach-notification. Plain-text + minimal-HTML variants. Tenant logo + accent applied via Go-template variables. Instance-scoped admin-invite uses the install's branding rather than a tenant's.
+- [x] Implement the `Storage` interface in `internal/storage`: `Put`, `Get`, `Delete`, `SignedURL(key, ttl)`. Default TTL 5 min, max 1 h.
+- [x] Implement `local-disk` backend in `internal/storage/localdisk`: filesystem path; `SignedURL` returns `https://<host>/storage/<base64url(payload)>.<HMAC-SHA256>` where payload encodes `{key, exp}`. Verified at the `/storage/*` chi handler.
+- [x] Implement `s3-compatible` backend in `internal/storage/s3compat`: AWS SDK v2 client; native `s3.PresignClient.PresignGetObject`; bucket + endpoint + creds from env.
+- [x] Author integration tests for every auth method using `testcontainers-go` Postgres + a stub email/storage backend.
+- [x] Author the per-tenant RP ID test: register a passkey under `acme.cypra.localhost`; attempt assertion under `bravo.cypra.localhost` with the same credential id; assert the WebAuthn library refuses the assertion (RP ID mismatch is enforced by `go-webauthn/webauthn`).
+- [x] Author the upstream-OAuth state-tampering test: tamper with the `state` parameter on callback; assert `auth.upstream_state_mismatch` is returned.
+- [x] Author the backup-code immediate-invalidation test: regenerate codes; assert all previously-issued unconsumed codes are now `used_at IS NOT NULL` (or rejected on consume).
+- [x] Wire all auth methods into `/api/v1/auth/...` handlers (used by hosted login in Phase 8 — handler-only at Phase 4).
+- [x] Define the **bot-mitigation `Verifier` interface** in `internal/botmitigation/verifier.go` (`type Verifier interface { Verify(ctx, token string) error }`) and ship a `noop` implementation. **Wire the interface into every sign-in / sign-up / magic-link / invite-redemption handler at Phase 4 (not Phase 10).** Phase 10's job is to wire the interface to Prometheus + ship the operator playbook around it; the *seam* must exist now so the v1.1 Turnstile/hCaptcha switch doesn't require touching every handler.
+- [x] Enrol every Phase 4 handler (auth methods, invite endpoints, invite redemption) with the tenant-isolation fuzzer harness.
+- [x] Fill in ADR-0007 (storage abstraction) and ADR-0012 (upstream OAuth state/nonce).
 
 ### Acceptance
 
-- [ ] Password sign-up + sign-in works against the API.
-- [ ] Magic-link issued via API → email dispatched via outbox → token consumed → session established.
-- [ ] Passkey registration + assertion works at the API; RP ID is per-tenant; cross-tenant assertion is refused.
-- [ ] Google OAuth round-trip with a stubbed upstream succeeds; tampered `state` rejected; missing/wrong `nonce` rejected.
-- [ ] TOTP enrollment + verification works; 30 s window honored; ±1 step accepted.
-- [ ] WebAuthn second-factor works alongside primary password.
-- [ ] Backup codes: 10 generated; consumed atomically; regen invalidates the rest.
-- [ ] Email providers `terminal` / `smtp` / `resend` all dispatch a magic-link email correctly (Resend tested with API mock).
-- [ ] Tenants without an enabled email provider get `tenant.email_provider_required` on every mail-dependent endpoint.
-- [ ] Storage `local-disk`: `Put` → `SignedURL` → fetch via signed URL → `Get` → bytes match. Tampered HMAC URL rejected.
-- [ ] Storage `s3-compatible`: same round-trip against MinIO in Docker Compose.
-- [ ] `POST /api/v1/admin/invite` and `POST /api/v1/instance/invite` round-trip: invite issued → email dispatched via outbox → token redeemed → user/admin minted with the bound role; expired token rejected; redeemed-twice rejected; cross-tenant invite rejected (member of `acme` cannot invite into `bravo`); idempotent re-invite rotates the token in the same row.
-- [ ] Bot-mitigation `Verifier` interface is callable from every sign-in / sign-up / magic-link / invite handler; the `noop` impl returns nil; replacing it with a stub-fail impl in tests blocks the call (interface seam works).
-- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
-- [ ] **Hygiene gate:** lint / format / typecheck clean; no plaintext secrets in any test fixture committed.
-- [ ] **Test gate:** unit + integration tests cover every auth method, every email backend, both storage backends, and the per-tenant RP ID + state/nonce CVE patterns.
-- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+- [x] Password sign-up + sign-in works against the API.
+- [x] Magic-link issued via API → email dispatched via outbox → token consumed → session established.
+- [x] Passkey registration + assertion works at the API; RP ID is per-tenant; cross-tenant assertion is refused.
+- [x] Google OAuth round-trip with a stubbed upstream succeeds; tampered `state` rejected; missing/wrong `nonce` rejected.
+- [x] TOTP enrollment + verification works; 30 s window honored; ±1 step accepted.
+- [x] WebAuthn second-factor works alongside primary password.
+- [x] Backup codes: 10 generated; consumed atomically; regen invalidates the rest.
+- [x] Email providers `terminal` / `smtp` / `resend` all dispatch a magic-link email correctly (Resend tested with API mock).
+- [x] Tenants without an enabled email provider get `tenant.email_provider_required` on every mail-dependent endpoint.
+- [x] Storage `local-disk`: `Put` → `SignedURL` → fetch via signed URL → `Get` → bytes match. Tampered HMAC URL rejected.
+- [x] Storage `s3-compatible`: same round-trip against MinIO in Docker Compose.
+- [x] `POST /api/v1/admin/invite` and `POST /api/v1/instance/invite` round-trip: invite issued → email dispatched via outbox → token redeemed → user/admin minted with the bound role; expired token rejected; redeemed-twice rejected; cross-tenant invite rejected (member of `acme` cannot invite into `bravo`); idempotent re-invite rotates the token in the same row.
+- [x] Bot-mitigation `Verifier` interface is callable from every sign-in / sign-up / magic-link / invite handler; the `noop` impl returns nil; replacing it with a stub-fail impl in tests blocks the call (interface seam works).
+- [x] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [x] **Hygiene gate:** lint / format / typecheck clean; no plaintext secrets in any test fixture committed.
+- [x] **Test gate:** unit + integration tests cover every auth method, every email backend, both storage backends, and the per-tenant RP ID + state/nonce CVE patterns.
+- [x] **Phase boundary invariant:** clean clone → install → test succeeds.
 
 ### Handoff
 
-_Filled at phase completion._
+Phase 4 completed locally.
+
+Evidence:
+
+- `./bin/agent-ci run --quiet --all` passed.
+- `go test -p 1 ./...` passed after an initial parallel testcontainer connection reset; rerunning failed packages and serialized suite passed.
+- `go test ./...` in `sdk/go` passed.
+- Focused tests cover password, magic link, invite issue/redeem, passkey RP binding, TOTP, backup-code regeneration invalidation, Google OAuth state/nonce validation, email provider resolution/Resend mock, local disk signed URLs, S3-compatible MinIO round-trip, auth route wiring, bot verifier failure, and Phase 4 tenant-isolation fuzzer enrollment.
+
+Notes:
+
+- Phase 4 exposes handler-only auth API seams for hosted login; UI continuation/session presentation lands in Phase 8 per plan.
+- S3-compatible storage is validated with a testcontainers MinIO instance rather than the repo compose file.
 
 ---
 
