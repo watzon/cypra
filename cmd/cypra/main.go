@@ -18,7 +18,7 @@ import (
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	_ "github.com/watzon/cypra/dashboard"
+	"github.com/watzon/cypra/dashboard"
 	"github.com/watzon/cypra/internal/auth/invite"
 	"github.com/watzon/cypra/internal/bootstrap"
 	cypra "github.com/watzon/cypra/internal/crypto"
@@ -98,7 +98,8 @@ func runServe(args []string) error {
 	if err != nil {
 		return fmt.Errorf("open gorm db: %w", err)
 	}
-	server, err := httpserver.New(httpserver.Options{DB: dbConn, TenantDB: db.NewTenantScopedDB(gormDB), PublicBaseURL: publicBaseURL, Version: version, Commit: commit, DevOpenAPI: os.Getenv("LOG_LEVEL") == "debug", KEKLoaded: masterKeyConfigured(), MasterKey: loadMasterKey()})
+	devMode := os.Getenv("LOG_LEVEL") == "debug"
+	server, err := httpserver.New(httpserver.Options{DB: dbConn, TenantDB: db.NewTenantScopedDB(gormDB), PublicBaseURL: publicBaseURL, Version: version, Commit: commit, DevOpenAPI: devMode, KEKLoaded: masterKeyConfigured(), MasterKey: loadMasterKey(), DashboardFS: dashboard.Files, DashboardDev: envDefault("VITE_DEV_SERVER", "http://127.0.0.1:5173")})
 	if err != nil {
 		return err
 	}

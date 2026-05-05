@@ -17,6 +17,18 @@ export default tseslint.config(
     },
     rules: {
       "@typescript-eslint/no-confusing-void-expression": "off",
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "lucide-react",
+              message:
+                "Import Lucide icons from lucide-react/dist/esm/icons/<icon-name>.mjs so Vite can tree-shake the icon set.",
+            },
+          ],
+        },
+      ],
     },
   },
 );

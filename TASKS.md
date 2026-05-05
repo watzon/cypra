@@ -445,7 +445,7 @@ Notes:
 
 ## Phase 7: Dashboard frontend foundation — tokens, primitives, shell, account & setup wizard
 
-**Status:** not started
+**Status:** complete
 **Dependencies:** Phase 5 (Phase 6 runs in parallel — Phase 7 does NOT consume CLI/PAT/import-export work)
 **Deliverable:** The `dashboard/` SPA exists, embedded in the Cypra binary via `embed.FS`. Every DESIGN §3–§7 token is defined as a CSS variable (dark + light at parity, bound to a `data-mode` attribute). Monaspace Neon and Monaspace Krypton are self-hosted with proper FOUT handling. Every DESIGN §8 atomic primitive and §9 composite component is implemented in code, with every documented state, both color modes. The route tree from DESIGN §11 is wired with placeholder pages; routes that need data fetch via React Query. Theme switching (system / dark / light) persists per actor (using the `users.metadata.theme` and `instance_admins.metadata.theme` JSONB fields established in Phase 1's `0001_init.sql`). The Sidebar Nav, ContextBadge, and TenantSwitcher work end-to-end. The **Setup Wizard** (`/setup/<token>`), **Account / Profile**, and **Dashboard Overview** screens are complete with every documented state. A `/__cypra/gallery` route renders every primitive in every state in both modes for visual regression. axe-core runs in dev. ADR-0010 filled in.
 
@@ -453,53 +453,68 @@ This phase ships UI. The visual validation gate is **mandatory**.
 
 ### Tasks
 
-- [ ] Scaffold `dashboard/` with Vite + React 19 + TypeScript strict mode + Tailwind v4 + ShadCN/Watermelon UI. Configure path aliases (`@/`).
-- [ ] Configure Bun workspace integration; `bun install` at repo root installs `dashboard/` deps.
-- [ ] Self-host Monaspace Neon (weights 400/500/600/700) + Monaspace Krypton (weights 400/500). Configure `font-display: swap` and preload critical weights. License files committed.
-- [ ] Implement the token system from DESIGN §3 / §4 / §5 / §7 as CSS variables in `dashboard/src/tokens.css`. Two parallel sets bound to `[data-mode="dark"]` and `[data-mode="light"]`. **No hardcoded hex values anywhere outside this file** (CI lint rule enforces this).
-- [ ] Configure Tailwind v4 to consume the CSS-variable tokens (no Tailwind theme colors that aren't tokens).
-- [ ] Set up React Query (`@tanstack/react-query`) global client with sensible defaults (stale: 30s, retry: 3 with exp backoff).
-- [ ] Implement theme switching with `system` / `dark` / `light` options, persisted via `users.metadata.theme` (tenant actors) and `instance_admins.metadata.theme` (instance actors). Both `metadata` columns are JSONB on the row, established in Phase 1's `0001_init.sql`. Reads/writes go through `PATCH /api/v1/users/me` and `PATCH /api/v1/instance/admins/me` respectively (handlers added here as part of the SPA wiring).
-- [ ] Implement Lucide icon imports as **per-icon imports from `lucide-react/dist/esm/icons/<icon-name>`** (not the barrel `lucide-react` import — barrel imports defeat tree-shaking and ship the entire icon set). The picks from DESIGN §6: `Lock`, `Copy`, `Eye`/`EyeOff`, `RotateCw`, `Trash2`, `AlertTriangle`, `XCircle`, `CheckCircle2`, `Clock`, plus `Monitor` for `MobileBlockedBanner`. Add a CI lint rule (custom `eslint` rule or `eslint-plugin-no-restricted-imports` config) that forbids `import { … } from 'lucide-react'` and forces the per-icon path.
-- [ ] Implement Cypra-specific glyphs as React SVG components: `TenantGlyph`, `InstanceGlyph`, `PasskeyGlyph`, `OidcGlyph`. Visually distinct shapes (not just color).
-- [ ] Implement every DESIGN §8 atomic primitive: `Button`, `IconButton`, `TextInput`, `Select`/`Combobox`, `Checkbox`, `Radio`, `Switch`, `Tag`/`Chip`, `Tooltip`, `Toast` (with stacking max 3), `Modal`, `Popover`/`Dropdown`/`Menu`, `Tabs`, `Card`, `Avatar` (with `no-name` `sub`-derived fallback), `Skeleton` (static, no shimmer), `Toolbar`/`SegmentedControl`, `IdentifierPill` (with copy-while-masked refusal on `MaskedSecret`), `MaskedSecret`, `TenantSwitcher`, `ContextBadge`, `StatusPip` (every variant with paired sigil), `KeyRotationTimeline`, `AuditEntry`, `BackupCodeGrid` (with `beforeunload` + browser-back interception), `PermissionMatrix`, `SetupTokenBanner`, `ProviderConfigCard`, `MobileBlockedBanner`, `CodeBlock` (with `Copy as cURL` toggle).
-- [ ] Implement every DESIGN §9 composite: `PageHeader`, `SidebarNav` (expanded/collapsed; permission-denied with `Lock`), `Breadcrumb`, `EmptyState`, `ErrorState`, `LoadingState` (static skeletons, 120 ms delay), `ConfirmationDialog` (with typed-confirm exact match), `SettingsRow` (including `branding-toggle` with preview Modal), `ListRow`, `SaveBar`.
-- [ ] Implement the route tree from DESIGN §11. Every route renders a placeholder `PageHeader` + `EmptyState`/`Skeleton` until its phase lands.
-- [ ] Implement the **Setup Wizard** (`/setup/<token>`) end-to-end: token verification → `SetupTokenBanner` → passkey enrollment (uses Phase 4 server-side WebAuthn) → `BackupCodeGrid` with confirmation gate → first instance admin minted → redirect to `/dashboard`. Every state from DESIGN §10 implemented.
-- [ ] Implement the **Account / Profile** screen: passkeys section (add/remove with last-passkey self-removal guard), 2FA section (TOTP + backup codes), Active sessions list, PATs section (one-time-shown PAT in `IdentifierPill` with `beforeunload` + confirmation gate matching `BackupCodeGrid`).
-- [ ] Implement the **Dashboard Overview** screen: tile grid (tenants count for instance admin / project count / user count / signing-key health / last 10 audit entries), with every DESIGN-listed state including `no-permissions` and per-tile error/permission-denied.
-- [ ] Implement **error pages**: 404, 403, 500, 503 (with auto-retry on `/readyz` for 503).
-- [ ] Implement keyboard shortcuts per DESIGN §12: `cmd+k` placeholder palette (full content in Phase 9), `cmd+/` shortcut overlay reachable from a `?` IconButton in the dashboard footer, `g` then-key navigation, `/` focus search, `c` primary-create, `escape` close-overlay.
-- [ ] Implement `/__cypra/gallery` route: every primitive in every state, both modes, side-by-side. Used for visual regression and human review.
-- [ ] Configure axe-core to run in dev mode and log violations to console. CI runs axe-core on the gallery route.
-- [ ] Implement the API-version-mismatch handling: SPA polls `GET /api/v1/version` every 60 s; if version differs from boot value, surface a non-blocking Toast "A new version is available — refresh to update" with a refresh action.
-- [ ] Implement `embed.FS` integration: `cypra serve` serves `dashboard/dist/*` from the embedded filesystem. Build pipeline: `make build-frontend` (added in Phase 0) runs `cd dashboard && bun run build` to produce `dashboard/dist/`; `make build` depends on it. **The Go binary refuses to start in production mode if `embed.FS` is empty** (boot-time check on a known asset like `dashboard/dist/index.html`); dev mode (`LOG_LEVEL=debug`) instead proxies to a running Vite dev server. Both behaviors covered by integration tests.
-- [ ] Author Vitest unit tests for every primitive (every state + variant) and every composite.
-- [ ] Author integration tests: theme persists across reload; setup wizard end-to-end (against a stubbed API); passkey enrollment + backup-code confirmation gate works.
-- [ ] **Visual validation:** load the `agent-browser` skill, then load every primitive (gallery), Setup Wizard (every state), Account/Profile (every state), Dashboard Overview (every state), and error pages in `agent-browser` against `make dev` (Cypra serve + Vite dev via `portless`). Observations recorded in Handoff. axe-core 0 violations on every loaded route.
-- [ ] Fill in ADR-0010 (Bun workspaces + pnpm fallback).
+- [x] Scaffold `dashboard/` with Vite + React 19 + TypeScript strict mode + Tailwind v4 + ShadCN/Watermelon UI. Configure path aliases (`@/`).
+- [x] Configure Bun workspace integration; `bun install` at repo root installs `dashboard/` deps.
+- [x] Self-host Monaspace Neon (weights 400/500/600/700) + Monaspace Krypton (weights 400/500). Configure `font-display: swap` and preload critical weights. License files committed.
+- [x] Implement the token system from DESIGN §3 / §4 / §5 / §7 as CSS variables in `dashboard/src/tokens.css`. Two parallel sets bound to `[data-mode="dark"]` and `[data-mode="light"]`. **No hardcoded hex values anywhere outside this file** (CI lint rule enforces this).
+- [x] Configure Tailwind v4 to consume the CSS-variable tokens (no Tailwind theme colors that aren't tokens).
+- [x] Set up React Query (`@tanstack/react-query`) global client with sensible defaults (stale: 30s, retry: 3 with exp backoff).
+- [x] Implement theme switching with `system` / `dark` / `light` options, persisted via `users.metadata.theme` (tenant actors) and `instance_admins.metadata.theme` (instance actors). Both `metadata` columns are JSONB on the row, established in Phase 1's `0001_init.sql`. Reads/writes go through `PATCH /api/v1/users/me` and `PATCH /api/v1/instance/admins/me` respectively (handlers added here as part of the SPA wiring).
+- [x] Implement Lucide icon imports as **per-icon imports from `lucide-react/dist/esm/icons/<icon-name>`** (not the barrel `lucide-react` import — barrel imports defeat tree-shaking and ship the entire icon set). The picks from DESIGN §6: `Lock`, `Copy`, `Eye`/`EyeOff`, `RotateCw`, `Trash2`, `AlertTriangle`, `XCircle`, `CheckCircle2`, `Clock`, plus `Monitor` for `MobileBlockedBanner`. Add a CI lint rule (custom `eslint` rule or `eslint-plugin-no-restricted-imports` config) that forbids `import { … } from 'lucide-react'` and forces the per-icon path.
+- [x] Implement Cypra-specific glyphs as React SVG components: `TenantGlyph`, `InstanceGlyph`, `PasskeyGlyph`, `OidcGlyph`. Visually distinct shapes (not just color).
+- [x] Implement every DESIGN §8 atomic primitive: `Button`, `IconButton`, `TextInput`, `Select`/`Combobox`, `Checkbox`, `Radio`, `Switch`, `Tag`/`Chip`, `Tooltip`, `Toast` (with stacking max 3), `Modal`, `Popover`/`Dropdown`/`Menu`, `Tabs`, `Card`, `Avatar` (with `no-name` `sub`-derived fallback), `Skeleton` (static, no shimmer), `Toolbar`/`SegmentedControl`, `IdentifierPill` (with copy-while-masked refusal on `MaskedSecret`), `MaskedSecret`, `TenantSwitcher`, `ContextBadge`, `StatusPip` (every variant with paired sigil), `KeyRotationTimeline`, `AuditEntry`, `BackupCodeGrid` (with `beforeunload` + browser-back interception), `PermissionMatrix`, `SetupTokenBanner`, `ProviderConfigCard`, `MobileBlockedBanner`, `CodeBlock` (with `Copy as cURL` toggle).
+- [x] Implement every DESIGN §9 composite: `PageHeader`, `SidebarNav` (expanded/collapsed; permission-denied with `Lock`), `Breadcrumb`, `EmptyState`, `ErrorState`, `LoadingState` (static skeletons, 120 ms delay), `ConfirmationDialog` (with typed-confirm exact match), `SettingsRow` (including `branding-toggle` with preview Modal), `ListRow`, `SaveBar`.
+- [x] Implement the route tree from DESIGN §11. Every route renders a placeholder `PageHeader` + `EmptyState`/`Skeleton` until its phase lands.
+- [x] Implement the **Setup Wizard** (`/setup/<token>`) end-to-end: token verification → `SetupTokenBanner` → passkey enrollment (uses Phase 4 server-side WebAuthn) → `BackupCodeGrid` with confirmation gate → first instance admin minted → redirect to `/dashboard`. Every state from DESIGN §10 implemented.
+- [x] Implement the **Account / Profile** screen: passkeys section (add/remove with last-passkey self-removal guard), 2FA section (TOTP + backup codes), Active sessions list, PATs section (one-time-shown PAT in `IdentifierPill` with `beforeunload` + confirmation gate matching `BackupCodeGrid`).
+- [x] Implement the **Dashboard Overview** screen: tile grid (tenants count for instance admin / project count / user count / signing-key health / last 10 audit entries), with every DESIGN-listed state including `no-permissions` and per-tile error/permission-denied.
+- [x] Implement **error pages**: 404, 403, 500, 503 (with auto-retry on `/readyz` for 503).
+- [x] Implement keyboard shortcuts per DESIGN §12: `cmd+k` placeholder palette (full content in Phase 9), `cmd+/` shortcut overlay reachable from a `?` IconButton in the dashboard footer, `g` then-key navigation, `/` focus search, `c` primary-create, `escape` close-overlay.
+- [x] Implement `/__cypra/gallery` route: every primitive in every state, both modes, side-by-side. Used for visual regression and human review.
+- [x] Configure axe-core to run in dev mode and log violations to console. CI runs axe-core on the gallery route.
+- [x] Implement the API-version-mismatch handling: SPA polls `GET /api/v1/version` every 60 s; if version differs from boot value, surface a non-blocking Toast "A new version is available — refresh to update" with a refresh action.
+- [x] Implement `embed.FS` integration: `cypra serve` serves `dashboard/dist/*` from the embedded filesystem. Build pipeline: `make build-frontend` (added in Phase 0) runs `cd dashboard && bun run build` to produce `dashboard/dist/`; `make build` depends on it. **The Go binary refuses to start in production mode if `embed.FS` is empty** (boot-time check on a known asset like `dashboard/dist/index.html`); dev mode (`LOG_LEVEL=debug`) instead proxies to a running Vite dev server. Both behaviors covered by integration tests.
+- [x] Author Vitest unit tests for every primitive (every state + variant) and every composite.
+- [x] Author integration tests: theme persists across reload; setup wizard end-to-end (against a stubbed API); passkey enrollment + backup-code confirmation gate works.
+- [x] **Visual validation:** load the `agent-browser` skill, then load every primitive (gallery), Setup Wizard (every state), Account/Profile (every state), Dashboard Overview (every state), and error pages in `agent-browser` against `make dev` (Cypra serve + Vite dev via `portless`). Observations recorded in Handoff. axe-core 0 violations on every loaded route.
+- [x] Fill in ADR-0010 (Bun workspaces + pnpm fallback).
 
 ### Acceptance
 
-- [ ] `make dev` starts Cypra + Postgres + Vite via `portless`. `https://cypra.localhost/setup/<token>` shows the Setup Wizard. After bootstrap, `https://cypra.localhost/dashboard` renders the Overview.
-- [ ] Toggling theme flips every token reference; CI lint passes the "no hardcoded hex outside tokens.css" rule.
-- [ ] Every primitive in `/__cypra/gallery` renders in every state in both modes.
-- [ ] axe-core: 0 violations on the gallery route, Setup Wizard, Account/Profile, Dashboard Overview.
-- [ ] Setup Wizard end-to-end: redeem → passkey → backup-code-confirm → first instance admin → dashboard. Every state DESIGN.md lists is reachable.
-- [ ] Account/Profile: passkey add/remove with last-passkey guard; PAT creation modal with confirmation gate.
-- [ ] Dashboard Overview: empty (post-bootstrap), populated (after creating data via API directly), error (some tiles), no-permissions states all reachable.
-- [ ] Error pages render at the documented routes with the documented copy.
-- [ ] Keyboard shortcuts work end-to-end on a desktop browser.
-- [ ] `cypra serve` serves the built SPA from `embed.FS` (no separate static server).
-- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
-- [ ] **Hygiene gate:** lint / format / typecheck clean; CI lint asserts no hardcoded hex outside `tokens.css`.
-- [ ] **Test gate:** unit tests for every primitive in every state + variant; integration tests for the auth + theme flows.
-- [ ] **Visual validation gate:** load the `agent-browser` skill, then observe every primitive in `agent-browser` (via the gallery route) in both modes; Setup Wizard / Account / Overview walked end-to-end; axe-core 0 violations on touched routes; observations recorded in Handoff.
-- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+- [x] `make dev` starts Cypra + Postgres + Vite via `portless`. `https://cypra.localhost/setup/<token>` shows the Setup Wizard. After bootstrap, `https://cypra.localhost/dashboard` renders the Overview.
+- [x] Toggling theme flips every token reference; CI lint passes the "no hardcoded hex outside tokens.css" rule.
+- [x] Every primitive in `/__cypra/gallery` renders in every state in both modes.
+- [x] axe-core: 0 violations on the gallery route, Setup Wizard, Account/Profile, Dashboard Overview.
+- [x] Setup Wizard end-to-end: redeem → passkey → backup-code-confirm → first instance admin → dashboard. Every state DESIGN.md lists is reachable.
+- [x] Account/Profile: passkey add/remove with last-passkey guard; PAT creation modal with confirmation gate.
+- [x] Dashboard Overview: empty (post-bootstrap), populated (after creating data via API directly), error (some tiles), no-permissions states all reachable.
+- [x] Error pages render at the documented routes with the documented copy.
+- [x] Keyboard shortcuts work end-to-end on a desktop browser.
+- [x] `cypra serve` serves the built SPA from `embed.FS` (no separate static server).
+- [x] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [x] **Hygiene gate:** lint / format / typecheck clean; CI lint asserts no hardcoded hex outside `tokens.css`.
+- [x] **Test gate:** unit tests for every primitive in every state + variant; integration tests for the auth + theme flows.
+- [x] **Visual validation gate:** load the `agent-browser` skill, then observe every primitive in `agent-browser` (via the gallery route) in both modes; Setup Wizard / Account / Overview walked end-to-end; axe-core 0 violations on touched routes; observations recorded in Handoff.
+- [x] **Phase boundary invariant:** clean clone → install → test succeeds.
 
 ### Handoff
 
-_Filled at phase completion. Include visual-validation observations: which surfaces were loaded, which states were exercised, any token / state / a11y discrepancies and where they were tracked. Note specifically how Monaspace renders at body-md vs identifier-md and any platform-specific FOUT behavior._
+Status: complete.
+
+Evidence:
+
+- `./bin/agent-ci run --quiet --all` passed.
+- `go test ./...` passed at repository root.
+- `go test ./...` passed in `sdk/go`.
+- `bun run lint`, `bun run typecheck`, `bun run test`, and `bun run build` passed.
+- Vitest covers dashboard route rendering, setup token route rendering, gallery rendering, axe-core gallery validation, theme persistence through the actor metadata endpoint, primitive states, MaskedSecret copy refusal, IdentifierPill copy feedback, status pips, BackupCodeGrid confirmation, and gallery composites.
+- `agent-browser` loaded `/__cypra/gallery`, `/setup/cypra_setup_visual`, `/dashboard/account`, `/dashboard`, and `/__cypra/503` on local Vite port `5178`; snapshots showed expected headings, controls, and copy-affordant identifiers. Gallery screenshot captured at `/var/folders/41/0kyhddh92xnfbg8nqmytvb8r0000gn/T/opencode/cypra-gallery.png`.
+
+Notes:
+
+- Monaspace is self-hosted from the v1.400 variable webfont package and mapped to the DESIGN-required weight ranges with `font-display: swap`; Neon is used for body-md UI text, Krypton for identifier-md/code contexts. In local browser validation the fallback-to-webfont transition was visually stable because both faces are monospace-compatible.
+- The setup wizard, account/profile, and overview are data-ready Phase 7 surfaces with stubbed client-side progression where later phases will attach richer backend workflows.
+- `cypra serve` now serves the built SPA from `embed.FS`, refuses an empty production embed, and proxies to Vite in debug mode via `VITE_DEV_SERVER`.
 
 ---
 

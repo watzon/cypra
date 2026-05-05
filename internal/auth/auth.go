@@ -16,6 +16,7 @@ import (
 type Actor struct {
 	Kind            string
 	InstanceAdmin   bool
+	InstanceAdminID uuid.UUID
 	TenantRole      string
 	PersonalTokenID string
 	TenantID        uuid.UUID
@@ -36,10 +37,16 @@ func MiddlewareWithPAT(db *sql.DB) func(http.Handler) http.Handler {
 			if r.Header.Get("X-Cypra-Instance-Admin") == "true" {
 				actor.Kind = "instance_admin"
 				actor.InstanceAdmin = true
+				if id, err := uuid.Parse(r.Header.Get("X-Cypra-Instance-Admin-Id")); err == nil {
+					actor.InstanceAdminID = id
+				}
 			}
 			if role := r.Header.Get("X-Cypra-Tenant-Role"); role != "" {
 				actor.Kind = "tenant_admin"
 				actor.TenantRole = role
+				if id, err := uuid.Parse(r.Header.Get("X-Cypra-User-Id")); err == nil {
+					actor.UserID = id
+				}
 			}
 			if authz := r.Header.Get("Authorization"); strings.HasPrefix(authz, "Bearer ") {
 				plaintext := strings.TrimPrefix(authz, "Bearer ")

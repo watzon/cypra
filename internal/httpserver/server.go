@@ -8,8 +8,10 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"strings"
 	"time"
@@ -37,6 +39,8 @@ type Options struct {
 	MasterKey     []byte
 	BotVerifier   botmitigation.Verifier
 	GoogleSecret  []byte
+	DashboardFS   fs.FS
+	DashboardDev  string
 }
 
 type Server struct {
@@ -61,6 +65,11 @@ func New(opts Options) (*Server, error) {
 	}
 	if len(opts.GoogleSecret) == 0 {
 		opts.GoogleSecret = []byte("dev-google-oauth-state-secret")
+	}
+	if !opts.DevOpenAPI && opts.DashboardFS != nil {
+		if _, err := fs.Stat(opts.DashboardFS, "dist/index.html"); err != nil {
+			return nil, fmt.Errorf("dashboard embed is empty: run make build-frontend")
+		}
 	}
 	return &Server{Options: opts, installHost: base.Host, audit: audit.NewWriter(opts.DB)}, nil
 }
@@ -115,6 +124,7 @@ func (s *Server) Router() http.Handler {
 		})
 		api.Route("/instance", func(rt chi.Router) {
 			rt.Use(auth.RequireInstanceAdmin)
+			rt.Patch("/admins/me", s.patchInstanceAdminMe)
 			rt.Post("/invite", s.instanceInvite)
 		})
 		api.Route("/tenants", func(rt chi.Router) {
@@ -132,6 +142,7 @@ func (s *Server) Router() http.Handler {
 		})
 		api.Route("/users", func(rt chi.Router) {
 			rt.Use(auth.RequireTenantRole)
+			rt.Patch("/me", s.patchUserMe)
 			rt.Get("/", s.listUsers)
 			rt.Post("/", s.createUser)
 		})
@@ -142,7 +153,33 @@ func (s *Server) Router() http.Handler {
 			rt.Delete("/{id}", s.revokePAT)
 		})
 	})
+	r.NotFound(s.dashboardSPA)
 	return r
+}
+
+func (s *Server) dashboardSPA(w http.ResponseWriter, r *http.Request) {
+	if s.DevOpenAPI && s.DashboardDev != "" {
+		devURL, err := url.Parse(s.DashboardDev)
+		if err == nil {
+			httputil.NewSingleHostReverseProxy(devURL).ServeHTTP(w, r)
+			return
+		}
+	}
+	if s.DashboardFS == nil {
+		writeError(w, http.StatusNotFound, "dashboard.not_found")
+		return
+	}
+	dist, err := fs.Sub(s.DashboardFS, "dist")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "dashboard.unavailable")
+		return
+	}
+	if strings.HasPrefix(r.URL.Path, "/assets/") || strings.HasPrefix(r.URL.Path, "/fonts/") {
+		http.FileServer(http.FS(dist)).ServeHTTP(w, r)
+		return
+	}
+	r.URL.Path = "/index.html"
+	http.FileServer(http.FS(dist)).ServeHTTP(w, r)
 }
 
 func (s *Server) healthz(w http.ResponseWriter, _ *http.Request) {
