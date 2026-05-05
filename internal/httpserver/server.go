@@ -72,6 +72,16 @@ func (s *Server) Router() http.Handler {
 	r.Get("/healthz", s.healthz)
 	r.Get("/readyz", s.readyz)
 	r.Get("/metrics", func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte("# cypra metrics\n")) })
+	r.Group(func(public chi.Router) {
+		public.Use(s.tenantResolver)
+		public.Get("/.well-known/openid-configuration", s.oidcDiscovery)
+		public.Get("/.well-known/jwks.json", s.oidcJWKS)
+		public.Get("/oidc/authorize", s.oidcAuthorize)
+		public.Post("/oidc/token", s.oidcToken)
+		public.Get("/oidc/userinfo", s.oidcUserInfo)
+		public.Post("/oidc/revoke", s.oidcRevoke)
+		public.Post("/oidc/consent", s.oidcConsent)
+	})
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Use(s.tenantResolver)
 		api.Use(s.rlsSetter)

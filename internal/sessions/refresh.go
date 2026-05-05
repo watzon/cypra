@@ -31,6 +31,10 @@ type RefreshToken struct {
 	ID        uuid.UUID
 	FamilyID  uuid.UUID
 	ParentID  *uuid.UUID
+	TenantID  uuid.UUID
+	ClientID  uuid.UUID
+	UserID    uuid.UUID
+	Scope     []string
 }
 
 func NewRefreshService(db *sql.DB) *RefreshService {
@@ -61,7 +65,7 @@ func (s *RefreshService) Mint(ctx context.Context, tenantID, clientID, userID uu
 	if err != nil {
 		return RefreshToken{}, fmt.Errorf("insert refresh token: %w", err)
 	}
-	return RefreshToken{Plaintext: token, ID: id, FamilyID: familyID, ParentID: parentID}, nil
+	return RefreshToken{Plaintext: token, ID: id, FamilyID: familyID, ParentID: parentID, TenantID: tenantID, ClientID: clientID, UserID: userID, Scope: scope}, nil
 }
 
 func (s *RefreshService) Consume(ctx context.Context, token string, expiresAt time.Time) (RefreshToken, error) {
@@ -95,7 +99,7 @@ func (s *RefreshService) Consume(ctx context.Context, token string, expiresAt ti
 	if err := tx.Commit(); err != nil {
 		return RefreshToken{}, fmt.Errorf("commit refresh consume: %w", err)
 	}
-	return RefreshToken{Plaintext: childToken, ID: childID, FamilyID: consumed.familyID, ParentID: &consumed.id}, nil
+	return RefreshToken{Plaintext: childToken, ID: childID, FamilyID: consumed.familyID, ParentID: &consumed.id, TenantID: consumed.tenantID, ClientID: consumed.clientID, UserID: consumed.userID, Scope: consumed.scope}, nil
 }
 
 func (s *RefreshService) handleReuse(ctx context.Context, tx *sql.Tx, tokenHash []byte) error {

@@ -80,7 +80,7 @@ func VerifyAccessToken(token string, keys []SigningKey, expectedIssuer, expected
 	if err := verifySignature(header, signingInput, signature, selected.PublicJWK); err != nil {
 		return AccessTokenClaims{}, err
 	}
-	if claims.Issuer != expectedIssuer || claims.Audience != expectedAudience {
+	if claims.Issuer != expectedIssuer || (expectedAudience != "" && claims.Audience != expectedAudience) {
 		return AccessTokenClaims{}, ErrInvalidToken
 	}
 	if now.Add(ClockLeeway).Unix() < claims.NotBefore || now.Add(-ClockLeeway).Unix() > claims.Expires {

@@ -5,6 +5,8 @@ on:
     branches:
       - main
   pull_request:
+  schedule:
+    - cron: "17 3 * * *"
 
 permissions:
   contents: read
@@ -67,3 +69,18 @@ jobs:
 
       - name: Run CI pipeline
         run: make ci-pipeline
+
+  openid-conformance:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Pull OpenID conformance suite
+        run: docker pull openid/conformance-suite:latest
+
+      - name: Run OpenID conformance suite placeholder
+        run: |
+          docker run --rm openid/conformance-suite:latest --help >/dev/null
+          echo "Nightly job hook is wired; Phase 12 canonical-demo seeds the hosted stack target."
