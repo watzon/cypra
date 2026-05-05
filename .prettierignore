@@ -1,0 +1,14 @@
+node_modules
+dashboard/dist
+bin
+bun.lockb
+cypra.pen
+.agents
+.claude
+.codex
+.commandcode
+.opencode
+BRAINSTORM.md
+DESIGN.md
+PLAN.md
+TASKS.md

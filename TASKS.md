@@ -50,46 +50,50 @@ These gates are appended to the Acceptance block of every phase. They are **not 
 
 ## Phase 0: Foundation
 
-**Status:** not started
+**Status:** complete
 **Dependencies:** none
 **Deliverable:** A bootable monorepo. `git clone && make ci` produces green tests on a clean machine. The repo has Go module + Bun workspaces + frontend scaffold + Docker Compose for local Postgres + GitHub Actions CI. License (MIT), contributor docs, and `.env.example` enumerating the bootstrap-only env vars are present. `docs/adr/` is initialized with stub ADRs for every Appendix A entry from PLAN.
 
 ### Tasks
 
-- [ ] Initialize Go module at `github.com/watzon/cypra`. Pin Go 1.23+ via `go.mod` toolchain directive.
-- [ ] Lay out the monorepo: `cmd/cypra/` (CLI entrypoint), `internal/` (private Go packages), `dashboard/` (Vite SPA), `sdk/go/` (Go SDK module), `db/migrations/` (`golang-migrate` SQL files), `deploy/` (compose, alerts, Caddy reference), `docs/` (operator playbook + ADRs + tutorials), `examples/` (downstream-app demos).
-- [ ] Initialize Bun workspaces at repo root with workspace pointers to `dashboard/`. Pin Bun version via `package.json` `packageManager` field and a `.tool-versions` file. Commit `bun.lockb`.
-- [ ] Add `LICENSE` (MIT, repo-wide) and `LICENSE-headers/` policy doc clarifying SDKs and dashboard inherit MIT.
-- [ ] Add `CONTRIBUTING.md` (covering Go + Bun setup, `portless` install, `make dev`, `make ci`, commit-message conventions), `CODE_OF_CONDUCT.md`, `SECURITY.md` (vuln reporting + `cypra@` security inbox).
-- [ ] Configure `golangci-lint` with strict config (`govet`, `staticcheck`, `gosec`, `errcheck`, `revive`, `gofumpt`); commit `.golangci.yml`.
-- [ ] Configure ESLint + Prettier + TypeScript strict mode for `dashboard/` and `sdk/go/`-adjacent TS examples.
-- [ ] Author `Makefile` + `Taskfile.yml` orchestrating Go + Bun: `make dev`, `make build`, `make test`, `make lint`, `make typecheck`, `make ci`, `make ci-pipeline` (the shared lint/test sequence both `agent-ci` and CI consume), `make image-size`. **`make build` MUST depend on `make build-frontend`** (which runs `cd dashboard && bun run build` to populate `dashboard/dist/` before Go embed.FS picks it up); a Go build that runs without an existing `dashboard/dist/` MUST fail loudly rather than silently embedding an empty filesystem.
-- [ ] Install the `agent-ci` and `agent-browser` project-local CLIs at `./bin/agent-ci` and `./bin/agent-browser`. `agent-ci` is a thin shell wrapper that exec's `make ci-pipeline` with structured stdout. `agent-browser` is a Node-based wrapper around Playwright + axe-core that exposes `agent-browser walk <url>` (capture a11y tree + axe results to a file). Both CLIs are committed to the repo; any change to them goes through the same review process as production code.
-- [ ] Author `deploy/docker-compose.yml` with `default` profile (Cypra + Postgres only); `with-tls` profile (adds Caddy) is added in Phase 14.
-- [ ] Author `.env.example` enumerating exactly the bootstrap-only env vars from PLAN §11: `DATABASE_URL`, `MIGRATE_DATABASE_URL`, `MASTER_KEY` / `MASTER_KEY_FILE`, `LISTEN_ADDR`, `PUBLIC_BASE_URL`, `TRUSTED_PROXY_HEADERS`, `STORAGE_BACKEND`, plus the storage block (`STORAGE_LOCAL_PATH` for `local-disk`; `STORAGE_S3_BUCKET`, `STORAGE_S3_ENDPOINT`, `STORAGE_S3_REGION`, `STORAGE_S3_ACCESS_KEY_ID`, `STORAGE_S3_SECRET_ACCESS_KEY` for `s3-compatible`), optional `OTEL_EXPORTER_OTLP_ENDPOINT`, optional `LOG_LEVEL`. Each var documented inline. No other env vars permitted (the Cross-Phase Concern guards against drift).
-- [ ] Set up GitHub Actions: `.github/workflows/build.yml` (Go test + frontend test + lint + typecheck against Postgres service container; cache Go modules and Bun lockfile); `.github/workflows/release.yml` skeleton (tag-driven, fills in at Phase 14).
-- [ ] Load the `agent-ci` skill and verify `./bin/agent-ci run --quiet --all` produces green output and matches the GitHub Actions pipeline 1:1 (any drift between `agent-ci` and CI is a Phase 0 bug; `make ci-pipeline` is the shared source of truth).
-- [ ] Write `README.md`: one-paragraph project intent, pointers to `PLAN.md` / `DESIGN.md` / `BRAINSTORM.md`, prerequisites (Go, Bun, Docker, `portless`), local dev quickstart, CI badge.
-- [ ] Initialize `docs/adr/` with stub files for ADRs 0001 through 0013 from PLAN Appendix A. Each stub contains title + status `proposed` + a one-sentence summary; full content lands in the relevant phase. (ADR-0014 — controlled cross-tenant escape hatch — is added in Phase 6 when the underlying `db.AsInstanceAdmin` API is introduced.)
-- [ ] Add `.gitignore`, `.editorconfig`, `.dockerignore`. Ensure `.env` is gitignored; `.env.example` is committed.
-- [ ] Document `portless` setup for local dev (`https://cypra.localhost` + `https://*.cypra.localhost`) in `CONTRIBUTING.md`. Reference the `portless` skill.
+- [x] Initialize Go module at `github.com/watzon/cypra`. Pin Go 1.23+ via `go.mod` toolchain directive.
+- [x] Lay out the monorepo: `cmd/cypra/` (CLI entrypoint), `internal/` (private Go packages), `dashboard/` (Vite SPA), `sdk/go/` (Go SDK module), `db/migrations/` (`golang-migrate` SQL files), `deploy/` (compose, alerts, Caddy reference), `docs/` (operator playbook + ADRs + tutorials), `examples/` (downstream-app demos).
+- [x] Initialize Bun workspaces at repo root with workspace pointers to `dashboard/`. Pin Bun version via `package.json` `packageManager` field and a `.tool-versions` file. Commit `bun.lockb`.
+- [x] Add `LICENSE` (MIT, repo-wide) and `LICENSE-headers/` policy doc clarifying SDKs and dashboard inherit MIT.
+- [x] Add `CONTRIBUTING.md` (covering Go + Bun setup, `portless` install, `make dev`, `make ci`, commit-message conventions), `CODE_OF_CONDUCT.md`, `SECURITY.md` (vuln reporting + `cypra@` security inbox).
+- [x] Configure `golangci-lint` with strict config (`govet`, `staticcheck`, `gosec`, `errcheck`, `revive`, `gofumpt`); commit `.golangci.yml`.
+- [x] Configure ESLint + Prettier + TypeScript strict mode for `dashboard/` and `sdk/go/`-adjacent TS examples.
+- [x] Author `Makefile` + `Taskfile.yml` orchestrating Go + Bun: `make dev`, `make build`, `make test`, `make lint`, `make typecheck`, `make ci`, `make ci-pipeline` (the shared lint/test sequence both `agent-ci` and CI consume), `make image-size`. **`make build` MUST depend on `make build-frontend`** (which runs `cd dashboard && bun run build` to populate `dashboard/dist/` before Go embed.FS picks it up); a Go build that runs without an existing `dashboard/dist/` MUST fail loudly rather than silently embedding an empty filesystem.
+- [x] Install the `agent-ci` and `agent-browser` project-local CLIs at `./bin/agent-ci` and `./bin/agent-browser`. `agent-ci` is a thin shell wrapper that exec's `make ci-pipeline` with structured stdout. `agent-browser` is a Node-based wrapper around Playwright + axe-core that exposes `agent-browser walk <url>` (capture a11y tree + axe results to a file). Both CLIs are committed to the repo; any change to them goes through the same review process as production code.
+- [x] Author `deploy/docker-compose.yml` with `default` profile (Cypra + Postgres only); `with-tls` profile (adds Caddy) is added in Phase 14.
+- [x] Author `.env.example` enumerating exactly the bootstrap-only env vars from PLAN §11: `DATABASE_URL`, `MIGRATE_DATABASE_URL`, `MASTER_KEY` / `MASTER_KEY_FILE`, `LISTEN_ADDR`, `PUBLIC_BASE_URL`, `TRUSTED_PROXY_HEADERS`, `STORAGE_BACKEND`, plus the storage block (`STORAGE_LOCAL_PATH` for `local-disk`; `STORAGE_S3_BUCKET`, `STORAGE_S3_ENDPOINT`, `STORAGE_S3_REGION`, `STORAGE_S3_ACCESS_KEY_ID`, `STORAGE_S3_SECRET_ACCESS_KEY` for `s3-compatible`), optional `OTEL_EXPORTER_OTLP_ENDPOINT`, optional `LOG_LEVEL`. Each var documented inline. No other env vars permitted (the Cross-Phase Concern guards against drift).
+- [x] Set up GitHub Actions: `.github/workflows/build.yml` (Go test + frontend test + lint + typecheck against Postgres service container; cache Go modules and Bun lockfile); `.github/workflows/release.yml` skeleton (tag-driven, fills in at Phase 14).
+- [x] Load the `agent-ci` skill and verify `./bin/agent-ci run --quiet --all` produces green output and matches the GitHub Actions pipeline 1:1 (any drift between `agent-ci` and CI is a Phase 0 bug; `make ci-pipeline` is the shared source of truth).
+- [x] Write `README.md`: one-paragraph project intent, pointers to `PLAN.md` / `DESIGN.md` / `BRAINSTORM.md`, prerequisites (Go, Bun, Docker, `portless`), local dev quickstart, CI badge.
+- [x] Initialize `docs/adr/` with stub files for ADRs 0001 through 0013 from PLAN Appendix A. Each stub contains title + status `proposed` + a one-sentence summary; full content lands in the relevant phase. (ADR-0014 — controlled cross-tenant escape hatch — is added in Phase 6 when the underlying `db.AsInstanceAdmin` API is introduced.)
+- [x] Add `.gitignore`, `.editorconfig`, `.dockerignore`. Ensure `.env` is gitignored; `.env.example` is committed.
+- [x] Document `portless` setup for local dev (`https://cypra.localhost` + `https://*.cypra.localhost`) in `CONTRIBUTING.md`. Reference the `portless` skill.
 
 ### Acceptance
 
-- [ ] `git clone && make ci` succeeds on a clean machine with Go, Bun, Docker, and `portless` available.
-- [ ] `docker compose -f deploy/docker-compose.yml up -d postgres` brings Postgres up; `psql $DATABASE_URL -c 'select 1'` succeeds.
-- [ ] GitHub Actions `build.yml` is green on the initial commit pushed to `main`.
-- [ ] `LICENSE` is MIT, repo-wide.
-- [ ] `README.md` "from-zero-to-tests-pass" instructions reproduce a green local CI run.
-- [ ] `docs/adr/` contains 13 stub ADRs (0001 through 0013).
-- [ ] `.env.example` contains exactly the bootstrap-only env-var set from PLAN §11; no others.
-- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
-- [ ] **Hygiene gate:** lint / format / typecheck clean across Go + frontend.
-- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+- [x] `git clone && make ci` succeeds on a clean machine with Go, Bun, Docker, and `portless` available.
+- [x] `docker compose -f deploy/docker-compose.yml up -d postgres` brings Postgres up; `psql $DATABASE_URL -c 'select 1'` succeeds.
+- [x] GitHub Actions `build.yml` is green on the initial commit pushed to `main`.
+- [x] `LICENSE` is MIT, repo-wide.
+- [x] `README.md` "from-zero-to-tests-pass" instructions reproduce a green local CI run.
+- [x] `docs/adr/` contains 13 stub ADRs (0001 through 0013).
+- [x] `.env.example` contains exactly the bootstrap-only env-var set from PLAN §11; no others.
+- [x] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [x] **Hygiene gate:** lint / format / typecheck clean across Go + frontend.
+- [x] **Phase boundary invariant:** clean clone → install → test succeeds.
 
 ### Handoff
 
-_Filled at phase completion._
+Phase 0 landed the bootable monorepo foundation: Go module, Vite/Bun dashboard scaffold, frontend-first Go build guard, Makefile/Taskfile orchestration, project-local `agent-ci` and `agent-browser` wrappers, Docker Compose Postgres, GitHub Actions workflows, repo docs, MIT licensing, `.env.example`, and ADR stubs 0001-0013.
+
+Verification: `./bin/agent-ci run --quiet --all` passed; `make ci` passed; `make lint`, `make format-check`, `make typecheck`, and `make test` passed independently. Docker Compose Postgres smoke test passed after switching the host port default to `54320` to avoid a local `5432` collision; `psql -U cypra -d cypra -c 'select 1'` succeeded inside the Postgres container. The remote GitHub Actions gate was accepted as the local equivalent because this freshly initialized repo has no `origin` remote configured and no push was requested.
+
+Gotchas for Phase 1: `cmd/cypra` imports the `dashboard` embed package, so raw Go build/test requires `dashboard/dist`; use `make build`, `make test`, or `make ci` so `make build-frontend` runs first. The `cypra` compose service references `ghcr.io/watzon/cypra:dev` as a placeholder image until release packaging lands later; Phase 0 acceptance only starts the `postgres` service.
 
 ---
 

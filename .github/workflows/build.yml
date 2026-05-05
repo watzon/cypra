@@ -1,0 +1,69 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: cypra
+          POSTGRES_PASSWORD: cypra
+          POSTGRES_DB: cypra
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cypra -d cypra"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+
+    env:
+      DATABASE_URL: postgres://cypra:cypra@localhost:5432/cypra?sslmode=disable
+      MIGRATE_DATABASE_URL: postgres://cypra:cypra@localhost:5432/cypra?sslmode=disable
+      MASTER_KEY: dev-only-change-me-dev-only-change-me-32b
+      LISTEN_ADDR: :8080
+      PUBLIC_BASE_URL: https://cypra.localhost
+      TRUSTED_PROXY_HEADERS: none
+      STORAGE_BACKEND: local-disk
+      STORAGE_LOCAL_PATH: .data/storage
+      LOG_LEVEL: debug
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lockb') }}
+          restore-keys: |
+            bun-${{ runner.os }}-
+
+      - name: Install Go lint tools
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+          go install mvdan.cc/gofumpt@latest
+          go install golang.org/x/tools/cmd/goimports@latest
+
+      - name: Run CI pipeline
+        run: make ci-pipeline
