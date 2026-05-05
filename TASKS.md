@@ -1,0 +1,866 @@
+# Cypra — Implementation Tasks
+
+**Companion to:** [`PLAN.md`](./PLAN.md), [`DESIGN.md`](./DESIGN.md), [`BRAINSTORM.md`](./BRAINSTORM.md).
+
+This document is the canonical execution plan. It breaks the project into ordered phases that, when followed end-to-end, produce **a self-hosted, multi-tenant Cypra v1 install: a single Go binary that an operator can boot via `docker compose up`, redeem a setup token, create a tenant with a custom branding, configure Google OAuth + Resend email, and have a Next.js app signing real users in via Cypra's per-tenant OIDC issuer — all inside a single afternoon, with passkeys, magic links, password (Argon2id), TOTP/WebAuthn second-factor, GDPR-enabling features, audit log, envelope-encrypted secrets, and a Go SDK.**
+
+**Versioning note.** "Cypra v1" throughout this document refers to the **product specification** captured in `PLAN.md` / `BRAINSTORM.md`. The **first shipping release** is tagged `v0.1.0` (Phase 14). Subsequent releases follow semver inside the v0.x line until the spec is feature-complete and the public API is stable; only then does Cypra cut `v1.0.0`. Phase 14's "Cypra v0.1 is publicly shippable" criterion is the same product as "Cypra v1" — the version number reflects API maturity, not feature completeness.
+
+---
+
+## Operating rules for agents working from this file
+
+The following rules use [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119) terminology. They are not advisory.
+
+> **You MUST keep this file current.** Whenever you start a task, you MUST mark its checkbox in-progress (`- [~]` or note it in the `Status` line of the phase). Whenever you complete a task, you MUST tick its checkbox (`- [x]`). Whenever you finish a phase, you MUST fill the **Handoff** block for that phase before opening the next one. Whenever you discover a gap that this file does not capture, you MUST add a task to the appropriate phase rather than work around it. **You MUST NOT mark a phase complete unless every task and every acceptance criterion in it has been verified.** **You MUST NOT skip phases or merge phases without an explicit instruction from the project owner.** **You SHOULD NOT add scope to a phase that is not on its acceptance list; surface it as a new task or new phase instead.**
+
+> **You MUST treat PLAN.md and DESIGN.md as the source of truth.** Any conflict between this file and either of them is a bug in this file; resolve by aligning to the canonical doc and updating tasks here. **You MUST NOT silently change architecture, data shapes, visual tokens, or auth-protocol semantics to make a task easier; raise the conflict and update the canonical doc explicitly.**
+
+> **Verification gates:** Each phase has acceptance criteria. **You MUST run them locally and confirm passing before declaring the phase complete.** A green CI run is necessary but not sufficient — the acceptance criteria are the binding test.
+
+> **Internal todo discipline:** When picking up a phase, you MUST mirror its Tasks list with `TaskCreate` and tick the internal list in lockstep with this file. Both lists end the phase ticked. Do not batch.
+
+---
+
+## Standards (apply to every phase)
+
+These gates are appended to the Acceptance block of every phase. They are **not optional** — a phase is not complete until each applicable gate is green.
+
+- **CI gate** — load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green for the changes this phase introduced. `agent-ci` is a project-local CLI script, **installed in Phase 0** at `./bin/agent-ci`, that wraps the same lint / format / typecheck / test pipeline GitHub Actions runs. Both surfaces stay in lockstep via a shared `Makefile` target (`make ci-pipeline`); `agent-ci` is the agent-friendly wrapper around it. Do not roll your own command.
+- **Hygiene gate** — `golangci-lint run`, `gofmt -l`, `go vet`, frontend `eslint`, frontend `prettier --check`, frontend `tsc --noEmit` all clean. No introduced dead code, no orphaned `fmt.Println` / `log.Println` / `console.log` / `dbg!`, no zombie `TODO` for finished work.
+- **Test gate** — new behavior covered by Go unit tests + frontend unit tests; new boundary crossings (handler↔DB via TenantScopedDB, frontend↔API, OIDC↔upstream provider, worker↔outbox, CLI↔DB) covered by integration tests against real Postgres via `testcontainers-go`. **Coverage floors:** the security-critical packages `internal/crypto`, `internal/oidc`, `internal/auth`, `internal/db`, `internal/sessions`, `internal/bootstrap` MUST hold ≥ 85% line coverage; coverage is reported per-package in CI and a regression below the floor fails the build.
+- **Visual validation gate** *(applies to every phase that ships UI)* — load the `agent-browser` skill, then load every new or changed surface in `agent-browser` against the running dev server (via `portless` for HTTPS + tenant subdomain wildcard). `agent-browser` is a project-local CLI **installed in Phase 0** at `./bin/agent-browser` that wraps Playwright with accessibility-tree capture + axe-core injection. The agent captures an accessibility-tree snapshot for each surface in each documented state (default / loading / empty / error and any others DESIGN.md lists for the surface). Observations are recorded in this phase's Handoff. axe-core reports zero new violations on touched routes. Both color modes verified.
+- **Phase boundary invariant** — at the end of this phase, a fresh clone, install, and test command (`make ci` or equivalent) succeeds.
+
+---
+
+## How to read this file
+
+- Each phase has a fixed shape:
+  - **Status** — `not started` / `in progress` / `complete`. Update it.
+  - **Dependencies** — phases that MUST be complete first.
+  - **Deliverable** — what concretely exists at the end.
+  - **Tasks** — GFM-checkbox list. Each task is sized to a focused unit of work.
+  - **Acceptance** — concrete, testable criteria. Always ends with the Standards gates above.
+  - **Handoff** — free-form notes added at phase completion.
+- Phases are ordered so the codebase remains in a runnable state at every checkpoint.
+- Some phases are internally parallelizable; those are called out with explicit sub-tracks.
+
+---
+
+## Phase 0: Foundation
+
+**Status:** not started
+**Dependencies:** none
+**Deliverable:** A bootable monorepo. `git clone && make ci` produces green tests on a clean machine. The repo has Go module + Bun workspaces + frontend scaffold + Docker Compose for local Postgres + GitHub Actions CI. License (MIT), contributor docs, and `.env.example` enumerating the bootstrap-only env vars are present. `docs/adr/` is initialized with stub ADRs for every Appendix A entry from PLAN.
+
+### Tasks
+
+- [ ] Initialize Go module at `github.com/watzon/cypra`. Pin Go 1.23+ via `go.mod` toolchain directive.
+- [ ] Lay out the monorepo: `cmd/cypra/` (CLI entrypoint), `internal/` (private Go packages), `dashboard/` (Vite SPA), `sdk/go/` (Go SDK module), `db/migrations/` (`golang-migrate` SQL files), `deploy/` (compose, alerts, Caddy reference), `docs/` (operator playbook + ADRs + tutorials), `examples/` (downstream-app demos).
+- [ ] Initialize Bun workspaces at repo root with workspace pointers to `dashboard/`. Pin Bun version via `package.json` `packageManager` field and a `.tool-versions` file. Commit `bun.lockb`.
+- [ ] Add `LICENSE` (MIT, repo-wide) and `LICENSE-headers/` policy doc clarifying SDKs and dashboard inherit MIT.
+- [ ] Add `CONTRIBUTING.md` (covering Go + Bun setup, `portless` install, `make dev`, `make ci`, commit-message conventions), `CODE_OF_CONDUCT.md`, `SECURITY.md` (vuln reporting + `cypra@` security inbox).
+- [ ] Configure `golangci-lint` with strict config (`govet`, `staticcheck`, `gosec`, `errcheck`, `revive`, `gofumpt`); commit `.golangci.yml`.
+- [ ] Configure ESLint + Prettier + TypeScript strict mode for `dashboard/` and `sdk/go/`-adjacent TS examples.
+- [ ] Author `Makefile` + `Taskfile.yml` orchestrating Go + Bun: `make dev`, `make build`, `make test`, `make lint`, `make typecheck`, `make ci`, `make ci-pipeline` (the shared lint/test sequence both `agent-ci` and CI consume), `make image-size`. **`make build` MUST depend on `make build-frontend`** (which runs `cd dashboard && bun run build` to populate `dashboard/dist/` before Go embed.FS picks it up); a Go build that runs without an existing `dashboard/dist/` MUST fail loudly rather than silently embedding an empty filesystem.
+- [ ] Install the `agent-ci` and `agent-browser` project-local CLIs at `./bin/agent-ci` and `./bin/agent-browser`. `agent-ci` is a thin shell wrapper that exec's `make ci-pipeline` with structured stdout. `agent-browser` is a Node-based wrapper around Playwright + axe-core that exposes `agent-browser walk <url>` (capture a11y tree + axe results to a file). Both CLIs are committed to the repo; any change to them goes through the same review process as production code.
+- [ ] Author `deploy/docker-compose.yml` with `default` profile (Cypra + Postgres only); `with-tls` profile (adds Caddy) is added in Phase 14.
+- [ ] Author `.env.example` enumerating exactly the bootstrap-only env vars from PLAN §11: `DATABASE_URL`, `MIGRATE_DATABASE_URL`, `MASTER_KEY` / `MASTER_KEY_FILE`, `LISTEN_ADDR`, `PUBLIC_BASE_URL`, `TRUSTED_PROXY_HEADERS`, `STORAGE_BACKEND`, plus the storage block (`STORAGE_LOCAL_PATH` for `local-disk`; `STORAGE_S3_BUCKET`, `STORAGE_S3_ENDPOINT`, `STORAGE_S3_REGION`, `STORAGE_S3_ACCESS_KEY_ID`, `STORAGE_S3_SECRET_ACCESS_KEY` for `s3-compatible`), optional `OTEL_EXPORTER_OTLP_ENDPOINT`, optional `LOG_LEVEL`. Each var documented inline. No other env vars permitted (the Cross-Phase Concern guards against drift).
+- [ ] Set up GitHub Actions: `.github/workflows/build.yml` (Go test + frontend test + lint + typecheck against Postgres service container; cache Go modules and Bun lockfile); `.github/workflows/release.yml` skeleton (tag-driven, fills in at Phase 14).
+- [ ] Load the `agent-ci` skill and verify `./bin/agent-ci run --quiet --all` produces green output and matches the GitHub Actions pipeline 1:1 (any drift between `agent-ci` and CI is a Phase 0 bug; `make ci-pipeline` is the shared source of truth).
+- [ ] Write `README.md`: one-paragraph project intent, pointers to `PLAN.md` / `DESIGN.md` / `BRAINSTORM.md`, prerequisites (Go, Bun, Docker, `portless`), local dev quickstart, CI badge.
+- [ ] Initialize `docs/adr/` with stub files for ADRs 0001 through 0013 from PLAN Appendix A. Each stub contains title + status `proposed` + a one-sentence summary; full content lands in the relevant phase. (ADR-0014 — controlled cross-tenant escape hatch — is added in Phase 6 when the underlying `db.AsInstanceAdmin` API is introduced.)
+- [ ] Add `.gitignore`, `.editorconfig`, `.dockerignore`. Ensure `.env` is gitignored; `.env.example` is committed.
+- [ ] Document `portless` setup for local dev (`https://cypra.localhost` + `https://*.cypra.localhost`) in `CONTRIBUTING.md`. Reference the `portless` skill.
+
+### Acceptance
+
+- [ ] `git clone && make ci` succeeds on a clean machine with Go, Bun, Docker, and `portless` available.
+- [ ] `docker compose -f deploy/docker-compose.yml up -d postgres` brings Postgres up; `psql $DATABASE_URL -c 'select 1'` succeeds.
+- [ ] GitHub Actions `build.yml` is green on the initial commit pushed to `main`.
+- [ ] `LICENSE` is MIT, repo-wide.
+- [ ] `README.md` "from-zero-to-tests-pass" instructions reproduce a green local CI run.
+- [ ] `docs/adr/` contains 13 stub ADRs (0001 through 0013).
+- [ ] `.env.example` contains exactly the bootstrap-only env-var set from PLAN §11; no others.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean across Go + frontend.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion._
+
+---
+
+## Phase 1: Schema, types, and the tenant-isolation invariant
+
+**Status:** not started
+**Dependencies:** Phase 0
+**Deliverable:** Every PLAN §8 entity exists as a `golang-migrate` SQL migration in `db/migrations/`. Two Postgres roles (`cypra_runtime`, `cypra_migrate`) are provisioned with column-level GRANTs on `audit_entries` (no DELETE, narrow UPDATE only). Postgres RLS policies are active on every tenant-scoped table. The `internal/db` package exposes `TenantScopedDB` — the single tenant-isolation enforcement layer; its public methods (`Find`, `Create`, `Update`, `Delete`, `Raw(stmt, tenantID, args...)`) refuse calls without an explicit `tenantID`. A connection-checkout hook resets `cypra.tenant_id` on every connection return. A test fuzzer (`internal/db/fuzz/`) mutates `tenant_id` on every reachable read/write path and asserts cross-tenant access returns zero rows. ADRs 0001, 0009, 0013 are filled in.
+
+### Tasks
+
+- [ ] Author migration `0001_init.sql`: `tenants`, `projects`, `instance_admins` (includes a `metadata JSONB NOT NULL DEFAULT '{}'::jsonb` column for theme/preferences parity with `users`), `tenant_memberships`, `users`, `password_credentials`, `passkey_credentials`, `totp_credentials`, `user_backup_codes`, `instance_admin_backup_codes`, `magic_link_tokens`, `password_reset_tokens`, `email_verification_tokens`, `pending_invitations` (unified table for tenant-admin invites, member invites, and instance-admin invites — fields: `id`, `tenant_id NULL` (NULL = instance-admin invite), `email`, `role`, `token_hash`, `created_by_kind`, `created_by_id`, `expires_at`, `redeemed_at`, `redeemed_by_user_id`; unique `(tenant_id, email)` partial index where `redeemed_at IS NULL`), `sessions`, `instance_admin_sessions`, `oidc_clients`, `oidc_authorization_codes`, `oidc_refresh_tokens`, `oidc_consents`, `oidc_signing_keys`, `upstream_providers`, `email_provider_configs`, `email_outbox`, `storage_objects`, `tenant_auth_methods` (per-tenant enable flags + counts cache for the six methods — fields: `tenant_id`, `method` (enum: `password`, `magic_link`, `passkey`, `totp`, `google`, `oidc_upstream`), `enabled`, `enrolled_count_cache`, `updated_at`; PK `(tenant_id, method)`), `audit_entries`, `bootstrap_tokens`, `master_key_rotations`, `rate_limit_buckets`, `gdpr_deletions` — every entity with the exact field set, types, indexes, and constraints from PLAN §8. Include the slug regex CHECK on `tenants.slug` and the partial unique index on `bootstrap_tokens` enforcing exclusivity. (The earlier `admin_invites` table is subsumed by `pending_invitations`; document the rename in the migration header.)
+- [ ] Author migration `0002_roles.sql`: create `cypra_runtime` and `cypra_migrate` Postgres roles. Grant `cypra_migrate` ALL on the schema. Grant `cypra_runtime` `INSERT, SELECT` plus `UPDATE (redacted_at, state_before, state_after, metadata, ip, user_agent)` on `audit_entries`; full DML on every other table. Explicitly deny `DELETE` on `audit_entries` to `cypra_runtime`. Document the env-var-driven role selection in the migration's header comment.
+- [ ] Author migration `0003_rls.sql`: enable RLS on every tenant-scoped table; create policy `tenant_isolation` per table using `USING (tenant_id = current_setting('cypra.tenant_id', true)::uuid)`. Bypass policy for `cypra_migrate` only.
+- [ ] Implement `internal/db.TenantScopedDB`: wraps `*gorm.DB`, exposes `Find`, `Create`, `Update`, `Delete`, `Transaction`, and `Raw(stmt string, tenantID uuid.UUID, args ...any)`. Every public method either takes `tenantID` explicitly or pulls it from a typed `context.Context` key (never from a string lookup). Methods that lack a tenant context return a typed `db.ErrTenantContextMissing`.
+- [ ] Implement the connection-checkout / connection-return hooks via GORM's `*gorm.DB.Use(plugin)` API: on checkout, `SET LOCAL cypra.tenant_id = <ctx tenant>`; on return, issue `SELECT set_config('cypra.tenant_id', '', false)` (the `set_config` form is safe whether or not the GUC was previously set on this connection — bare `RESET cypra.tenant_id` raises an error if the GUC was never set on the connection, which fails under pgbouncer transaction-pooling). RLS policies use `current_setting('cypra.tenant_id', true)` (the `missing_ok=true` arg form) to handle the empty-string default cleanly.
+- [ ] Define GORM model structs in `internal/models/` matching the schema 1:1. Models do NOT carry `gorm:"index"` tags — schema is the source of truth, models are read-only.
+- [ ] Author the integration-test harness: `internal/dbtest` spins up a fresh Postgres via `testcontainers-go`, runs migrations, returns a configured `*TenantScopedDB`.
+- [ ] Author the **tenant-isolation fuzzer harness** (`internal/db/fuzz/`): a test-time framework that, given a registered handler, swaps the request `tenant_id` in `context.Context` for a different tenant's id and asserts the handler returns zero rows OR a permission-denied error OR a not-found error — never another tenant's data. At Phase 1 the fuzzer ships only as a harness with self-tests against synthetic `TenantScopedDB`-backed handlers; **handler enrolment is the responsibility of every later phase**: Phase 3 enrolls the REST API skeleton, Phase 4 enrolls auth handlers, Phase 5 enrolls OIDC, etc. Every phase that introduces new HTTP handlers MUST register them with the fuzzer in the same PR. The Cross-Phase Concern guards against silent skips.
+- [ ] Author unit tests for `TenantScopedDB.Raw` rejecting zero `tenantID` (compile-time + runtime).
+- [ ] Author RLS-bypass test: open a connection as `cypra_runtime` without `cypra.tenant_id` set; assert reads against tenant-scoped tables return zero rows.
+- [ ] Author audit-log immutability test: connect as `cypra_runtime`, INSERT an audit row, attempt `UPDATE audit_entries SET action = 'tampered'` — assert it fails with insufficient privilege; attempt `DELETE` — assert it fails.
+- [ ] Author migration up/down round-trip test: every migration's `down` reverses its `up` cleanly on a populated DB.
+- [ ] Author `internal/models/README.md` and `internal/db/README.md` documenting the tenant-isolation contract and the `Raw` escape hatch's `tenantID` requirement.
+- [ ] Fill in ADR-0001 (tenant isolation), ADR-0009 (GORM + SQL migrations boundary), ADR-0013 (Postgres role separation). Status flips from `proposed` to `accepted`.
+
+### Acceptance
+
+- [ ] Every entity in PLAN §8 has a corresponding table; column types match.
+- [ ] Two Postgres roles exist; `cypra_runtime` cannot DELETE from `audit_entries` (verified by integration test).
+- [ ] Every tenant-scoped table has an active RLS policy; reads without `cypra.tenant_id` return zero rows.
+- [ ] `TenantScopedDB.Raw` requires a non-zero `tenantID`; the test suite asserts this.
+- [ ] The tenant-isolation fuzzer harness runs in CI; self-tests against synthetic handlers pass. (Handler enrolment is per-phase from Phase 3 onward.)
+- [ ] Migration up/down round-trips cleanly.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green and the fuzzer runs as part of CI.
+- [ ] **Hygiene gate:** lint / format / typecheck clean; no introduced dead code in `internal/db` or `internal/models`.
+- [ ] **Test gate:** unit tests cover the `TenantScopedDB` API surface; integration tests cover RLS, role separation, audit-log immutability, and migration round-trips.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion._
+
+---
+
+## Phase 2: Crypto, secrets, sessions, and bootstrap
+
+**Status:** not started
+**Dependencies:** Phase 1
+**Deliverable:** `internal/crypto` exposes Argon2id password hashing, AES-GCM envelope encryption (per-row DEK + master KEK loaded from env or file at boot), and OIDC keypair generation/rotation primitives. Per-tenant signing keys rotate via a 90-day schedule with 30-day overlap (state machine: `active → overlap → retired`, plus `sunsetting` for tenant-deletion). The session manager mints JWT access tokens (15 min) + opaque refresh tokens with family-tree reuse detection. The bootstrap setup-token flow is end-to-end testable: a fresh DB produces a single-use token printed under a `redacted-on-export: true` slog attribute, redeemable exactly once, revokable via a future `cypra admin reset-bootstrap` (CLI lands in Phase 6 — at this phase the function is reachable from tests only). Master-key rotation is resumable (`master_key_rotations` table tracks `phase` and `rows_done`). ADRs 0004, 0005, 0006 filled in.
+
+### Tasks
+
+- [ ] Implement `internal/crypto/argon2.go`: Argon2id parameters per OWASP 2025 recommendation, with named constants and a denylist hook for rejected passwords.
+- [ ] Implement `internal/crypto/envelope.go`: per-row DEK (AES-256-GCM) wrapped under a master KEK held in memory only. `Encrypt(plaintext, kek) → (ciphertext, encrypted_dek)`; `Decrypt(ciphertext, encrypted_dek, kek) → plaintext`. Master KEK loaded once at process start via `LoadMasterKey(env, file)`; loss = irrecoverable.
+- [ ] Implement `internal/crypto/master_key_rotation.go`: writes a `master_key_rotations` row with `phase='rewrap'`; iterates every encrypted column in batches; re-wraps each row's DEK under the new KEK in a transaction; updates `rows_done`. `Resume(rotationID)` continues from `rows_done`. New writes during rotation use the new KEK; verifier code accepts both KEKs while `phase != 'done'`. `ConfirmCutover(rotationID)` marks `phase='done'` and clears the old KEK from memory.
+- [ ] Implement `internal/crypto/signing_keys.go`: per-tenant OIDC keypair generation (RS256 default; ES256 selectable). `kid` is `<tenant_id>:<seq>` so cross-tenant lookups are structurally impossible. Store private key envelope-encrypted; public key as JWK in JSONB.
+- [ ] Implement signing-key rotation state machine in `internal/oidc/rotation.go`: 90-day rotation, 30-day overlap, automatic via background ticker; `ForceRotate(tenantID)` triggers off-schedule. State transitions persisted; old keys move to `retired` after the overlap window. Tenant-deletion path sets all keys to `sunsetting` with `sunset_until = now() + 30d`.
+- [ ] Implement `internal/sessions/jwt.go`: 15-minute access tokens signed with the tenant's `active` signing key; claims include `iss = https://<tenant>.<install-domain>`, `sub = <tenant_id>:<user_id>`, `iat`, `exp`, `nbf`, `aud`, `scope`. Verifier accepts `active ∪ overlap ∪ sunsetting` keys with ±60 s leeway.
+- [ ] Extend `internal/dbtest` with `SeedTenant(t, slug)` + `SeedSecondTenant(t, slug)` helpers that insert a fully-formed tenant row (with its first signing keypair already minted) — every Phase 2+ test that needs to exercise per-tenant signing/JWT/refresh logic uses these helpers, since the tenant CRUD HTTP surface doesn't land until Phase 3.
+- [ ] Implement `internal/sessions/refresh.go`: opaque refresh tokens (32 bytes random), stored hashed in `oidc_refresh_tokens`, with `family_id` and `parent_id`. `Mint(tenant, client, user, scope, parent_id)` creates a new row in the parent's family. `Consume(token)` atomically checks `consumed_at IS NULL` via `UPDATE … RETURNING`; if NULL, mint a child and return; if NOT NULL, **reuse detected** — set `revoked_at` on every row with the same `family_id`, emit a `cypra_oidc_refresh_reuse_detected_total` metric and an audit entry, return error.
+- [ ] Implement the bootstrap flow in `internal/bootstrap`: `IsFirstBoot()` checks `instance_admins` + `bootstrap_tokens`. `MintSetupToken()` generates 32 bytes random, INSERTs into `bootstrap_tokens` with 24 h expiry, COMMITs, then logs the plaintext token via `slog` with `redacted-on-export: true` attribute. `RedeemSetupToken(plaintext)` atomically checks `consumed_at IS NULL AND revoked_at IS NULL AND expires_at > now()`, marks `consumed_at`, returns the right to mint the first instance admin. `RevokeSetupToken()` (for `cypra admin reset-bootstrap`) sets `revoked_at` on any live token and mints a fresh one if `instance_admins` is empty.
+- [ ] Author crash-resistance test for bootstrap: simulate a process crash between `INSERT bootstrap_tokens` COMMIT and the slog emit; assert that on restart, `cypra admin reset-bootstrap` re-mints. Document the failure-mode behavior (token row exists, plaintext lost — recoverable via reset-bootstrap).
+- [ ] Author master-key-rotation crash-resistance test: kill the process mid-rewrap (after some `rows_done`); restart with both old + new KEK; `Resume(rotationID)` continues to completion; cutover succeeds.
+- [ ] Author refresh-token reuse property-based test: build random family graphs (parent → child → grandchild → …), randomly choose a node to "reuse", assert all descendants are revoked.
+- [ ] Author refresh-token race test: two goroutines present the same parent simultaneously; assert exactly one mints a child and the other gets `consumed_at != NULL` on its second-attempt (next-call) reuse-detection.
+- [ ] Implement Argon2id deny-list (top-N common passwords from a static list) and a unit test asserting common passwords are rejected with a specific error code.
+- [ ] Fill in ADR-0004 (envelope encryption + master-key rotation), ADR-0005 (signing-key rotation schedule), ADR-0006 (bootstrap setup-token).
+
+### Acceptance
+
+- [ ] Argon2id encode/verify round-trip works at the documented parameters.
+- [ ] Envelope encryption: encrypt → decrypt round-trip with the same KEK; decrypt with a different KEK fails with a typed error.
+- [ ] Master-key rotation completes online with concurrent writes; resumes after process kill.
+- [ ] Per-tenant signing-key generation + rotation: rotating moves `active → overlap`; mints with `active`; verifier accepts both.
+- [ ] JWT issuance + verification: claims match expected shape; `iss` is per-tenant; clock skew honored at ±60 s.
+- [ ] Refresh-token rotation: present-rotate-present-old triggers family-wide revocation.
+- [ ] Bootstrap: fresh DB → `MintSetupToken` → `RedeemSetupToken` → first instance admin minted → second `MintSetupToken` is refused (admin exists). After `RevokeSetupToken`, a fresh token is mintable only if `instance_admins` is empty.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean; no plaintext secrets logged anywhere; `redacted-on-export` attribute present on bootstrap-token log emission (asserted by a log-shape test).
+- [ ] **Test gate:** unit tests cover every crypto primitive; integration tests cover signing-key rotation, master-key rotation crash-resume, refresh-token race + reuse, bootstrap mint/redeem/revoke.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion._
+
+---
+
+## Phase 3: HTTP server, tenant resolver, REST API skeleton, healthz/readyz, auto-migrate
+
+**Status:** not started
+**Dependencies:** Phase 2
+**Deliverable:** `cypra serve` boots a chi-routed HTTP server bound to `LISTEN_ADDR`. Subrouters exist for `/api/v1`, `/oidc`, `/login`, `/dashboard`, `/.well-known`, `/setup`, `/healthz`, `/readyz`, `/metrics`, `/storage`. The tenant-resolver middleware extracts the tenant slug from `Host`, looks it up, sets `cypra.tenant_id`, attaches the tenant to the request context. The reserved-slug denylist is enforced at tenant creation. Auto-migrations run on boot (with `--skip-migrate` opt-out and a clear "run `cypra migrate`" message if migrations pending). `/healthz` returns 200 if the process is up; `/readyz` returns 200 only if migrations are applied + KEK loaded + DB reachable + storage backend reachable. The REST API skeleton (`/api/v1/tenants`, `/api/v1/projects`, `/api/v1/users`) supports CRUD via `TenantScopedDB`. Authorization middleware resolves tenant role + permission. The email-outbox worker is scaffolded (reads `email_outbox`, dispatches via the `terminal` backend at this phase). The Postgres-backed rate limiter with hard-coded defaults is in place. A typed REST client lives in `sdk/go/admin/`.
+
+### Tasks
+
+- [ ] Scaffold `cmd/cypra/main.go` + subcommand dispatch via `cobra` or stdlib (`flag`-based subcommand pattern).
+- [ ] Implement `internal/httpserver`: chi router with subrouters. Middleware order: request-id → slog logger → tenant-resolver (where applicable) → rls-setter → auth → handler.
+- [ ] Implement `internal/httpserver/tenant_resolver.go`: parses `Host` per `TRUSTED_PROXY_HEADERS` mode (honoring `X-Forwarded-Host` only when configured); strips `<install-domain>` suffix; looks up tenant by slug; attaches to context. Unknown host → 404 with `tenant.not_found`. Bare install domain → instance-admin context.
+- [ ] Implement `internal/httpserver/rls_setter.go`: middleware that pulls tenant from context and issues `SET LOCAL cypra.tenant_id = …` on the connection used by downstream `TenantScopedDB` calls.
+- [ ] Implement `internal/auth`: session-cookie parsing, PAT parsing, role/permission resolver. `requireAuth(perm)` middleware factory.
+- [ ] Implement `internal/api/v1/tenants`: instance-admin-only CRUD. Slug validation: regex `^[a-z][a-z0-9-]{2,63}$` AND not in the reserved-words denylist (`www`, `api`, `admin`, `dashboard`, `oidc`, `login`, `signup`, `setup`, `health`, `healthz`, `readyz`, `metrics`, `well-known`, `docs`, `assets`, `auth`, `id`, `me`, `root`, `public`, `static`, `_`).
+- [ ] Implement `internal/api/v1/projects`: tenant-scoped CRUD; one project per tenant slug (uniqueness + soft-delete-aware).
+- [ ] Implement `internal/api/v1/users`: tenant-scoped CRUD; per-tenant email uniqueness; `metadata JSONB` write/read.
+- [ ] Implement `internal/api/v1/version`: `GET /api/v1/version` returns build version + commit SHA. (Used by SPA for upgrade-prompt-on-mismatch in Phase 7.)
+- [ ] Implement `cypra serve` flag handling: `--skip-migrate`, `LISTEN_ADDR` from env, `PUBLIC_BASE_URL` parsing + validation (must be HTTPS in non-dev).
+- [ ] Implement `cypra migrate`: runs `golang-migrate` against `MIGRATE_DATABASE_URL` (or fall back to `DATABASE_URL` with a stderr warning).
+- [ ] Implement boot-time migration check: if pending migrations exist and `--skip-migrate` is not set, exit with code 4 and the message "Pending migrations. Run `cypra migrate`."
+- [ ] Implement `/healthz` (always 200) and `/readyz` (DB reachable + KEK loaded + migrations applied + storage backend reachable).
+- [ ] Define the `Sender` interface in `internal/email/sender.go` (`type Sender interface { Send(ctx, EmailMessage) error }`) and ship the `terminal` backend implementing it (writes message body to stdout; used as the default until provider config lands in Phase 4). The `smtp` and `resend` backends land in Phase 4 against this same interface.
+- [ ] Scaffold `internal/email/worker.go`: goroutine pool reading `email_outbox` via `SELECT FOR UPDATE SKIP LOCKED`; dispatches via the configured `Sender`; exponential backoff on failure; updates `attempts` / `next_attempt_at` / `sent_at` / `failed_at`.
+- [ ] Implement `internal/ratelimit`: Postgres-backed token-bucket on `rate_limit_buckets`; hard-coded defaults (login: 10/min/IP + 5/min/account; signup: 5/min/IP; password reset / magic link: 5/hr/account; token endpoint: 60/min/client).
+- [ ] Implement `internal/audit`: append-only writer; PII-redaction helper for DSR scrub; NDJSON exporter handler at `GET /api/v1/audit/export`. Read paths require `audit.read` permission. **Audit emission is structural, not per-handler:** the chi route registry exposes a `RegisterMutating(method, path, handler, action, resourceKindFn)` helper that wraps the handler with an audit-emission middleware. The wrapper captures `state_before` (via a per-resource snapshotter the registry consumes) before invocation and `state_after` after a 2xx; on 4xx/5xx it still emits an attempt record. Per-handler audit calls are a **lint rule violation** (custom golangci-lint linter forbids direct `audit.Write` in package `internal/api/v1/...`). This guards against the "every state-mutating endpoint emits an audit event" Cross-Phase Concern silently breaking in later phases.
+- [ ] Implement OpenAPI 3.1 generation (via `kin-openapi` or hand-maintained YAML) at `/api/v1/openapi.json`; surfaced only in dev mode (gated by `LOG_LEVEL=debug` or a build tag).
+- [ ] Implement structured slog handler with PII-redaction wrapper (no email bodies, no token bodies, no plaintext passwords at info; `request_id`, `tenant_id`, `actor_id` on every record).
+- [ ] Enrol every Phase 3 handler with the tenant-isolation fuzzer harness from Phase 1. The fuzzer asserts cross-tenant access is structurally impossible on `/api/v1/tenants`, `/api/v1/projects`, `/api/v1/users`, `/api/v1/audit/export`, `/api/v1/version`. Future phases register their handlers in the same PR.
+- [ ] Author `sdk/go/admin/`: typed REST client over `/api/v1`, with PAT auth. Phase 3 lands the skeleton (tenants/projects/users CRUD). The OIDC client (`sdk/go/oidc/`) lands in Phase 11.
+- [ ] Author integration tests: `cypra serve` boots; `curl /healthz` 200; `curl /readyz` 200 once migrations applied; tenant CRUD round-trips; tenant-resolver picks the right tenant for `acme.cypra.localhost`; reserved slugs are rejected.
+- [ ] Author audit-log integration test: every state-mutating endpoint writes an audit row with the resolved actor.
+
+### Acceptance
+
+- [ ] `cypra serve` starts; `/healthz` and `/readyz` work as specified.
+- [ ] `cypra serve` with pending migrations and no `--skip-migrate` exits with code 4 and the documented message.
+- [ ] `cypra migrate` brings the schema current.
+- [ ] Tenant CRUD via `/api/v1/tenants` works for instance admins; non-instance-admin returns 403.
+- [ ] Reserved slugs rejected with `tenant.slug_reserved`; invalid slugs rejected with `tenant.slug_invalid`.
+- [ ] Tenant resolver routes `acme.cypra.localhost` to the `acme` tenant; unknown subdomains 404.
+- [ ] Rate limiter rejects with `auth.rate_limited` after the documented thresholds.
+- [ ] Audit log captures every state-mutating call with `actor_kind`, `actor_id`, `action`, `resource_kind`, `resource_id`, `state_before`, `state_after`.
+- [ ] Email worker picks up `email_outbox` rows and dispatches via the `terminal` backend (writes message body to stdout).
+- [ ] `sdk/go/admin/` client: tenant-create round-trips against a running server.
+- [ ] OpenAPI doc at `/api/v1/openapi.json` lists every Phase 3 route.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean; no secrets in any log path (asserted by a log-shape test).
+- [ ] **Test gate:** unit + integration tests for tenant resolver, RLS, rate limiter, audit log, email outbox dispatch, healthz/readyz, migrations behavior.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion._
+
+---
+
+## Phase 4: Auth methods, email providers, storage backends
+
+**Status:** not started
+**Dependencies:** Phase 3
+**Deliverable:** Every PLAN-mandated end-user auth method works server-side: email + password (Argon2id), magic link, passkey (WebAuthn with **per-tenant RP ID**), Google OAuth upstream (with mandatory `state` + `nonce`). Two-factor: TOTP + WebAuthn second factor. Backup codes (Argon2id-hashed; immediate invalidation on regenerate). Email providers `terminal` / `smtp` / `resend` are wired via the `Sender` interface; tenants without a configured provider cannot issue mail-dependent flows (handlers return `tenant.email_provider_required` and the admin dashboard surfaces a hard-block in Phase 9). Storage backends `local-disk` (HMAC-signed proxy URLs at `/storage/*`) and `s3-compatible` (AWS SDK v2 presigned URLs) implement the `Storage` interface. ADRs 0007, 0012 filled in.
+
+### Tasks
+
+- [ ] Implement password verifier in `internal/auth/password`: Argon2id verify; password-reset flow with `password_reset_tokens` (single-use, atomic consume); competing-credential revocation (when a password is set via passkey-flow, all live `password_reset_tokens` for the user are `revoked_at`).
+- [ ] Implement magic-link verifier in `internal/auth/magiclink`: token issuance (32 bytes random, hashed), email dispatch via outbox, atomic consume on `/verify-magic-link?token=`.
+- [ ] Implement the **invite endpoint** at `POST /api/v1/admin/invite` (tenant-admin authority, body `{ email, role, redirect_url? }`) and `POST /api/v1/instance/invite` (instance-admin authority, body `{ email, role, redirect_url? }`, writes a `pending_invitations` row with `tenant_id = NULL`). Token is 32 bytes random, hashed in DB, single-use, 7-day expiry. Enqueues to `email_outbox` using the `admin-invite` template. Idempotency: re-inviting the same email when an unredeemed row exists rotates the token and resets the expiry rather than creating a second row (enforced by the partial unique index on `pending_invitations`).
+- [ ] Implement the **invite redemption flow**: `GET /invite?token=…` on the hosted-login surface (the rendered page lands in Phase 8 — Phase 4 ships the API endpoint + redemption state machine: validate → pin to a session-bound continuation token → on continuation: optional set-password → mandatory passkey enrolment → role binding → audit event). `POST /api/v1/auth/invite/redeem` consumes the token; the matching `pending_invitations` row's `redeemed_at` and `redeemed_by_user_id` are set atomically. Invite redemption is the **single mechanism** behind every "invite teammate", "invite admin", and second-instance-admin onboarding flow downstream — no other phase introduces a parallel invite mechanism.
+- [ ] Implement passkey (WebAuthn) flow in `internal/auth/webauthn` using `go-webauthn/webauthn`: registration + assertion. **RP ID is per-tenant** (`<tenant>.<install-domain>`), enforced at registration time and checked at assertion time. `rp_id` column on `passkey_credentials` is set at registration; assertions present credentials with that `rp_id` only.
+- [ ] Implement TOTP enrollment + verification in `internal/auth/totp`: secret generation (160-bit), envelope-encryption at rest, ±1-step verification window, QR-code provisioning URI generation.
+- [ ] Implement WebAuthn second-factor in `internal/auth/webauthn2fa`: same library, separate credential set tagged as 2FA-only.
+- [ ] Implement backup codes in `internal/auth/backupcodes`: 10-code generation, Argon2id-hash storage, atomic consume, regeneration immediately invalidates all unconsumed codes. Separate tables for `user_backup_codes` and `instance_admin_backup_codes` per PLAN §8.
+- [ ] Implement upstream Google OAuth in `internal/auth/upstream/google`: OAuth client setup; `state` is a signed nonce + return-URL bundle, validated on callback; `nonce` is included in the auth request and echoed in the upstream `id_token`, validated on receipt.
+- [ ] Implement the `Sender` interface in `internal/email`: backends `terminal` (stdout), `smtp` (`net/smtp`), `resend` (Resend Go SDK). Per-tenant `email_provider_configs` resolution. Mail-dependent handlers return `tenant.email_provider_required` if no enabled config exists.
+- [ ] Implement email templates in `internal/email/templates/`: magic-link, password-reset, email-verification, admin-invite (tenant-scoped + instance-scoped variants), breach-notification. Plain-text + minimal-HTML variants. Tenant logo + accent applied via Go-template variables. Instance-scoped admin-invite uses the install's branding rather than a tenant's.
+- [ ] Implement the `Storage` interface in `internal/storage`: `Put`, `Get`, `Delete`, `SignedURL(key, ttl)`. Default TTL 5 min, max 1 h.
+- [ ] Implement `local-disk` backend in `internal/storage/localdisk`: filesystem path; `SignedURL` returns `https://<host>/storage/<base64url(payload)>.<HMAC-SHA256>` where payload encodes `{key, exp}`. Verified at the `/storage/*` chi handler.
+- [ ] Implement `s3-compatible` backend in `internal/storage/s3compat`: AWS SDK v2 client; native `s3.PresignClient.PresignGetObject`; bucket + endpoint + creds from env.
+- [ ] Author integration tests for every auth method using `testcontainers-go` Postgres + a stub email/storage backend.
+- [ ] Author the per-tenant RP ID test: register a passkey under `acme.cypra.localhost`; attempt assertion under `bravo.cypra.localhost` with the same credential id; assert the WebAuthn library refuses the assertion (RP ID mismatch is enforced by `go-webauthn/webauthn`).
+- [ ] Author the upstream-OAuth state-tampering test: tamper with the `state` parameter on callback; assert `auth.upstream_state_mismatch` is returned.
+- [ ] Author the backup-code immediate-invalidation test: regenerate codes; assert all previously-issued unconsumed codes are now `used_at IS NOT NULL` (or rejected on consume).
+- [ ] Wire all auth methods into `/api/v1/auth/...` handlers (used by hosted login in Phase 8 — handler-only at Phase 4).
+- [ ] Define the **bot-mitigation `Verifier` interface** in `internal/botmitigation/verifier.go` (`type Verifier interface { Verify(ctx, token string) error }`) and ship a `noop` implementation. **Wire the interface into every sign-in / sign-up / magic-link / invite-redemption handler at Phase 4 (not Phase 10).** Phase 10's job is to wire the interface to Prometheus + ship the operator playbook around it; the *seam* must exist now so the v1.1 Turnstile/hCaptcha switch doesn't require touching every handler.
+- [ ] Enrol every Phase 4 handler (auth methods, invite endpoints, invite redemption) with the tenant-isolation fuzzer harness.
+- [ ] Fill in ADR-0007 (storage abstraction) and ADR-0012 (upstream OAuth state/nonce).
+
+### Acceptance
+
+- [ ] Password sign-up + sign-in works against the API.
+- [ ] Magic-link issued via API → email dispatched via outbox → token consumed → session established.
+- [ ] Passkey registration + assertion works at the API; RP ID is per-tenant; cross-tenant assertion is refused.
+- [ ] Google OAuth round-trip with a stubbed upstream succeeds; tampered `state` rejected; missing/wrong `nonce` rejected.
+- [ ] TOTP enrollment + verification works; 30 s window honored; ±1 step accepted.
+- [ ] WebAuthn second-factor works alongside primary password.
+- [ ] Backup codes: 10 generated; consumed atomically; regen invalidates the rest.
+- [ ] Email providers `terminal` / `smtp` / `resend` all dispatch a magic-link email correctly (Resend tested with API mock).
+- [ ] Tenants without an enabled email provider get `tenant.email_provider_required` on every mail-dependent endpoint.
+- [ ] Storage `local-disk`: `Put` → `SignedURL` → fetch via signed URL → `Get` → bytes match. Tampered HMAC URL rejected.
+- [ ] Storage `s3-compatible`: same round-trip against MinIO in Docker Compose.
+- [ ] `POST /api/v1/admin/invite` and `POST /api/v1/instance/invite` round-trip: invite issued → email dispatched via outbox → token redeemed → user/admin minted with the bound role; expired token rejected; redeemed-twice rejected; cross-tenant invite rejected (member of `acme` cannot invite into `bravo`); idempotent re-invite rotates the token in the same row.
+- [ ] Bot-mitigation `Verifier` interface is callable from every sign-in / sign-up / magic-link / invite handler; the `noop` impl returns nil; replacing it with a stub-fail impl in tests blocks the call (interface seam works).
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean; no plaintext secrets in any test fixture committed.
+- [ ] **Test gate:** unit + integration tests cover every auth method, every email backend, both storage backends, and the per-tenant RP ID + state/nonce CVE patterns.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion._
+
+---
+
+## Phase 5: OIDC provider (lean v1 surface)
+
+**Status:** not started
+**Dependencies:** Phase 4
+**Deliverable:** Cypra is a functioning OIDC provider with a per-tenant issuer URL `https://<tenant>.<install-domain>`. The lean v1 surface is implemented: per-tenant discovery doc + JWKS + authorize + token + userinfo + revoke + consent. Auth code + PKCE only (`S256`). Refresh tokens with rotation + family-tree reuse detection (built in Phase 2; wired here). Strict redirect-URI matching per RFC 6749 §3.1.2. JWKS responds with `Cache-Control: public, max-age=300, must-revalidate`. The `openid-conformance-suite` runs nightly in CI against a test tenant. The authorization-code cleanup job runs hourly. ADRs 0002, 0003 filled in.
+
+### Tasks
+
+- [ ] Implement `/oidc/authorize` in `internal/oidc/authorize.go`: validates `client_id` (resolves to `oidc_client_uuid`), `redirect_uri` (exact match per RFC 6749 §3.1.2 — host case-folded per RFC 3986; path/query/port exact; trailing slash significant; fragments forbidden), `scope`, `code_challenge` + `code_challenge_method=S256` (mandatory), `state`, `nonce`. Redirects to `/login` with a continuation token; on continuation, mints an `oidc_authorization_codes` row (60 s TTL, single-use atomic consume).
+- [ ] Implement `/oidc/token` in `internal/oidc/token.go`: supports `grant_type=authorization_code` and `grant_type=refresh_token` only. Validates client auth (`client_secret_basic`, `client_secret_post`, or `none` for PKCE-public). Validates PKCE on auth-code grant. Mints access token (15 min JWT) + ID token + refresh token (with `family_id`). On refresh-token grant: consumes the parent (atomic), mints a child; if reuse detected → cascade-revoke family + return `invalid_grant`.
+- [ ] Implement `/oidc/userinfo` in `internal/oidc/userinfo.go`: validates the access token (signature + `iss` + `exp` ± 60 s + `aud`); returns `sub = <tenant_id>:<user_id>`, `email`, `email_verified` (from `users.email_verified_at`), `name`, `picture` (5-min signed URL via storage abstraction), `updated_at`. `Cache-Control: no-store`.
+- [ ] Implement `/oidc/revoke` in `internal/oidc/revoke.go` per RFC 7009: refresh tokens only; access tokens accepted but no-op (200). Revoking a refresh token revokes its entire family. Unknown token shapes return `unsupported_token_type`.
+- [ ] Implement `/oidc/consent` in `internal/oidc/consent.go`: **recording logic only at Phase 5.** The endpoint accepts the recorded decision (POST), writes an `oidc_consents` row, and resumes the auth flow. Returning users with prior consent on the same client + scope auto-redirect; scope-upgrade triggers re-consent. The HTML rendering layer (the actual consent screen the user sees) lands in Phase 8; until Phase 8, end-to-end OIDC tests use a stub auto-consent client that POSTs decisions directly. **Phase 5 acceptance does not require human-visible consent UI.**
+- [ ] Implement per-tenant discovery doc at `/.well-known/openid-configuration`: `issuer = https://<tenant>.<install-domain>`; advertises only the v1 surface (auth-code + refresh; `S256`; `RS256`/`ES256`; `client_secret_basic`/`client_secret_post`/`none`). `Cache-Control: public, max-age=600, must-revalidate`.
+- [ ] Implement per-tenant JWKS at `/.well-known/jwks.json`: returns `active ∪ overlap ∪ sunsetting` keys. `Cache-Control: public, max-age=300, must-revalidate`. `kid` is `<tenant_id>:<seq>`.
+- [ ] Implement OIDC error model: every error case in PLAN §9 returns the documented OIDC code (`invalid_request`, `invalid_client`, `invalid_grant`, `unauthorized_client`, `unsupported_grant_type`, `invalid_scope`, `access_denied`, `interaction_required`, `login_required`, `consent_required`, `account_selection_required`, `server_error`, `temporarily_unavailable`, `unsupported_token_type`).
+- [ ] Implement the authorization-code cleanup job: hourly background ticker hard-deletes rows with `expires_at + 7d < now()`. Same job sweeps consumed `magic_link_tokens`, `password_reset_tokens`, `email_verification_tokens`, expired `sessions`, etc.
+- [ ] Wire the `openid-conformance-suite` Docker container into a nightly CI job. Pre-create a test tenant + OIDC client via the admin API; run the conformance suite against it. Fail CI if any conformance test regresses.
+- [ ] Author redirect-URI parsing tests covering: case-folded host equality, exact path equality, trailing-slash significance, fragment rejection at registration, port equality, scheme equality.
+- [ ] Author the JWKS-cache stale-on-rotation integration test: rotate signing keys; assert the new `kid` appears in JWKS within `max-age` + tolerance; assert old `kid` remains during the overlap window; assert old `kid` disappears after retirement.
+- [ ] Author refresh-token rotation + reuse-detection end-to-end test against a real `/oidc/token` flow.
+- [ ] Author end-to-end OIDC flow test using `golang.org/x/oauth2` + `coreos/go-oidc` as a downstream consumer: configure a test OIDC client; execute `/oidc/authorize` → user-stub-login → `/oidc/token` → `/oidc/userinfo` → assert claims.
+- [ ] Author the **signing-key sunset window test**: simulate a tenant-deletion path (without invoking the Phase 10 cascade — call `oidc.SunsetKeys(tenantID)` directly), verify JWKS continues serving the `sunsetting` keys for the documented 30-day window, then drops them. Phase 10 then exercises this through the user-facing tenant-delete cascade.
+- [ ] Enrol every Phase 5 OIDC handler with the tenant-isolation fuzzer harness.
+- [ ] Fill in ADR-0002 (OIDC provider surface) and ADR-0003 (refresh-token reuse detection).
+
+### Acceptance
+
+- [ ] A downstream OIDC consumer can complete a full auth-code-with-PKCE flow against `https://acme.cypra.localhost` (using the stub auto-consent client) and receive valid `id_token` + `access_token` + `refresh_token`. End-to-end with the *rendered* consent screen lands in Phase 8 acceptance.
+- [ ] Refresh rotation works; reuse triggers family-wide revocation.
+- [ ] Discovery + JWKS return the documented `Cache-Control` headers.
+- [ ] `kid` shape is `<tenant_id>:<seq>`; cross-tenant verification is structurally impossible (verified by negative test).
+- [ ] `openid-conformance-suite` passes against the test tenant in nightly CI.
+- [ ] Strict redirect-URI matching: changing case of path, adding trailing slash, adding fragment, or changing port all reject with `invalid_redirect_uri`.
+- [ ] Authorization-code cleanup job hard-deletes consumed/expired codes after 7 days.
+- [ ] `/oidc/revoke`: refresh-token revocation cascades the family; access-token revocation is a 200 no-op; unknown-shape token returns `unsupported_token_type`.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean.
+- [ ] **Test gate:** unit + integration tests cover every endpoint, every error code in PLAN §9, redirect-URI strictness, JWKS cache behavior, and the conformance suite.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion._
+
+---
+
+## Phase 6: CLI, backup tooling, PATs
+
+**Status:** not started
+**Dependencies:** Phase 5
+**Parallelizable with:** Phases 7 — 10. Phase 6 has no dashboard surface; the **API Tokens** dashboard screen ships in Phase 9 sub-track 9b. Phase 6 ships the CLI commands, the `/api/v1/pats` endpoints, and the `cypra export` / `cypra import` round-trip — none of which gate the SPA.
+**Deliverable:** `cypra` CLI is feature-complete per PLAN §9: `serve`, `migrate`, `admin {promote, invite, reset-passkey, reset-passwords, rotate-key, rotate-master-key, revoke-tenant-tokens, reset-bootstrap, list-tenants}`, `export`, `import`, `version`. `cypra export` bundles `pg_dump` + storage manifest + envelope-encrypted secrets export under a mandatory passphrase. `cypra import` restores into an empty Cypra; refuses to overwrite existing data; refuses to resurrect DSR-deleted users without `--allow-resurrect`. Personal Access Tokens (PATs) are issuable via the admin API (`/api/v1/pats`); scoped to the issuing admin's tenant + a permission set; revoked when the issuing admin's role is downgraded or membership is revoked. The CLI introduces a controlled cross-tenant escape hatch (`db.AsInstanceAdmin(ctx)` returning a `*TenantScopedDB` that bypasses the tenant filter but still uses the `cypra_runtime` Postgres role; every call site in `cmd/cypra/admin/` audit-logs the cross-tenant intent). ADR-0011 + ADR-0014 (the controlled escape hatch) filled in.
+
+### Tasks
+
+- [ ] Implement `cypra admin promote --tenant=<slug-or-id> --email=<email> [--role=owner|admin|member]`: requires `--tenant`; calls `POST /api/v1/admin/invite` on behalf of the operator; refuses if `--tenant` is omitted (no implicit instance-admin promotion via this command).
+- [ ] Implement `cypra admin invite <email>` (no `--tenant`): the **second-instance-admin recovery path**. Generates an instance-admin invite via `POST /api/v1/instance/invite` (called with operator-on-host break-glass authority — the CLI authenticates by direct DB access using the bootstrap-loaded `MASTER_KEY`, not over HTTP). Prints the redemption link to stdout via slog with `redacted-on-export: true`. Refuses if the host process is not the same Cypra instance (sanity check on `DATABASE_URL`). This is the documented recovery path when all instance admins lose access and `cypra admin reset-bootstrap` cannot run because `instance_admins` is non-empty.
+- [ ] Implement `cypra admin list-instance-admins [--json]`: lists every row in `instance_admins` (email, last-seen, role). Uses `db.AsInstanceAdmin(ctx)` cross-tenant escape hatch.
+- [ ] Implement `cypra admin reset-passkey --tenant=… --email=…`: clears the user's passkeys; allows re-enrollment via magic-link.
+- [ ] Implement `cypra admin reset-passwords --tenant=…`: sets `must_reset=true` on every password credential in the tenant; documents user-visible behavior.
+- [ ] Implement `cypra admin rotate-key --tenant=…`: invokes the Phase 2 `ForceRotate(tenantID)`.
+- [ ] Implement `cypra admin rotate-master-key --old-from-env --new-from-env [--resume] [--confirm-cutover]`: kicks off Phase 2 master-key rotation; resumes a partial rotation; confirms cutover.
+- [ ] Implement `cypra admin revoke-tenant-tokens --tenant=…`: sets `revoked_at` on every refresh token + session for the tenant.
+- [ ] Implement `cypra admin reset-bootstrap`: revokes any live bootstrap token via Phase 2 `RevokeSetupToken`; mints a fresh one only if `instance_admins` is empty.
+- [ ] Implement `cypra admin list-tenants [--json]`: lists tenants with row counts + last activity. Plain-text or JSON.
+- [ ] Implement `cypra export --out=<path> --passphrase-from-stdin | --passphrase-file=<path>`: bundles `pg_dump` of the schema + data + storage-backend manifest (or full content for `local-disk`) + a sealed-secrets export (every envelope-encrypted column re-wrapped under the passphrase via Argon2id-derived key) into a single `.tar.zst`. **Refuses to run without a passphrase.** Exits with code 7 if the passphrase is missing in a non-interactive context.
+- [ ] Implement `cypra import <path> --passphrase-from-stdin | --passphrase-file=<path> [--allow-resurrect]`: refuses to overwrite a non-empty Cypra DB; refuses to resurrect any user with a row in `gdpr_deletions` unless `--allow-resurrect` is set, in which case writes a fresh audit entry. Re-wraps secrets under the live `MASTER_KEY` on import.
+- [ ] Implement `cypra version`: prints semantic version + git SHA + build date in plain text or JSON.
+- [ ] Implement PAT management in `internal/pat`: random 32-byte token, hashed in DB, revealed once at creation; scope = (tenant_id, permission_set); revoked on role change via a DB trigger or app-level hook.
+- [ ] Implement `/api/v1/pats` REST endpoints: list (without revealing tokens), create (returns the token once), revoke. PAT auth wired into `internal/auth` middleware.
+- [ ] Author CLI integration tests using `testcontainers-go` + the running `cypra` binary: every subcommand exercised happy-path; every documented exit code reachable.
+- [ ] Author backup round-trip integration test: `cypra export` → fresh DB → `cypra import` → assert every tenant, project, user, OIDC client, signing key restored. **Refresh-token assertion:** because refresh tokens are opaque random bytes hashed in DB (not envelope-encrypted), they survive verbatim through export/import — the test asserts that a refresh-token row from the source DB still resolves on the imported DB and a `/oidc/token` refresh-grant call against the imported instance succeeds with the same `family_id`. Envelope-encrypted columns (passkey credentials, TOTP secrets, OIDC client secrets) are re-wrapped under the destination's live `MASTER_KEY` during import, and the test asserts that a passkey assertion against the imported instance succeeds.
+- [ ] Author backup-resurrect-blocked test: DSR-delete a user; export; import to fresh DB; assert import refuses without `--allow-resurrect`.
+- [ ] Author the second-instance-admin recovery test: stand up a fresh instance, redeem the bootstrap token, lock out the only admin (delete `instance_admin_sessions` rows + revoke all PATs), run `cypra admin invite recovery@example.com` against the host, redeem the printed link via the hosted-login `/invite?token=…` flow, assert a new instance-admin row exists and can sign in.
+- [ ] Implement the `db.AsInstanceAdmin(ctx) *TenantScopedDB` escape hatch in `internal/db`. Returns a wrapper whose tenant filter is bypassed (`tenant_id` clause omitted) but still runs as `cypra_runtime` (RLS still applies — must be paired with a connection-level `cypra.tenant_id = '*'` exception for instance-admin reads, or each affected RLS policy includes a `OR current_setting('cypra.actor_kind', true) = 'instance_admin'` clause). **This escape hatch is callable only from `cmd/cypra/admin/...` and `internal/api/v1/instance/...`** (compile-time enforced via a build-tag-gated source file plus a custom golangci-lint rule that flags imports outside the allowlist). Every call writes an audit entry with `actor_kind = 'instance_admin'`, `cross_tenant = true`.
+- [ ] Fill in ADR-0011 (PATs) and ADR-0014 (controlled cross-tenant escape hatch for instance-admin paths).
+
+### Acceptance
+
+- [ ] Every CLI subcommand has a working integration test exercising happy path + each documented error.
+- [ ] `cypra export` requires a passphrase; refuses non-interactive without `--passphrase-file`.
+- [ ] `cypra import` refuses to overwrite; refuses resurrect without `--allow-resurrect`.
+- [ ] PATs: create returns the token once; subsequent reads return only metadata (last 4 chars). Role downgrade revokes PATs (verified by integration test).
+- [ ] PAT auth works against `/api/v1/*`; expired/revoked PATs return 401.
+- [ ] `cypra admin reset-bootstrap` revokes the live token; refuses to mint a new one if any `instance_admins` row exists.
+- [ ] `cypra admin invite <email>` (no `--tenant`) issues an instance-admin invite link, redemption mints a second instance admin, and the second-admin-recovery integration test passes end-to-end.
+- [ ] `db.AsInstanceAdmin(ctx)` is callable only from the documented allowlist; the lint rule fails the build if a forbidden caller imports it.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean.
+- [ ] **Test gate:** unit + integration tests for every CLI subcommand, backup round-trip, PAT lifecycle.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion._
+
+---
+
+## Phase 7: Dashboard frontend foundation — tokens, primitives, shell, account & setup wizard
+
+**Status:** not started
+**Dependencies:** Phase 5 (Phase 6 runs in parallel — Phase 7 does NOT consume CLI/PAT/import-export work)
+**Deliverable:** The `dashboard/` SPA exists, embedded in the Cypra binary via `embed.FS`. Every DESIGN §3–§7 token is defined as a CSS variable (dark + light at parity, bound to a `data-mode` attribute). Monaspace Neon and Monaspace Krypton are self-hosted with proper FOUT handling. Every DESIGN §8 atomic primitive and §9 composite component is implemented in code, with every documented state, both color modes. The route tree from DESIGN §11 is wired with placeholder pages; routes that need data fetch via React Query. Theme switching (system / dark / light) persists per actor (using the `users.metadata.theme` and `instance_admins.metadata.theme` JSONB fields established in Phase 1's `0001_init.sql`). The Sidebar Nav, ContextBadge, and TenantSwitcher work end-to-end. The **Setup Wizard** (`/setup/<token>`), **Account / Profile**, and **Dashboard Overview** screens are complete with every documented state. A `/__cypra/gallery` route renders every primitive in every state in both modes for visual regression. axe-core runs in dev. ADR-0010 filled in.
+
+This phase ships UI. The visual validation gate is **mandatory**.
+
+### Tasks
+
+- [ ] Scaffold `dashboard/` with Vite + React 19 + TypeScript strict mode + Tailwind v4 + ShadCN/Watermelon UI. Configure path aliases (`@/`).
+- [ ] Configure Bun workspace integration; `bun install` at repo root installs `dashboard/` deps.
+- [ ] Self-host Monaspace Neon (weights 400/500/600/700) + Monaspace Krypton (weights 400/500). Configure `font-display: swap` and preload critical weights. License files committed.
+- [ ] Implement the token system from DESIGN §3 / §4 / §5 / §7 as CSS variables in `dashboard/src/tokens.css`. Two parallel sets bound to `[data-mode="dark"]` and `[data-mode="light"]`. **No hardcoded hex values anywhere outside this file** (CI lint rule enforces this).
+- [ ] Configure Tailwind v4 to consume the CSS-variable tokens (no Tailwind theme colors that aren't tokens).
+- [ ] Set up React Query (`@tanstack/react-query`) global client with sensible defaults (stale: 30s, retry: 3 with exp backoff).
+- [ ] Implement theme switching with `system` / `dark` / `light` options, persisted via `users.metadata.theme` (tenant actors) and `instance_admins.metadata.theme` (instance actors). Both `metadata` columns are JSONB on the row, established in Phase 1's `0001_init.sql`. Reads/writes go through `PATCH /api/v1/users/me` and `PATCH /api/v1/instance/admins/me` respectively (handlers added here as part of the SPA wiring).
+- [ ] Implement Lucide icon imports as **per-icon imports from `lucide-react/dist/esm/icons/<icon-name>`** (not the barrel `lucide-react` import — barrel imports defeat tree-shaking and ship the entire icon set). The picks from DESIGN §6: `Lock`, `Copy`, `Eye`/`EyeOff`, `RotateCw`, `Trash2`, `AlertTriangle`, `XCircle`, `CheckCircle2`, `Clock`, plus `Monitor` for `MobileBlockedBanner`. Add a CI lint rule (custom `eslint` rule or `eslint-plugin-no-restricted-imports` config) that forbids `import { … } from 'lucide-react'` and forces the per-icon path.
+- [ ] Implement Cypra-specific glyphs as React SVG components: `TenantGlyph`, `InstanceGlyph`, `PasskeyGlyph`, `OidcGlyph`. Visually distinct shapes (not just color).
+- [ ] Implement every DESIGN §8 atomic primitive: `Button`, `IconButton`, `TextInput`, `Select`/`Combobox`, `Checkbox`, `Radio`, `Switch`, `Tag`/`Chip`, `Tooltip`, `Toast` (with stacking max 3), `Modal`, `Popover`/`Dropdown`/`Menu`, `Tabs`, `Card`, `Avatar` (with `no-name` `sub`-derived fallback), `Skeleton` (static, no shimmer), `Toolbar`/`SegmentedControl`, `IdentifierPill` (with copy-while-masked refusal on `MaskedSecret`), `MaskedSecret`, `TenantSwitcher`, `ContextBadge`, `StatusPip` (every variant with paired sigil), `KeyRotationTimeline`, `AuditEntry`, `BackupCodeGrid` (with `beforeunload` + browser-back interception), `PermissionMatrix`, `SetupTokenBanner`, `ProviderConfigCard`, `MobileBlockedBanner`, `CodeBlock` (with `Copy as cURL` toggle).
+- [ ] Implement every DESIGN §9 composite: `PageHeader`, `SidebarNav` (expanded/collapsed; permission-denied with `Lock`), `Breadcrumb`, `EmptyState`, `ErrorState`, `LoadingState` (static skeletons, 120 ms delay), `ConfirmationDialog` (with typed-confirm exact match), `SettingsRow` (including `branding-toggle` with preview Modal), `ListRow`, `SaveBar`.
+- [ ] Implement the route tree from DESIGN §11. Every route renders a placeholder `PageHeader` + `EmptyState`/`Skeleton` until its phase lands.
+- [ ] Implement the **Setup Wizard** (`/setup/<token>`) end-to-end: token verification → `SetupTokenBanner` → passkey enrollment (uses Phase 4 server-side WebAuthn) → `BackupCodeGrid` with confirmation gate → first instance admin minted → redirect to `/dashboard`. Every state from DESIGN §10 implemented.
+- [ ] Implement the **Account / Profile** screen: passkeys section (add/remove with last-passkey self-removal guard), 2FA section (TOTP + backup codes), Active sessions list, PATs section (one-time-shown PAT in `IdentifierPill` with `beforeunload` + confirmation gate matching `BackupCodeGrid`).
+- [ ] Implement the **Dashboard Overview** screen: tile grid (tenants count for instance admin / project count / user count / signing-key health / last 10 audit entries), with every DESIGN-listed state including `no-permissions` and per-tile error/permission-denied.
+- [ ] Implement **error pages**: 404, 403, 500, 503 (with auto-retry on `/readyz` for 503).
+- [ ] Implement keyboard shortcuts per DESIGN §12: `cmd+k` placeholder palette (full content in Phase 9), `cmd+/` shortcut overlay reachable from a `?` IconButton in the dashboard footer, `g` then-key navigation, `/` focus search, `c` primary-create, `escape` close-overlay.
+- [ ] Implement `/__cypra/gallery` route: every primitive in every state, both modes, side-by-side. Used for visual regression and human review.
+- [ ] Configure axe-core to run in dev mode and log violations to console. CI runs axe-core on the gallery route.
+- [ ] Implement the API-version-mismatch handling: SPA polls `GET /api/v1/version` every 60 s; if version differs from boot value, surface a non-blocking Toast "A new version is available — refresh to update" with a refresh action.
+- [ ] Implement `embed.FS` integration: `cypra serve` serves `dashboard/dist/*` from the embedded filesystem. Build pipeline: `make build-frontend` (added in Phase 0) runs `cd dashboard && bun run build` to produce `dashboard/dist/`; `make build` depends on it. **The Go binary refuses to start in production mode if `embed.FS` is empty** (boot-time check on a known asset like `dashboard/dist/index.html`); dev mode (`LOG_LEVEL=debug`) instead proxies to a running Vite dev server. Both behaviors covered by integration tests.
+- [ ] Author Vitest unit tests for every primitive (every state + variant) and every composite.
+- [ ] Author integration tests: theme persists across reload; setup wizard end-to-end (against a stubbed API); passkey enrollment + backup-code confirmation gate works.
+- [ ] **Visual validation:** load the `agent-browser` skill, then load every primitive (gallery), Setup Wizard (every state), Account/Profile (every state), Dashboard Overview (every state), and error pages in `agent-browser` against `make dev` (Cypra serve + Vite dev via `portless`). Observations recorded in Handoff. axe-core 0 violations on every loaded route.
+- [ ] Fill in ADR-0010 (Bun workspaces + pnpm fallback).
+
+### Acceptance
+
+- [ ] `make dev` starts Cypra + Postgres + Vite via `portless`. `https://cypra.localhost/setup/<token>` shows the Setup Wizard. After bootstrap, `https://cypra.localhost/dashboard` renders the Overview.
+- [ ] Toggling theme flips every token reference; CI lint passes the "no hardcoded hex outside tokens.css" rule.
+- [ ] Every primitive in `/__cypra/gallery` renders in every state in both modes.
+- [ ] axe-core: 0 violations on the gallery route, Setup Wizard, Account/Profile, Dashboard Overview.
+- [ ] Setup Wizard end-to-end: redeem → passkey → backup-code-confirm → first instance admin → dashboard. Every state DESIGN.md lists is reachable.
+- [ ] Account/Profile: passkey add/remove with last-passkey guard; PAT creation modal with confirmation gate.
+- [ ] Dashboard Overview: empty (post-bootstrap), populated (after creating data via API directly), error (some tiles), no-permissions states all reachable.
+- [ ] Error pages render at the documented routes with the documented copy.
+- [ ] Keyboard shortcuts work end-to-end on a desktop browser.
+- [ ] `cypra serve` serves the built SPA from `embed.FS` (no separate static server).
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean; CI lint asserts no hardcoded hex outside `tokens.css`.
+- [ ] **Test gate:** unit tests for every primitive in every state + variant; integration tests for the auth + theme flows.
+- [ ] **Visual validation gate:** load the `agent-browser` skill, then observe every primitive in `agent-browser` (via the gallery route) in both modes; Setup Wizard / Account / Overview walked end-to-end; axe-core 0 violations on touched routes; observations recorded in Handoff.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion. Include visual-validation observations: which surfaces were loaded, which states were exercised, any token / state / a11y discrepancies and where they were tracked. Note specifically how Monaspace renders at body-md vs identifier-md and any platform-specific FOUT behavior._
+
+---
+
+## Phase 8: Hosted login pages and per-tenant theming
+
+**Status:** not started
+**Dependencies:** Phase 7
+**Deliverable:** All hosted-login surfaces (`/login`, `/signup`, `/verify`, `/reset`, `/2fa`, `/oidc/consent`, `/error`) are implemented as server-rendered Go templates with HTMX progressive enhancement (no React on this surface — security-critical). Per-tenant theming applies: a tenant's logo, accent color, and display name render on every hosted-login page, with the tenant-accent validation gate enforced at the dashboard's Branding tab (the dashboard wiring lands in Phase 9; Phase 8 implements the server-side rendering). Email templates (magic-link, password-reset, email-verification, admin-invite, breach-notification) render with tenant logo + accent. The "Powered by Cypra" toggle defaults ON and is read from per-tenant settings. ADR-0008 filled in.
+
+This phase ships UI. Visual validation gate is mandatory.
+
+### Tasks
+
+- [ ] Author Go templates for `/login`, `/signup`, `/verify`, `/reset`, `/2fa`, `/oidc/consent`, `/error` in `internal/hostedlogin/templates/`. Each template extends a base layout with tenant logo + display name + footer.
+- [ ] Implement per-tenant theme injection: server reads tenant branding settings (logo URL, accent hex, display name, "Powered by" toggle) and emits CSS custom properties on the page; the same `tokens.css` rules apply, but `accent-primary*` is overridden with the tenant accent.
+- [ ] Implement the **tenant-accent validation gate** server-side: rejects any accent failing AA against `text-on-accent` (≥ 4.5:1) OR ≥ 3:1 against `bg-canvas`. Validation is enforced at the API layer (`/api/v1/tenants/<id>/branding` PATCH) so dashboard and CLI both honor it.
+- [ ] Implement the **`border-focus` invariance**: tenant accent does NOT override `border-focus`; the system teal stays. Verified by a unit test that asserts the rendered CSS keeps `border-focus` at the system value regardless of accent override.
+- [ ] Implement HTMX-enhanced password / passkey / magic-link sign-in handlers: form submits → HTMX swap on the active region → no full-page reload.
+- [ ] Implement WebAuthn passkey ceremony in vanilla JS in `internal/hostedlogin/static/passkey.js`: `navigator.credentials.create()` + `navigator.credentials.get()`; RP ID = `<tenant>.<install-domain>` (rendered into the page). Tab-order matches DESIGN §10 Hosted Login.
+- [ ] Implement uniform error messages on auth failures (no enumeration): "Sign in didn't work. Check your details and try again."
+- [ ] Implement rate-limited error UI: countdown displayed via HTMX-driven server-side updates.
+- [ ] Implement the bot-mitigation hook placeholder slot (v1.1 Turnstile/hCaptcha will populate; v1 ships an empty `noop` verifier).
+- [ ] Implement the OIDC consent screen: scope list with plain-language descriptions (Cypra-supplied default copy); recognizes `scope-upgraded` state for prior-consent users.
+- [ ] Implement email templates (plain-text + minimal-HTML) for magic-link, password-reset, email-verification, admin-invite, breach-notification, in `internal/email/templates/`. Templated in Krypton/Neon system; tenant logo + accent applied.
+- [ ] Implement `/error` hosted-login error landing for OAuth callback errors and similar.
+- [ ] Wire all hosted-login flows to the Phase 4 auth verifiers and the Phase 5 OIDC layer.
+- [ ] Author integration tests: every hosted-login flow end-to-end (HTMX-aware test client). Every state from DESIGN §10 reachable. Tenant-accent validation rejects failing accents.
+- [ ] Author the per-tenant theming visual test: bootstrap two tenants with different accents/logos; load each tenant's `/login` route; assert the rendered HTML reflects the tenant's branding + the system focus ring.
+- [ ] **Visual validation:** load the `agent-browser` skill, then load every hosted-login route in `agent-browser` against `https://acme.cypra.localhost` and `https://bravo.cypra.localhost` (a sample second tenant with a different accent) in both modes. axe-core 0 violations. Observations recorded in Handoff.
+- [ ] Author `deploy/Caddyfile.example` showing the recommended reverse-proxy config (TLS termination + trusted-proxy headers). Add the `with-tls` profile to `docker-compose.yml`.
+- [ ] Fill in ADR-0008 (TLS via reverse proxy).
+
+### Acceptance
+
+- [ ] All hosted-login routes render correctly with system theme and with a sample tenant theme.
+- [ ] Tenant-accent validation rejects a failing accent at the API (e.g., `#FFFF00` on white returns the failing pair + ratio).
+- [ ] `border-focus` is the system teal regardless of tenant accent (verified by test).
+- [ ] Passkey ceremony works end-to-end on `https://acme.cypra.localhost` (via `portless`).
+- [ ] Magic-link, password, Google upstream all complete sign-in via the hosted UI.
+- [ ] 2FA challenge page works for TOTP + WebAuthn-2FA + backup codes.
+- [ ] Consent screen records consent; returning users auto-redirect; scope-upgraded users re-consent.
+- [ ] Email templates render with tenant logo + accent (visually inspected).
+- [ ] Reverse-proxy reference compose (`with-tls` profile) brings up Cypra + Postgres + Caddy and serves HTTPS at the install domain.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean; no JS framework code on hosted-login surfaces (HTMX + vanilla only).
+- [ ] **Test gate:** integration tests for every hosted-login flow + the tenant-accent validation gate.
+- [ ] **Visual validation gate:** load the `agent-browser` skill, then observe every hosted-login route in `agent-browser` in both modes, with system theme and a sample tenant theme; axe-core 0 violations; observations recorded in Handoff.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion._
+
+---
+
+## Phase 9: Dashboard domain UI — tenants, projects, users, members, audit, signing keys
+
+**Status:** not started
+**Dependencies:** Phase 7, Phase 8
+**Deliverable:** The dashboard exposes every PLAN-mandated administrative surface. A tenant admin (and where applicable, an instance admin) can manage tenants, projects, users, members, signing keys, and audit log entirely through the SPA. Every screen in DESIGN §10 (excluding provider-config screens, which land in Phase 10) is implemented with every documented state.
+
+This phase ships UI. Visual validation gate is mandatory.
+
+This phase is **internally parallelizable** with **9a as a prerequisite** for 9b–9f. 9a establishes the Tenant List + Tenant Detail shell + tab navigation; 9b–9f all mount inside the Tenant Detail tabs that 9a wires. Once 9a is complete, 9b–9f can be picked up by separate agents in parallel.
+
+### Tasks
+
+#### 9a — Tenant List + Tenant Detail shell + Branding (PREREQUISITE for 9b–9f)
+
+- [ ] Implement Tenant List (`/dashboard/tenants`, instance-admin): searchable + sortable table; empty (post-bootstrap), search-empty, error, permission-denied states.
+- [ ] Implement Tenant Detail header + tab navigation per DESIGN §10 (Overview · Projects · Users · **Auth methods** · Signing keys · Audit · Settings). Tab routes use `/dashboard/tenants/<slug>/<tab>` for top-level tabs and `/dashboard/tenants/<slug>/settings/<sub>` for Settings sub-tabs (`branding`, `email`, `upstream`, `members`, `api-tokens`, `danger`); the Settings sub-tabs render with a left-rail `Tabs` primitive per DESIGN §11.
+- [ ] Implement Tenant Overview tab: tile summary scoped to the tenant. Shows `tenant.email_provider_required` hard-block banner when no email provider is configured (linking to `/settings/email`); blocks "Invite user" / "Invite member" CTAs until the provider is set, with explanatory tooltip on the disabled buttons.
+- [ ] Implement Branding tab (`/dashboard/tenants/<slug>/settings/branding`): SettingsRow `branding-toggle` for "Powered by Cypra" with hosted-login preview Modal; SettingsRow `input` for display name; SettingsRow `input` (file picker) for logo with SVG sanitization + PNG validation; color picker for accent with the live tenant-accent validation gate from §11. SaveBar surfaces when dirty.
+- [ ] Implement Tenant Delete confirmation dialog with typed-slug exact match. (The Danger tab itself lands in Phase 10; 9a wires the Delete CTA to a placeholder route until Phase 10 hydrates the tab.)
+
+#### 9b — Project List + Project Detail (OIDC client config) + Auth methods tab + API Tokens tab
+
+- [ ] Implement Project List under Tenant Detail.
+- [ ] Implement Project Detail: issuer URL `IdentifierPill` (copy), `client_id` `IdentifierPill`, `client_secret` `MaskedSecret` with reveal-then-copy, redirect URIs editor (with strict validation matching the Phase 5 server-side rules, including fragment rejection at submission), allowed scopes editor, token-endpoint auth method picker.
+- [ ] Implement *Rotate client secret* Modal with the downstream-app warning.
+- [ ] Implement *Delete project* Modal (typed-slug confirm).
+- [ ] Render `CodeBlock` snippets for Auth.js / NextAuth + Go server (using the Phase 11 SDK); "Copy as cURL" toggle persists per-snippet.
+- [ ] Implement secret-rotation-in-progress banner with the documented copy.
+- [ ] Implement the **Auth methods tab** (`/dashboard/tenants/<slug>/auth-methods`): one card per method (Email + Password, Magic Link, Passkeys, TOTP, Google upstream, OIDC upstreams). Each card has an enable toggle, a configuration shortcut (deep-link to `/settings/email` for mail-dependent methods or to `/settings/upstream` for OAuth upstreams), and an "X users have this enrolled" count. Disabling a method that has enrolled users shows a confirmation Modal with the impact summary. Backed by `tenant_auth_methods` rows (added to Phase 1's `0001_init.sql` if not already present — verify and add if missing). Toggle changes apply at the next sign-in attempt.
+- [ ] Implement the **API Tokens tab** (`/dashboard/tenants/<slug>/settings/api-tokens`): list PATs (name, scope, last-used, created, expiry), *Create token* primary button → Modal with name + scope checkbox grid → reveal-once secret using `MaskedSecret` + `BackupCodeGrid`-style confirmation gate (`beforeunload` + browser-back interception + typed confirmation) before navigating away; revoke action with confirmation Modal. Calls `/api/v1/pats` from Phase 6 (Phase 6 ships the API; 9b ships the dashboard surface).
+
+#### 9c — User List + User Detail
+
+- [ ] Implement User List: searchable table with default / loading / empty / search-empty / error states. Primary actions: *Invite user* (uses `POST /api/v1/admin/invite` from Phase 4) + *Import via CLI* (modal showing the `cypra import` instructions + screencast embed placeholder for v1.1). The *Invite user* action is disabled with a tooltip when `tenant.email_provider_required` blocks issuance.
+- [ ] Implement User Detail: identity card (avatar, email, `sub` `IdentifierPill`, enrolled-method chips) + tabs (Auth methods · Sessions · Consents · Audit · Metadata).
+- [ ] Implement permission-gated user actions (Reset password — issues a new invite-style magic link via `POST /api/v1/admin/invite` with `role=keep` / Disable MFA / Enroll factor on user's behalf / Delete user (DSR) / Export user data) with confirmation dialogs.
+- [ ] Implement *Re-invite* CTA for users in pending state (rotates the existing `pending_invitations` token via the same endpoint).
+- [ ] Implement the `gdpr.user_deletion_in_progress` banner state on the user detail when a DSR delete is mid-flight.
+
+#### 9d — Members & Roles + PermissionMatrix
+
+- [ ] Implement Members & Roles screen at `/dashboard/tenants/<slug>/settings/members` with invite flow (uses `POST /api/v1/admin/invite` from Phase 4 — the same single mechanism). The invite Modal collects email + role; the email picks up the tenant branding and renders via the `admin-invite` template from Phase 4.
+- [ ] Implement `PermissionMatrix` with read-only state (member role) + dirty/saving/saved/error/permission-denied states + sticky `SaveBar`.
+- [ ] Implement the last-admin self-action guard: actor cannot remove themselves or downgrade their own role if last owner; action disabled with documented tooltip.
+- [ ] Implement the pending-invite list section: shows un-redeemed `pending_invitations` rows with email / role / expires_in / created_by; per-row *Resend* (rotates token via the idempotent re-invite path) and *Revoke* (sets `redeemed_at = now()` with a synthetic `revoked` marker on the row).
+
+#### 9e — Signing Keys
+
+- [ ] Implement Signing Keys screen: full `KeyRotationTimeline` + key list table (`kid` pill, state pip, activated_at, retires_at, sunset_until).
+- [ ] Implement *Rotate now* primary action with typed-`kid` confirmation dialog.
+- [ ] Implement zero-key empty state (should be unreachable in normal operation; documented in copy).
+- [ ] Implement post-rotation success Toast + timeline auto-refresh.
+
+#### 9f — Audit Log Viewer
+
+- [ ] Implement Audit Log Viewer (per-tenant: `/dashboard/tenants/<slug>/audit`; instance-level: `/dashboard/instance/audit`).
+- [ ] Implement filter bar (date range, action, actor, resource_kind) reflected in the URL query.
+- [ ] Implement the streaming list with 10s polling while the page is visible; stream-disconnected banner.
+- [ ] Implement `AuditEntry` expand-on-click with `state_before` / `state_after` JSON diff (uses `react-diff-viewer` or equivalent).
+- [ ] Implement redacted-entry rendering (PII fields in `secret-mask`).
+- [ ] Implement *Export NDJSON* primary action calling `GET /api/v1/audit/export`.
+
+### Acceptance
+
+- [ ] An instance admin can: create a tenant, edit branding (with live accent validation), navigate every Tenant Detail tab (Overview · Projects · Users · Auth methods · Signing keys · Audit · Settings sub-tabs); the Delete CTA wires through the placeholder Danger route until Phase 10.
+- [ ] A tenant owner can: create a project, configure its OIDC client, copy issuer URL + client_id + client_secret, edit redirect URIs, rotate the client secret, delete the project.
+- [ ] A tenant owner can: toggle each of the six auth methods on the Auth methods tab; disabling a method with enrolled users surfaces the impact-summary confirmation; toggle changes apply at next sign-in.
+- [ ] A tenant admin can: list, create-with-reveal-once, and revoke PATs on the API Tokens tab (calls the Phase 6 `/api/v1/pats` endpoints).
+- [ ] A tenant admin can: invite a user (calls `POST /api/v1/admin/invite`), view a user's detail (auth methods, sessions, consents, audit, metadata), reset password (re-invite), disable MFA, enroll a factor on the user's behalf, delete the user (DSR), export the user's data; see pending invites with re-send / revoke actions.
+- [ ] A tenant admin can: invite a member (calls `POST /api/v1/admin/invite`), change roles via the `PermissionMatrix`, remove a member, manage pending invites; the last-owner guard prevents self-demotion.
+- [ ] A tenant owner can: view the `KeyRotationTimeline`, force-rotate a signing key with typed-kid confirmation.
+- [ ] A tenant admin can: view the audit log, filter by date/action/actor/resource, expand entries with state diffs, export NDJSON.
+- [ ] Every state DESIGN.md lists for every screen is reachable.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean.
+- [ ] **Test gate:** unit tests for every screen's core data hooks; integration tests for the dashboard↔API flows for each sub-track; e2e Playwright test exercising one full sub-track per phase boundary.
+- [ ] **Visual validation gate:** load the `agent-browser` skill, then load every screen in 9a–9f in `agent-browser` in dark + light mode, every documented state. axe-core 0 violations. Observations recorded in Handoff.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion. Sub-track owners list which sub-tracks they completed and any cross-track contracts (e.g., the `IdentifierPill` copy semantic on Project Detail vs. User Detail) that were unified or split. Visual-validation observations per sub-track._
+
+---
+
+## Phase 10: Provider config + instance admin surfaces + GDPR + observability
+
+**Status:** not started
+**Dependencies:** Phase 9
+**Deliverable:** Email and Upstream provider configuration screens are complete (tenant-scoped). The Storage Provider Config surface is a **read-only diagnostic** under Instance Diagnostics (storage config is operator-controlled via the bootstrap-only env-var set per PLAN §11; Cypra never writes storage config to the DB). The **Instance Admins** screen (`/dashboard/instance/admins` — list / invite / demote, with last-admin guard) and **Instance Diagnostics** screen (`/dashboard/instance/diagnostics` — Health, Version, Migration state, Master-key rotation, Storage backend status) are complete. The **Tenant Settings → Danger** tab (`/dashboard/tenants/<slug>/settings/danger` — Suspend + Delete with sunset countdown) is complete and hydrates the placeholder Delete CTA from Phase 9. GDPR-enabling features (per-user export, per-user delete with PII scrub + audit redaction, per-tenant delete cascade with signing-key sunset) are end-to-end. The Prometheus `/metrics` endpoint exports every metric in PLAN §12; OpenTelemetry tracing is wired (activated when `OTEL_EXPORTER_OTLP_ENDPOINT` is set). `deploy/alerts.yml` ships with the documented alert rules. The bot-mitigation `Verifier` interface (the seam was added in Phase 4) is **wired to Prometheus + audit logs**, and the operator playbook documents the v1.1 swap path. The operator playbook (`docs/playbook/`) covers the GDPR posture, sub-processor list template, DSR runbook, breach-notification runbook.
+
+This phase ships UI. Visual validation gate is mandatory.
+
+### Tasks
+
+- [ ] Implement Email Provider Config screen (`/dashboard/tenants/<slug>/settings/email`): `ProviderConfigCard` + form (kind picker `terminal`/`smtp`/`resend`, per-kind fields, "Send test email" diagnostic). Onboarding wizard recommends Resend (free tier nudge).
+- [ ] Implement Upstream Provider Config screen (`/dashboard/tenants/<slug>/settings/upstream`): `ProviderConfigCard` + Google config form (client_id, client_secret encrypted at rest), "Try OAuth round-trip" diagnostic (redirect to Google then back).
+- [ ] Implement the **Tenant Settings → Danger** tab (`/dashboard/tenants/<slug>/settings/danger`, tenant-owner-only): two destructive cards. **(a) Suspend tenant** — reversible, blocks new sign-ins, ends active sessions, leaves data intact; surfaces a "Resume" CTA when suspended. **(b) Delete tenant** — irreversible, requires typed-slug exact match; on submit, transitions to a 7-day countdown screen explaining sunset behavior (signing keys go to `sunsetting`, JWKS continues serving for 30 days, then hard-delete cascade runs); a "Cancel deletion" CTA reverses the request within the 7-day window. Hydrates the placeholder Delete CTA from Phase 9 sub-track 9a.
+- [ ] Implement the **Instance Admins** screen (`/dashboard/instance/admins`, instance-admin-only): list (email, last-seen, role, created), *Invite admin* primary action calling `POST /api/v1/instance/invite` (Phase 4) with the install-branded `admin-invite` template, *Demote* action with confirmation; **last-admin self-action guard** refuses demotion of the only remaining admin with a documented tooltip. Invitation list section parallels the tenant Members & Roles pending-invite section.
+- [ ] Implement the **Instance Diagnostics** screen (`/dashboard/instance/diagnostics`, instance-admin-only): four read-only cards. **Health** — DB reachable, storage backend reachable, email backend reachable (terminal always green), polled every 5 s. **Version** — `cypra version` output (semver + git SHA + build date). **Migration state** — current schema version, list of pending migrations (zero in steady state). **Master-key rotation** — current `master_key_rotations` row's `phase` + `rows_done` / total + ETA when active. **Storage backend** (read-only diagnostic, replaces the previously-planned Storage Provider Config form per ADR-0014): kind (`local-disk` | `s3-compatible`), bucket name (s3 only), masked endpoint (`https://****.r2.cloudflarestorage.com`), region (s3 only), "credentials present" boolean. Storage config is bootstrap-only env, NOT editable from the dashboard — surface explanatory copy linking to the operator playbook for changes.
+- [ ] Implement GDPR DSR endpoints in `internal/api/v1/gdpr`: `GET /users/{id}/export` (NDJSON), `DELETE /users/{id}` (PII scrub + audit-log redaction), `DELETE /tenants/{id}` (full cascade per PLAN §8 lifecycle, with signing-key sunset).
+- [ ] Implement the audit-log redaction logic: PII fields on prior `audit_entries` rows are replaced with `*** redacted (gdpr-<dsar-id>) ***`; row metadata records the DSR id + timestamp.
+- [ ] Implement the `gdpr_deletions` ledger writes on every user delete (used by Phase 6 `cypra import` resurrect-blocked check).
+- [ ] Implement the tenant-deletion cascade: revoke sessions, revoke refresh tokens, soft-delete OIDC clients, transition signing keys to `sunsetting` with `sunset_until = now() + 30d`. Background job hard-deletes after sunset.
+- [ ] Implement the Prometheus `/metrics` endpoint with every metric in PLAN §12: `cypra_http_request_duration_seconds`, `cypra_auth_attempts_total{kind, outcome}`, `cypra_oidc_token_issued_total{grant}`, `cypra_oidc_refresh_reuse_detected_total`, `cypra_signing_key_age_seconds{tenant, state}`, `cypra_storage_operation_duration_seconds`, `cypra_email_outbox_pending`, `cypra_email_send_total{outcome}`, `cypra_db_pool_*`, `cypra_rate_limit_exceeded_total{scope}`, `cypra_migrations_pending`, `cypra_master_key_rotation_phase`.
+- [ ] Implement OpenTelemetry tracing: spans on every HTTP request, child spans on DB queries (GORM hook), upstream OAuth, email sends, storage ops; OTLP-HTTP exporter activated when `OTEL_EXPORTER_OTLP_ENDPOINT` is set.
+- [ ] Author `deploy/alerts.yml` with the rules from PLAN §12 (high-error-rate, high-auth-failure-rate, signing-key-near-expiry, refresh-token-reuse-detected, master-key-not-set, migrations-pending, storage-write-failures, db-conn-saturation, email-outbox-stuck).
+- [ ] Wire the bot-mitigation `Verifier` (interface seam from Phase 4, `noop` impl from Phase 4) to Prometheus: increment `cypra_botmitigation_check_total{verifier, outcome}` on every Verify call. Document the v1.1 swap path (Turnstile / hCaptcha) in `docs/playbook/bot-mitigation.md`.
+- [ ] Author the operator playbook in `docs/playbook/`: data inventory, DSR runbook, breach-notification runbook, sub-processor list template, "what to monitor" checklist, "first 24 hours after install" checklist, downstream-OIDC-client expectations (refetch JWKS on `kid` miss).
+- [ ] Author integration tests: provider config flow → diagnostic call → save → use; GDPR user-delete flow (audit redaction + storage purge); GDPR tenant-delete cascade triggered through the Danger tab (refresh tokens revoked, signing keys sunsetting, JWKS continues serving for the documented sunset window, hard-delete cascade runs after the window).
+- [ ] Author integration test for the Instance Admins surface: invite a second instance admin via the screen → redeem the link → verify both admins exist; demote one → verify the remaining admin still works; attempt to demote the last admin → verify refusal.
+- [ ] Author integration test for Instance Diagnostics: trigger a master-key rotation, verify the screen reflects the rotation phase + progress; mark a migration pending (test fixture), verify the screen surfaces it; sever the storage backend, verify the screen reports unhealthy.
+- [ ] **Visual validation:** load the `agent-browser` skill, then load Email / Upstream / Tenant Settings → Danger / Instance Admins / Instance Diagnostics screens in `agent-browser`, every documented state (unconfigured, configured-healthy, configured-failing, testing, testing-while-dirty, suspended, mid-deletion, last-admin-guard-active, mid-master-key-rotation), both modes; observations recorded in Handoff.
+
+### Acceptance
+
+- [ ] An admin can configure Email and Upstream provider kinds end-to-end with a working diagnostic.
+- [ ] Resend onboarding nudge appears for tenants without an email provider configured.
+- [ ] An instance admin can: see the Storage backend diagnostic on Instance Diagnostics; the screen renders the bootstrap-only env values masked; no storage form fields are present anywhere in the dashboard.
+- [ ] An instance admin can: list instance admins, invite a second admin via the dashboard, demote a non-last admin; the last-admin guard refuses the destructive action with the documented tooltip.
+- [ ] An instance admin can: see Instance Diagnostics with live Health / Version / Migration state / Master-key rotation / Storage backend status.
+- [ ] A tenant owner can: suspend a tenant (reversible), schedule a tenant deletion via the Danger tab (typed-slug confirm), see the 7-day countdown, cancel within the window. After 7 days the cascade runs end-to-end.
+- [ ] DSR user-export returns NDJSON of the user's data.
+- [ ] DSR user-delete scrubs `users` PII, redacts user-PII fields on prior audit entries (no row deletion), purges the user's storage objects.
+- [ ] DSR tenant-delete revokes sessions + refresh tokens, soft-deletes OIDC clients, sunsets signing keys for 30 days, then a background job hard-deletes after sunset.
+- [ ] `/metrics` returns every metric from PLAN §12 plus `cypra_botmitigation_check_total`.
+- [ ] OpenTelemetry tracing activates only when the env var is set; otherwise zero overhead.
+- [ ] `deploy/alerts.yml` validates against `promtool check rules`.
+- [ ] Bot-mitigation `Verifier` is wired to Prometheus; the v1.1 swap-path doc renders.
+- [ ] Operator playbook is complete and renders correctly in the docs site preview.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean.
+- [ ] **Test gate:** unit + integration tests for provider config + diagnostics + GDPR flows + metrics surface.
+- [ ] **Visual validation gate:** load the `agent-browser` skill, then observe provider config screens in `agent-browser`; observations recorded in Handoff.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion._
+
+---
+
+## Phase 11: Go SDK + downstream-app examples
+
+**Status:** not started
+**Dependencies:** Phase 10
+**Deliverable:** The `sdk/go/` Go module is published and tagged independently of the server. `sdk/go/oidc` is a thin wrapper around `golang.org/x/oauth2` + `coreos/go-oidc` that consumes Cypra's per-tenant issuer. `sdk/go/admin` is a typed client for `/api/v1` with PAT auth (skeleton from Phase 3 finished here). Both clients use typed errors (`cypra.ErrNotFound`, `cypra.ErrUnauthorized`, `cypra.ErrConflict`, `cypra.ErrRateLimited`, `cypra.ErrValidation`) compatible with `errors.Is` / `errors.As`. Two examples live in `examples/`: a Next.js + Auth.js consumer (TypeScript reference; no TS SDK at v1) and a Go server protected by Cypra OIDC.
+
+### Tasks
+
+- [ ] Finish `sdk/go/admin/`: tenants, projects, users, members, OIDC clients, signing-key, audit endpoints. Typed structs mirror the REST API. Typed errors. PAT auth via `Authorization: Bearer <pat>`.
+- [ ] Implement `sdk/go/oidc/`: `Client{Issuer, ClientID, ClientSecret, RedirectURI}` with `AuthCodeURL`, `Exchange`, `UserInfo`, `RefreshToken`, `Verify` — thin wrappers over `golang.org/x/oauth2` + `coreos/go-oidc` configured against Cypra's per-tenant issuer.
+- [ ] Author `sdk/go/README.md`: install, quickstart, common usage patterns.
+- [ ] Author `sdk/go/admin/README.md` + `sdk/go/oidc/README.md`.
+- [ ] Tag the SDK separately: `sdk/go/v1.0.0` (separate from server tags).
+- [ ] Author `examples/go-server/`: Go HTTP server protected by Cypra OIDC via the SDK; reads Cypra-issued ID tokens; protects routes with `requireAuth`. README walks setup against a local Cypra.
+- [ ] Author `examples/nextjs/`: Next.js 15 + Auth.js 5 example using Cypra's per-tenant issuer URL. README walks setup. (No TS SDK at v1; the example uses Auth.js's generic OIDC provider with Cypra's issuer URL.)
+- [ ] Author the **Playwright e2e harness** at `tests/e2e/` (introduced in Phase 11, reused by Phase 12 + Phase 14): boots Cypra + Postgres + MailHog (SMTP stub) + a stubbed Google upstream via Docker Compose; configures Playwright's `setVirtualAuthenticatorEnvironment` so passkey ceremonies work in CI without a real authenticator; exposes helper functions for "redeem bootstrap token", "create tenant", "configure email provider", "configure upstream", "sign in via passkey", "sign in via Google upstream". Phase 11's example tests use this harness; Phase 12's canonical-demo extends it.
+- [ ] Author end-to-end smoke test (using the Playwright harness): spin Cypra in Docker, create a tenant + project + OIDC client via the admin SDK, run the Go example consumer + the Next.js example consumer, exercise sign-in via passkey + Google upstream against both.
+- [ ] Add the Go SDK release workflow to GitHub Actions (publishes via Go module proxy on tag).
+
+### Acceptance
+
+- [ ] `go get github.com/watzon/cypra/sdk/go/oidc` works after the tag.
+- [ ] The Go example signs a real test user in via Cypra OIDC, with passkey + Google upstream both working end-to-end.
+- [ ] The Next.js example signs a real test user in via Cypra OIDC.
+- [ ] SDK typed errors propagate via `errors.Is` / `errors.As` (verified by unit tests).
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean across SDK + examples.
+- [ ] **Test gate:** SDK unit tests; examples e2e smoke test in CI (against a Cypra container).
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion._
+
+---
+
+## Phase 12: Onboarding & canonical demo (end-to-end)
+
+**Status:** not started
+**Dependencies:** Phase 11
+**Deliverable:** PLAN's canonical end-to-end story runs end-to-end. A new operator can spin Cypra in the cloud (or locally via `docker compose`), redeem the bootstrap setup token, enroll a passkey, create a tenant `acme`, create a project, configure Resend + Google OAuth, copy the OIDC config into a Next.js app via the example template, and have a real test user sign in — **all inside a single sitting**, target ≤ 30 minutes. A Playwright e2e test exercises this flow against a stack of Cypra + Postgres + MailHog (SMTP stub) + a stubbed Google upstream + the Next.js example app, and runs in CI.
+
+This phase ships UI (the canonical-demo flow). Visual validation gate is mandatory.
+
+### Tasks
+
+- [ ] Author the **canonical-demo Playwright e2e test** in `tests/e2e/canonical-demo/` (extends the harness from Phase 11): the test boots the Phase 11 Compose stack with the Next.js example app added, redeems the bootstrap token, enrolls a passkey, creates `acme` tenant, creates a project, configures email provider (terminal or Resend stub), configures Google OAuth (terminal upstream stub), copies the OIDC config into the Next.js app via env injection, signs a test user in via the Next.js app, asserts the resulting ID token has the expected claims.
+- [ ] Author the "First-run" docs in `docs/firstrun.md`: the same flow, written for a human operator. Include screenshots from the visual-validation pass.
+- [ ] Author the "From-zero-to-Next.js in an afternoon" tutorial in `docs/tutorials/nextjs.md`.
+- [ ] Author the Railway one-click template in a separate repo `watzon/cypra-railway-template` (referenced from this repo's README): Railway-rendered `railway.json` + a README walking the bootstrap process. Default `STORAGE_BACKEND=s3-compatible` with R2/B2 setup instructions.
+- [ ] Author the Setup Wizard "create your first tenant" CTA flow improvements: surface the canonical-demo path with copy-paste-able env stanzas for the Next.js example.
+- [ ] Implement timing budget assertion: the e2e test logs each step's duration; a CI assertion fails if the unattended Playwright run exceeds 8 minutes. The "30-minute human-read target" is **not** a CI gate — it is verified manually by an operator stopwatch run against `docs/firstrun.md` whose result is recorded in this phase's Handoff. If the operator run exceeds 30 minutes, surface as a Phase-13 task to streamline the docs.
+- [ ] **Visual validation:** load the `agent-browser` skill, then load every screen in the canonical demo flow in `agent-browser` against the running test stack; observations recorded in Handoff. Cross-flow consistency check: tenant accent applies on hosted-login `/login` AND surfaces in the dashboard `ContextBadge` when signed in as a tenant admin (single accent renders on both surfaces with the documented system-invariant `border-focus`).
+
+### Acceptance
+
+- [ ] The canonical-demo Playwright test runs in CI from a clean state and passes within the 8-minute unattended budget.
+- [ ] A new operator following only `docs/firstrun.md` reaches "Next.js app signs a real user in" in ≤ 30 minutes (verified by a manual stopwatch run; result recorded in Handoff).
+- [ ] Railway one-click template repo exists and successfully deploys against Railway's beta deploy environment.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green and canonical-demo e2e is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean.
+- [ ] **Test gate:** the canonical-demo e2e test runs in CI with stubs; the documented manual recipe runs against live deps (Resend free tier + Google Cloud Console) and is checked into `docs/`.
+- [ ] **Visual validation gate:** load the `agent-browser` skill, then walk every step of the canonical-demo flow in `agent-browser`; observations recorded in Handoff.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion. Note the actual end-to-end timing observed against `docker compose up` from clean. Note any rough edges that survived._
+
+---
+
+## Phase 13: Polish — light-mode parity, responsive, a11y, all states, performance
+
+**Status:** not started
+**Dependencies:** Phase 12
+**Deliverable:** Every dashboard route renders correctly in light mode with no token leaks. Every route is responsive across the documented breakpoints (sm/md/lg/xl) per DESIGN §13. axe-core reports zero violations across every authenticated route + every hosted-login route. Reduced-motion fallbacks verified. Performance targets from PLAN §13 are met locally and in CI synthetic tests. Image size ≤ 80 MB compressed. Cold start ≤ 3 s from `docker run` to `/readyz=200`.
+
+This phase ships UI changes across many surfaces. Visual validation gate is mandatory at scale.
+
+### Tasks
+
+- [ ] Load the `agent-browser` skill, then audit every dashboard route in light mode using `agent-browser`; track every token leak (hardcoded color, dark-only assumption). CI lint rule already prohibits hardcoded hex outside `tokens.css` — fix any escapes.
+- [ ] Audit every dashboard route at `< md`, `md`, `lg`, `xl` breakpoints. Verify sidebar collapses to drawer at `< md`, icon-only at `md`, expanded at `≥ lg`. Verify dashboard tables column-stack at `< md` (except Audit Log → AuditEntry compact mode, the documented exception).
+- [ ] Verify the `MobileBlockedBanner` appears at `< md` on the dashboard with the documented copy.
+- [ ] Verify hosted-login surfaces are mobile-first at every breakpoint.
+- [ ] Run axe-core across every authenticated dashboard route + every hosted-login route; resolve every violation.
+- [ ] Verify keyboard navigation across the canonical-demo flow end-to-end (no mouse).
+- [ ] Verify screen-reader announcements: identifier copy ("Copied <name>"), validation summary, route-change page-title announcement, async-button "loading" / "Saved" / "Failed: <reason>".
+- [ ] Verify the Krypton `aria-label` policy: every `IdentifierPill` reads the full string from `aria-label`, not character-by-character.
+- [ ] Implement and verify every empty / loading / error state per DESIGN §10 for every screen (sweep — most should already be in place from Phase 9).
+- [ ] Verify Skeletons are STATIC across every loading state (no shimmer; no pulse).
+- [ ] Performance pass: measure p99 latencies for `/oidc/token`, `/login/passkey/verify`, `/api/v1/users` paged 50; verify against PLAN §13 targets on a 2-vCPU/4-GiB VPS profile.
+- [ ] Image-size audit: `make image-size` confirms ≤ 80 MB compressed; Vite chunking + tree-shaking applied.
+- [ ] Cold-start audit: `time docker run …` to `/readyz=200` confirms ≤ 3 s on a warm host.
+- [ ] Add a Lighthouse run to CI on the canonical-demo flow's hosted-login + dashboard routes; **set numeric thresholds** that fail the build below them: Performance ≥ 85 (hosted-login), Performance ≥ 70 (dashboard), Accessibility ≥ 95 (both), Best Practices ≥ 95 (both). Store the baseline JSON for trend tracking.
+- [ ] Verify the **coverage floor** from Standards: `internal/crypto`, `internal/oidc`, `internal/auth`, `internal/db`, `internal/sessions`, `internal/bootstrap` each ≥ 85% line coverage. Wire `go test -coverprofile=…` per-package + a CI assertion that any drop below the floor fails the build. Document in `docs/contributing/testing.md`.
+- [ ] `prefers-reduced-motion` audit: every motion treatment in DESIGN §7 has a static fallback, verified across every interactive surface.
+- [ ] Verify the tap-target relaxation: 32×32 only on cursor surfaces inside List Rows; touch always 40×40.
+- [ ] Verify the `shift+?` alternative-reachability: the keyboard-shortcut overlay is also reachable via the `?` IconButton in the dashboard footer.
+- [ ] Verify the `border-focus` system-invariance: switch tenant accent to a near-`bg-canvas` value in light mode; verify focus ring stays visible (system teal).
+
+### Acceptance
+
+- [ ] Every dashboard route renders correctly in light mode; no token leaks.
+- [ ] axe-core: 0 violations on every dashboard route + every hosted-login route.
+- [ ] Keyboard-only flow: a user can complete the canonical demo without touching a mouse.
+- [ ] PLAN §13 performance targets met in CI synthetic tests on a profile-matched runner.
+- [ ] Image size ≤ 80 MB; cold start ≤ 3 s.
+- [ ] `prefers-reduced-motion` audit: every motion treatment has a static fallback.
+- [ ] Lighthouse baseline stored.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean.
+- [ ] **Test gate:** added tests for any new state behaviors; performance assertions in CI synthetic profile.
+- [ ] **Visual validation gate:** load the `agent-browser` skill, then load every authenticated dashboard route AND every hosted-login route in `agent-browser` in light mode AND dark mode AND every documented breakpoint. Observations recorded in Handoff.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion._
+
+---
+
+## Phase 14: Ship — deployment, observability, docs, release
+
+**Status:** not started
+**Dependencies:** Phase 13
+**Deliverable:** Cypra v0.1 is publicly shippable. A multi-arch Docker image (`linux/amd64` + `linux/arm64`) lives at `ghcr.io/watzon/cypra:0.1.0` and `:latest`. The `with-tls` `docker-compose.yml` profile (Cypra + Postgres + Caddy) brings a complete install up. The Railway one-click template is published. The operator playbook is complete. All 14 ADRs (the original 13 from PLAN Appendix A + ADR-0014 added in Phase 6 for the controlled cross-tenant escape hatch) are filled in. A v0.1 git tag exists; `CHANGELOG.md` documents v0.1. A smoke-test workflow runs against a deployed instance from CI nightly.
+
+### Tasks
+
+- [ ] Author production `Dockerfile`: multi-stage build, distroless final stage, non-root user, healthcheck instructions, multi-arch via `docker buildx`. Image embeds `dashboard/dist/`.
+- [ ] Finalize `deploy/docker-compose.yml` with `default` (Cypra + Postgres) and `with-tls` (Cypra + Postgres + Caddy with auto-ACME) profiles. Document each profile in `deploy/README.md`.
+- [ ] Author `deploy/Caddyfile.example` with the documented trust-proxy setup; reference compose pulls it in.
+- [ ] Document the Railway one-click recipe (in `watzon/cypra-railway-template`) and link it from this repo's README.
+- [ ] Document a VPS-bare-metal deploy recipe in `docs/deploy/vps.md`.
+- [ ] Wire OpenTelemetry tracing across the full request path including the email worker (already done in Phase 10; verify here on a deployed instance).
+- [ ] Add structured logging with request IDs threaded through to background jobs and audit events (already done in Phase 3; verify on a deployed instance).
+- [ ] Wire error tracking (no bundled error tracker per PLAN; document operator-side Sentry/Datadog wiring via stdout shipping in `docs/deploy/observability.md`).
+- [ ] Verify `/metrics` exposes every metric from PLAN §12 against the deployed instance.
+- [ ] Complete `README.md`: architecture overview, screenshots from Phase 12, "Quick start" pointing at `docker compose up`, Railway one-click button, links to docs, CI status badge, license badge.
+- [ ] Author `docs/architecture/overview.md` synthesizing PLAN §7 for new contributors.
+- [ ] Author `docs/security/threat-model.md` covering the PLAN §11 threat model + secret-handling + GDPR posture.
+- [ ] Author `docs/contributing/extending.md` covering "how to add a new auth method", "how to add a new email backend", "how to add a new storage backend".
+- [ ] Author `docs/contributing/release.md` covering the release workflow (tag → CI → multi-arch image → SDK module).
+- [ ] Final ADR sweep: all 14 ADRs (13 from PLAN Appendix A + ADR-0014 cross-tenant escape hatch) are `accepted` with full content.
+- [ ] Author `CHANGELOG.md` v0.1 release notes.
+- [ ] Tag `v0.1.0` and trigger the `release.yml` workflow (multi-arch image + SDK module + GitHub Release with binary attached).
+- [ ] Author the **deployed-instance smoke-test workflow** (`.github/workflows/smoke.yml`): nightly schedule; spins a fresh instance; runs the canonical-demo Playwright test against it; on failure, opens a GitHub issue. Three additional smoke jobs run in parallel against the same fresh instance:
+  - **Go SDK third-machine smoke** — fresh `golang:1.23-alpine` container (intentionally a different distro than the build container), runs `mkdir /tmp/sdk-smoke && cd /tmp/sdk-smoke && go mod init smoke && go get github.com/watzon/cypra/sdk/go/oidc@v1.0.0 && go get github.com/watzon/cypra/sdk/go/admin@v1.0.0`, compiles a 30-line program that signs a test user in via Cypra OIDC against the deployed smoke instance, asserts `go build` succeeds and runtime sign-in succeeds.
+  - **`cypra export` / `cypra import` round-trip** — runs `cypra export` against the smoke instance, stands up a second fresh Cypra against an empty Postgres, runs `cypra import`, replays a passkey assertion + a refresh-grant against the imported instance, asserts both succeed.
+  - **Multi-instance-admin recovery** — locks out the smoke instance's only admin (programmatically), runs `cypra admin invite` from the host, redeems the link, asserts the recovery flow ends with a usable admin session.
+- [ ] **Visual validation:** load the `agent-browser` skill, then load the deployed instance's `https://<install>` and `https://<tenant>.<install>` in `agent-browser`; walk the canonical demo end-to-end; record observations.
+
+### Acceptance
+
+- [ ] A new contributor following only `README.md` + `docs/` can deploy a working Cypra instance.
+- [ ] OpenTelemetry tracing shows the path from `/oidc/authorize` → email-worker dispatch → audit event.
+- [ ] `/metrics` returns every PLAN §12 metric on the deployed instance.
+- [ ] CHANGELOG describes v0.1 honestly, including known limitations (no SAML, no embeddable widget, no TS SDK, no built-in CNAMEs).
+- [ ] Multi-arch Docker image is on GHCR; `docker pull ghcr.io/watzon/cypra:0.1.0` works on amd64 and arm64.
+- [ ] Railway one-click template successfully deploys.
+- [ ] All 14 ADRs are checked in with `accepted` status.
+- [ ] Go SDK third-machine smoke is green.
+- [ ] `cypra export` / `cypra import` round-trip smoke is green.
+- [ ] Multi-instance-admin recovery smoke is green.
+- [ ] v0.1 git tag exists.
+- [ ] Smoke-test workflow is scheduled and green.
+- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [ ] **Hygiene gate:** lint / format / typecheck clean.
+- [ ] **Test gate:** smoke test against a deployed instance from CI.
+- [ ] **Visual validation gate:** load the `agent-browser` skill, then walk the deployed instance in `agent-browser` against the canonical demo; observations recorded in Handoff.
+- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+
+### Handoff
+
+_Filled at phase completion. This is the last handoff. Capture v1.1 followups discovered during shipping._
+
+---
+
+## Cross-Phase Concerns
+
+These are properties Cypra MUST maintain across all phases. They are not phase tasks; they are invariants enforced by the standards gates and reviewed at every phase Handoff.
+
+- **The codebase MUST remain runnable at every phase boundary.** A clean `git clone && make ci && make dev` succeeds at the end of every phase. The Go binary refuses to start in production mode if the `embed.FS` for `dashboard/dist/` is empty.
+- **Tenant isolation is enforced via three layers — tenant resolver, `TenantScopedDB`, and Postgres RLS.** No code path bypasses any of them. Raw SQL goes through `TenantScopedDB.Raw(stmt, tenantID, args...)` which mandates an explicit `tenantID` argument. The CI tenant-isolation fuzzer is the contract; **every phase that introduces new HTTP handlers MUST enrol them with the fuzzer in the same PR.**
+- **The cross-tenant escape hatch (`db.AsInstanceAdmin(ctx)`) is callable only from the documented allowlist** (`cmd/cypra/admin/...`, `internal/api/v1/instance/...`). Compile-time guarded via build tags + custom golangci-lint rule. Every call writes an audit entry with `cross_tenant = true`.
+- **Schema changes land in `db/migrations/` first** as `golang-migrate` SQL files; downstream services consume the migrated types. GORM is for queries only, never for DDL. Down-migrations are required for every change.
+- **Every state-mutating endpoint emits an audit event** with a resolved actor (`actor_kind`, `actor_id`), the action verb, and `state_before` / `state_after` snapshots where applicable. Audit emission is **structural** via the chi `RegisterMutating(...)` registry middleware introduced in Phase 3 — direct `audit.Write` calls in `internal/api/v1/...` are a lint rule violation.
+- **Every secret-handling code path goes through `internal/crypto`.** Direct DB reads of envelope-encrypted columns are forbidden outside the crypto package. Secrets are never logged at any level. The `redacted-on-export` slog attribute is required on the bootstrap token + the recovery `cypra admin invite` magic link + any other one-time-revealed credentials (PATs at creation, OIDC client secrets at rotation, backup codes at generation).
+- **Invite is one mechanism.** Every "invite teammate" / "invite admin" / "invite second instance admin" / "re-invite user" / "admin-mediated password reset" flow goes through `POST /api/v1/admin/invite` or `POST /api/v1/instance/invite` (Phase 4) writing to `pending_invitations`. No phase introduces a parallel invite mechanism.
+- **The Postgres role separation is structural, not advisory.** `cypra_runtime` cannot DELETE from `audit_entries`; integration tests assert this on every CI run.
+- **The OIDC issuer is per-tenant.** Every endpoint + claim + cache header observes this. The discovery doc, JWKS, `iss` claim, and `kid` shape (`<tenant_id>:<seq>`) are mutually consistent.
+- **The WebAuthn RP ID is per-tenant** (`<tenant>.<install-domain>`). Cross-tenant passkey assertions are structurally impossible.
+- **Tenant accent overrides apply only on hosted-login surfaces** and only to the documented narrow token set. `border-focus` is a system invariant. The accent validation gate (≥ 4.5:1 vs `text-on-accent`, ≥ 3:1 vs `bg-canvas`) is enforced at the API layer, not the dashboard.
+- **No env-vars for application config**, except the bootstrap-only set in PLAN §11. The bootstrap-only set explicitly includes the storage-config block (`STORAGE_BACKEND`, `STORAGE_S3_BUCKET`, `STORAGE_S3_ENDPOINT`, `STORAGE_S3_REGION`, `STORAGE_S3_ACCESS_KEY_ID`, `STORAGE_S3_SECRET_ACCESS_KEY`); storage config is operator-controlled, not tenant-controlled. The Instance Diagnostics screen exposes a read-only view of the storage block; **no dashboard surface accepts storage-config writes**.
+- **The bot-mitigation `Verifier` interface seam exists at Phase 4** and is wired into every sign-in / sign-up / magic-link / invite-redemption handler with a `noop` implementation. Phase 10 wires it to Prometheus + audit logs. The v1.1 swap-in (Turnstile / hCaptcha) requires no handler changes.
+- **Every UI change loads the `agent-browser` skill and is browser-validated via `agent-browser` before the phase closes.** Observations live in the phase Handoff. Both color modes are verified per touched route.
+- **Every change to PLAN.md or DESIGN.md triggers a corresponding ADR or doc update.** Conflicts surface as a Revisions entry on the canonical doc, with task updates in the same PR.
+- **Every PR MUST load the `agent-ci` skill and pass `./bin/agent-ci run --quiet --all` locally before being opened.** A red CI is a stop, not a footnote.
+
+---
+
+## Project completion
+
+The project is **v0.1 complete** when:
+
+- [ ] Phases 0 through 14 are all marked complete.
+- [ ] The Phase 12 canonical-demo Playwright test runs end-to-end against real dependencies in a deployed instance (the Phase 14 smoke-test workflow is its proxy).
+- [ ] The Phase 14 Go SDK third-machine smoke runs green (proves `go get github.com/watzon/cypra/sdk/go/oidc@v1.0.0` works from a clean container against the proxy.golang.org cache).
+- [ ] The Phase 14 `cypra export` / `cypra import` round-trip smoke runs green against a fresh second instance.
+- [ ] The Phase 14 multi-instance-admin recovery smoke runs green.
+- [ ] CI is green, including the canonical-demo e2e test and all three additional smokes.
+- [ ] Coverage floors hold: `internal/crypto`, `internal/oidc`, `internal/auth`, `internal/db`, `internal/sessions`, `internal/bootstrap` each ≥ 85% line coverage.
+- [ ] All 14 ADRs are checked in with `accepted` status.
+- [ ] A `v0.1.0` git tag exists.
+- [ ] `CHANGELOG.md` documents v0.1 with known limitations called out (no SAML, no embeddable widget, no TS SDK, no built-in CNAMEs, no SMS).
+- [ ] The multi-arch Docker image is published at `ghcr.io/watzon/cypra:0.1.0` for `linux/amd64` and `linux/arm64`.
+- [ ] The Railway one-click template is published and verified.
+- [ ] The operator playbook is complete (data inventory, sub-processor template, DSR runbook, breach-notification runbook, bot-mitigation v1.1 swap-path doc, "what to monitor" checklist, "first 24 hours" checklist).
