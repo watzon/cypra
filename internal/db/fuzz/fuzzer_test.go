@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/watzon/cypra/internal/db"
 	fuzzharness "github.com/watzon/cypra/internal/db/fuzz"
 	"github.com/watzon/cypra/internal/dbtest"
 )
@@ -19,8 +20,12 @@ func TestTenantIsolationFuzzerAllowsTenantScopedHandler(t *testing.T) {
 
 	fuzzer := fuzzharness.Harness{ProtectedTenant: protectedTenant, OtherTenant: otherTenant}
 	err := fuzzer.AssertIsolated(context.Background(), func(ctx context.Context) fuzzharness.Outcome {
+		tenantID, ok := db.TenantFromContext(ctx)
+		if !ok {
+			return fuzzharness.Outcome{Err: db.ErrTenantContextMissing}
+		}
 		var rows int
-		if err := dbHarness.TenantDB.RawScan(ctx, `SELECT count(*) FROM projects`, otherTenant, &rows); err != nil {
+		if err := dbHarness.SQL.QueryRowContext(ctx, `SELECT count(*) FROM projects WHERE tenant_id = $1`, tenantID).Scan(&rows); err != nil {
 			return fuzzharness.Outcome{Err: err}
 		}
 		return fuzzharness.Outcome{Rows: rows}

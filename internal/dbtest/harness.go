@@ -161,6 +161,11 @@ func MigrationFiles(t *testing.T, pattern string, reverse bool) []string {
 
 func applyMigrations(t *testing.T, sqlDB *sql.DB, pattern string, reverse bool) {
 	t.Helper()
+	if !reverse {
+		if _, err := sqlDB.Exec(`CREATE TABLE IF NOT EXISTS schema_migrations (version TEXT PRIMARY KEY, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())`); err != nil {
+			t.Fatalf("create schema_migrations: %v", err)
+		}
+	}
 	for _, file := range MigrationFiles(t, pattern, reverse) {
 		content, err := os.ReadFile(file) // #nosec G304 -- migration files are discovered from this repository's db/migrations directory.
 		if err != nil {
@@ -168,6 +173,12 @@ func applyMigrations(t *testing.T, sqlDB *sql.DB, pattern string, reverse bool) 
 		}
 		if _, err := sqlDB.Exec(string(content)); err != nil {
 			t.Fatalf("apply migration %s: %v", filepath.Base(file), err)
+		}
+		version := strings.TrimSuffix(strings.TrimSuffix(filepath.Base(file), ".up.sql"), ".down.sql")
+		if reverse {
+			_, _ = sqlDB.Exec(`DELETE FROM schema_migrations WHERE version = $1`, version)
+		} else if _, err := sqlDB.Exec(`INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT DO NOTHING`, version); err != nil {
+			t.Fatalf("record migration %s: %v", version, err)
 		}
 	}
 }

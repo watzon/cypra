@@ -101,7 +101,7 @@ func (tdb *TenantScopedDB) withTenant(ctx context.Context, tenantID uuid.UUID, f
 }
 
 func setTenant(tx *gorm.DB, tenantID uuid.UUID) error {
-	return tx.Exec("SET LOCAL cypra.tenant_id = ?", tenantID.String()).Error
+	return tx.Exec("SELECT set_config('cypra.tenant_id', ?, true)", tenantID.String()).Error
 }
 
 func resetTenantAfter(tx *gorm.DB, fn func() error) error {
