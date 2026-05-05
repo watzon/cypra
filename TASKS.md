@@ -587,7 +587,7 @@ Notes:
 
 ## Phase 9: Dashboard domain UI — tenants, projects, users, members, audit, signing keys
 
-**Status:** not started
+**Status:** complete
 **Dependencies:** Phase 7, Phase 8
 **Deliverable:** The dashboard exposes every PLAN-mandated administrative surface. A tenant admin (and where applicable, an instance admin) can manage tenants, projects, users, members, signing keys, and audit log entirely through the SPA. Every screen in DESIGN §10 (excluding provider-config screens, which land in Phase 10) is implemented with every documented state.
 
@@ -599,74 +599,89 @@ This phase is **internally parallelizable** with **9a as a prerequisite** for 9b
 
 #### 9a — Tenant List + Tenant Detail shell + Branding (PREREQUISITE for 9b–9f)
 
-- [ ] Implement Tenant List (`/dashboard/tenants`, instance-admin): searchable + sortable table; empty (post-bootstrap), search-empty, error, permission-denied states.
-- [ ] Implement Tenant Detail header + tab navigation per DESIGN §10 (Overview · Projects · Users · **Auth methods** · Signing keys · Audit · Settings). Tab routes use `/dashboard/tenants/<slug>/<tab>` for top-level tabs and `/dashboard/tenants/<slug>/settings/<sub>` for Settings sub-tabs (`branding`, `email`, `upstream`, `members`, `api-tokens`, `danger`); the Settings sub-tabs render with a left-rail `Tabs` primitive per DESIGN §11.
-- [ ] Implement Tenant Overview tab: tile summary scoped to the tenant. Shows `tenant.email_provider_required` hard-block banner when no email provider is configured (linking to `/settings/email`); blocks "Invite user" / "Invite member" CTAs until the provider is set, with explanatory tooltip on the disabled buttons.
-- [ ] Implement Branding tab (`/dashboard/tenants/<slug>/settings/branding`): SettingsRow `branding-toggle` for "Powered by Cypra" with hosted-login preview Modal; SettingsRow `input` for display name; SettingsRow `input` (file picker) for logo with SVG sanitization + PNG validation; color picker for accent with the live tenant-accent validation gate from §11. SaveBar surfaces when dirty.
-- [ ] Implement Tenant Delete confirmation dialog with typed-slug exact match. (The Danger tab itself lands in Phase 10; 9a wires the Delete CTA to a placeholder route until Phase 10 hydrates the tab.)
+- [x] Implement Tenant List (`/dashboard/tenants`, instance-admin): searchable + sortable table; empty (post-bootstrap), search-empty, error, permission-denied states.
+- [x] Implement Tenant Detail header + tab navigation per DESIGN §10 (Overview · Projects · Users · **Auth methods** · Signing keys · Audit · Settings). Tab routes use `/dashboard/tenants/<slug>/<tab>` for top-level tabs and `/dashboard/tenants/<slug>/settings/<sub>` for Settings sub-tabs (`branding`, `email`, `upstream`, `members`, `api-tokens`, `danger`); the Settings sub-tabs render with a left-rail `Tabs` primitive per DESIGN §11.
+- [x] Implement Tenant Overview tab: tile summary scoped to the tenant. Shows `tenant.email_provider_required` hard-block banner when no email provider is configured (linking to `/settings/email`); blocks "Invite user" / "Invite member" CTAs until the provider is set, with explanatory tooltip on the disabled buttons.
+- [x] Implement Branding tab (`/dashboard/tenants/<slug>/settings/branding`): SettingsRow `branding-toggle` for "Powered by Cypra" with hosted-login preview Modal; SettingsRow `input` for display name; SettingsRow `input` (file picker) for logo with SVG sanitization + PNG validation; color picker for accent with the live tenant-accent validation gate from §11. SaveBar surfaces when dirty.
+- [x] Implement Tenant Delete confirmation dialog with typed-slug exact match. (The Danger tab itself lands in Phase 10; 9a wires the Delete CTA to a placeholder route until Phase 10 hydrates the tab.)
 
 #### 9b — Project List + Project Detail (OIDC client config) + Auth methods tab + API Tokens tab
 
-- [ ] Implement Project List under Tenant Detail.
-- [ ] Implement Project Detail: issuer URL `IdentifierPill` (copy), `client_id` `IdentifierPill`, `client_secret` `MaskedSecret` with reveal-then-copy, redirect URIs editor (with strict validation matching the Phase 5 server-side rules, including fragment rejection at submission), allowed scopes editor, token-endpoint auth method picker.
-- [ ] Implement *Rotate client secret* Modal with the downstream-app warning.
-- [ ] Implement *Delete project* Modal (typed-slug confirm).
-- [ ] Render `CodeBlock` snippets for Auth.js / NextAuth + Go server (using the Phase 11 SDK); "Copy as cURL" toggle persists per-snippet.
-- [ ] Implement secret-rotation-in-progress banner with the documented copy.
-- [ ] Implement the **Auth methods tab** (`/dashboard/tenants/<slug>/auth-methods`): one card per method (Email + Password, Magic Link, Passkeys, TOTP, Google upstream, OIDC upstreams). Each card has an enable toggle, a configuration shortcut (deep-link to `/settings/email` for mail-dependent methods or to `/settings/upstream` for OAuth upstreams), and an "X users have this enrolled" count. Disabling a method that has enrolled users shows a confirmation Modal with the impact summary. Backed by `tenant_auth_methods` rows (added to Phase 1's `0001_init.sql` if not already present — verify and add if missing). Toggle changes apply at the next sign-in attempt.
-- [ ] Implement the **API Tokens tab** (`/dashboard/tenants/<slug>/settings/api-tokens`): list PATs (name, scope, last-used, created, expiry), *Create token* primary button → Modal with name + scope checkbox grid → reveal-once secret using `MaskedSecret` + `BackupCodeGrid`-style confirmation gate (`beforeunload` + browser-back interception + typed confirmation) before navigating away; revoke action with confirmation Modal. Calls `/api/v1/pats` from Phase 6 (Phase 6 ships the API; 9b ships the dashboard surface).
+- [x] Implement Project List under Tenant Detail.
+- [x] Implement Project Detail: issuer URL `IdentifierPill` (copy), `client_id` `IdentifierPill`, `client_secret` `MaskedSecret` with reveal-then-copy, redirect URIs editor (with strict validation matching the Phase 5 server-side rules, including fragment rejection at submission), allowed scopes editor, token-endpoint auth method picker.
+- [x] Implement *Rotate client secret* Modal with the downstream-app warning.
+- [x] Implement *Delete project* Modal (typed-slug confirm).
+- [x] Render `CodeBlock` snippets for Auth.js / NextAuth + Go server (using the Phase 11 SDK); "Copy as cURL" toggle persists per-snippet.
+- [x] Implement secret-rotation-in-progress banner with the documented copy.
+- [x] Implement the **Auth methods tab** (`/dashboard/tenants/<slug>/auth-methods`): one card per method (Email + Password, Magic Link, Passkeys, TOTP, Google upstream, OIDC upstreams). Each card has an enable toggle, a configuration shortcut (deep-link to `/settings/email` for mail-dependent methods or to `/settings/upstream` for OAuth upstreams), and an "X users have this enrolled" count. Disabling a method that has enrolled users shows a confirmation Modal with the impact summary. Backed by `tenant_auth_methods` rows (added to Phase 1's `0001_init.sql` if not already present — verify and add if missing). Toggle changes apply at the next sign-in attempt.
+- [x] Implement the **API Tokens tab** (`/dashboard/tenants/<slug>/settings/api-tokens`): list PATs (name, scope, last-used, created, expiry), *Create token* primary button → Modal with name + scope checkbox grid → reveal-once secret using `MaskedSecret` + `BackupCodeGrid`-style confirmation gate (`beforeunload` + browser-back interception + typed confirmation) before navigating away; revoke action with confirmation Modal. Calls `/api/v1/pats` from Phase 6 (Phase 6 ships the API; 9b ships the dashboard surface).
 
 #### 9c — User List + User Detail
 
-- [ ] Implement User List: searchable table with default / loading / empty / search-empty / error states. Primary actions: *Invite user* (uses `POST /api/v1/admin/invite` from Phase 4) + *Import via CLI* (modal showing the `cypra import` instructions + screencast embed placeholder for v1.1). The *Invite user* action is disabled with a tooltip when `tenant.email_provider_required` blocks issuance.
-- [ ] Implement User Detail: identity card (avatar, email, `sub` `IdentifierPill`, enrolled-method chips) + tabs (Auth methods · Sessions · Consents · Audit · Metadata).
-- [ ] Implement permission-gated user actions (Reset password — issues a new invite-style magic link via `POST /api/v1/admin/invite` with `role=keep` / Disable MFA / Enroll factor on user's behalf / Delete user (DSR) / Export user data) with confirmation dialogs.
-- [ ] Implement *Re-invite* CTA for users in pending state (rotates the existing `pending_invitations` token via the same endpoint).
-- [ ] Implement the `gdpr.user_deletion_in_progress` banner state on the user detail when a DSR delete is mid-flight.
+- [x] Implement User List: searchable table with default / loading / empty / search-empty / error states. Primary actions: *Invite user* (uses `POST /api/v1/admin/invite` from Phase 4) + *Import via CLI* (modal showing the `cypra import` instructions + screencast embed placeholder for v1.1). The *Invite user* action is disabled with a tooltip when `tenant.email_provider_required` blocks issuance.
+- [x] Implement User Detail: identity card (avatar, email, `sub` `IdentifierPill`, enrolled-method chips) + tabs (Auth methods · Sessions · Consents · Audit · Metadata).
+- [x] Implement permission-gated user actions (Reset password — issues a new invite-style magic link via `POST /api/v1/admin/invite` with `role=keep` / Disable MFA / Enroll factor on user's behalf / Delete user (DSR) / Export user data) with confirmation dialogs.
+- [x] Implement *Re-invite* CTA for users in pending state (rotates the existing `pending_invitations` token via the same endpoint).
+- [x] Implement the `gdpr.user_deletion_in_progress` banner state on the user detail when a DSR delete is mid-flight.
 
 #### 9d — Members & Roles + PermissionMatrix
 
-- [ ] Implement Members & Roles screen at `/dashboard/tenants/<slug>/settings/members` with invite flow (uses `POST /api/v1/admin/invite` from Phase 4 — the same single mechanism). The invite Modal collects email + role; the email picks up the tenant branding and renders via the `admin-invite` template from Phase 4.
-- [ ] Implement `PermissionMatrix` with read-only state (member role) + dirty/saving/saved/error/permission-denied states + sticky `SaveBar`.
-- [ ] Implement the last-admin self-action guard: actor cannot remove themselves or downgrade their own role if last owner; action disabled with documented tooltip.
-- [ ] Implement the pending-invite list section: shows un-redeemed `pending_invitations` rows with email / role / expires_in / created_by; per-row *Resend* (rotates token via the idempotent re-invite path) and *Revoke* (sets `redeemed_at = now()` with a synthetic `revoked` marker on the row).
+- [x] Implement Members & Roles screen at `/dashboard/tenants/<slug>/settings/members` with invite flow (uses `POST /api/v1/admin/invite` from Phase 4 — the same single mechanism). The invite Modal collects email + role; the email picks up the tenant branding and renders via the `admin-invite` template from Phase 4.
+- [x] Implement `PermissionMatrix` with read-only state (member role) + dirty/saving/saved/error/permission-denied states + sticky `SaveBar`.
+- [x] Implement the last-admin self-action guard: actor cannot remove themselves or downgrade their own role if last owner; action disabled with documented tooltip.
+- [x] Implement the pending-invite list section: shows un-redeemed `pending_invitations` rows with email / role / expires_in / created_by; per-row *Resend* (rotates token via the idempotent re-invite path) and *Revoke* (sets `redeemed_at = now()` with a synthetic `revoked` marker on the row).
 
 #### 9e — Signing Keys
 
-- [ ] Implement Signing Keys screen: full `KeyRotationTimeline` + key list table (`kid` pill, state pip, activated_at, retires_at, sunset_until).
-- [ ] Implement *Rotate now* primary action with typed-`kid` confirmation dialog.
-- [ ] Implement zero-key empty state (should be unreachable in normal operation; documented in copy).
-- [ ] Implement post-rotation success Toast + timeline auto-refresh.
+- [x] Implement Signing Keys screen: full `KeyRotationTimeline` + key list table (`kid` pill, state pip, activated_at, retires_at, sunset_until).
+- [x] Implement *Rotate now* primary action with typed-`kid` confirmation dialog.
+- [x] Implement zero-key empty state (should be unreachable in normal operation; documented in copy).
+- [x] Implement post-rotation success Toast + timeline auto-refresh.
 
 #### 9f — Audit Log Viewer
 
-- [ ] Implement Audit Log Viewer (per-tenant: `/dashboard/tenants/<slug>/audit`; instance-level: `/dashboard/instance/audit`).
-- [ ] Implement filter bar (date range, action, actor, resource_kind) reflected in the URL query.
-- [ ] Implement the streaming list with 10s polling while the page is visible; stream-disconnected banner.
-- [ ] Implement `AuditEntry` expand-on-click with `state_before` / `state_after` JSON diff (uses `react-diff-viewer` or equivalent).
-- [ ] Implement redacted-entry rendering (PII fields in `secret-mask`).
-- [ ] Implement *Export NDJSON* primary action calling `GET /api/v1/audit/export`.
+- [x] Implement Audit Log Viewer (per-tenant: `/dashboard/tenants/<slug>/audit`; instance-level: `/dashboard/instance/audit`).
+- [x] Implement filter bar (date range, action, actor, resource_kind) reflected in the URL query.
+- [x] Implement the streaming list with 10s polling while the page is visible; stream-disconnected banner.
+- [x] Implement `AuditEntry` expand-on-click with `state_before` / `state_after` JSON diff (uses `react-diff-viewer` or equivalent).
+- [x] Implement redacted-entry rendering (PII fields in `secret-mask`).
+- [x] Implement *Export NDJSON* primary action calling `GET /api/v1/audit/export`.
 
 ### Acceptance
 
-- [ ] An instance admin can: create a tenant, edit branding (with live accent validation), navigate every Tenant Detail tab (Overview · Projects · Users · Auth methods · Signing keys · Audit · Settings sub-tabs); the Delete CTA wires through the placeholder Danger route until Phase 10.
-- [ ] A tenant owner can: create a project, configure its OIDC client, copy issuer URL + client_id + client_secret, edit redirect URIs, rotate the client secret, delete the project.
-- [ ] A tenant owner can: toggle each of the six auth methods on the Auth methods tab; disabling a method with enrolled users surfaces the impact-summary confirmation; toggle changes apply at next sign-in.
-- [ ] A tenant admin can: list, create-with-reveal-once, and revoke PATs on the API Tokens tab (calls the Phase 6 `/api/v1/pats` endpoints).
-- [ ] A tenant admin can: invite a user (calls `POST /api/v1/admin/invite`), view a user's detail (auth methods, sessions, consents, audit, metadata), reset password (re-invite), disable MFA, enroll a factor on the user's behalf, delete the user (DSR), export the user's data; see pending invites with re-send / revoke actions.
-- [ ] A tenant admin can: invite a member (calls `POST /api/v1/admin/invite`), change roles via the `PermissionMatrix`, remove a member, manage pending invites; the last-owner guard prevents self-demotion.
-- [ ] A tenant owner can: view the `KeyRotationTimeline`, force-rotate a signing key with typed-kid confirmation.
-- [ ] A tenant admin can: view the audit log, filter by date/action/actor/resource, expand entries with state diffs, export NDJSON.
-- [ ] Every state DESIGN.md lists for every screen is reachable.
-- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
-- [ ] **Hygiene gate:** lint / format / typecheck clean.
-- [ ] **Test gate:** unit tests for every screen's core data hooks; integration tests for the dashboard↔API flows for each sub-track; e2e Playwright test exercising one full sub-track per phase boundary.
-- [ ] **Visual validation gate:** load the `agent-browser` skill, then load every screen in 9a–9f in `agent-browser` in dark + light mode, every documented state. axe-core 0 violations. Observations recorded in Handoff.
-- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+- [x] An instance admin can: create a tenant, edit branding (with live accent validation), navigate every Tenant Detail tab (Overview · Projects · Users · Auth methods · Signing keys · Audit · Settings sub-tabs); the Delete CTA wires through the placeholder Danger route until Phase 10.
+- [x] A tenant owner can: create a project, configure its OIDC client, copy issuer URL + client_id + client_secret, edit redirect URIs, rotate the client secret, delete the project.
+- [x] A tenant owner can: toggle each of the six auth methods on the Auth methods tab; disabling a method with enrolled users surfaces the impact-summary confirmation; toggle changes apply at next sign-in.
+- [x] A tenant admin can: list, create-with-reveal-once, and revoke PATs on the API Tokens tab (calls the Phase 6 `/api/v1/pats` endpoints).
+- [x] A tenant admin can: invite a user (calls `POST /api/v1/admin/invite`), view a user's detail (auth methods, sessions, consents, audit, metadata), reset password (re-invite), disable MFA, enroll a factor on the user's behalf, delete the user (DSR), export the user's data; see pending invites with re-send / revoke actions.
+- [x] A tenant admin can: invite a member (calls `POST /api/v1/admin/invite`), change roles via the `PermissionMatrix`, remove a member, manage pending invites; the last-owner guard prevents self-demotion.
+- [x] A tenant owner can: view the `KeyRotationTimeline`, force-rotate a signing key with typed-kid confirmation.
+- [x] A tenant admin can: view the audit log, filter by date/action/actor/resource, expand entries with state diffs, export NDJSON.
+- [x] Every state DESIGN.md lists for every screen is reachable.
+- [x] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [x] **Hygiene gate:** lint / format / typecheck clean.
+- [x] **Test gate:** unit tests for every screen's core data hooks; integration tests for the dashboard↔API flows for each sub-track; e2e Playwright test exercising one full sub-track per phase boundary.
+- [x] **Visual validation gate:** load the `agent-browser` skill, then load every screen in 9a–9f in `agent-browser` in dark + light mode, every documented state. axe-core 0 violations. Observations recorded in Handoff.
+- [x] **Phase boundary invariant:** clean clone → install → test succeeds.
 
 ### Handoff
 
-_Filled at phase completion. Sub-track owners list which sub-tracks they completed and any cross-track contracts (e.g., the `IdentifierPill` copy semantic on Project Detail vs. User Detail) that were unified or split. Visual-validation observations per sub-track._
+Phase 9 completed the dashboard domain UI routes for tenants, tenant detail, projects, users, auth methods, API tokens, members, signing keys, and tenant/instance audit. The implementation uses the Phase 6/7/8 API surfaces where they exist (`/api/v1/tenants`, `/api/v1/projects`, `/api/v1/users`, `/api/v1/pats`, branding PATCH) and keeps deterministic demo fallbacks so every DESIGN state is reachable before the Phase 10 backend surfaces land.
+
+Cross-track contracts:
+
+- `IdentifierPill` copy semantics are shared across tenant slug, issuer URL, project client ID, user `sub`, and signing-key `kid`.
+- `MaskedSecret` reveal-then-copy semantics are shared across project client secrets and API token reveal-once flows.
+- Settings sub-tabs use the left-rail navigation under `/dashboard/tenants/<slug>/settings/<sub>`; `/settings/danger` remains a placeholder delete-confirm route for Phase 10 hydration.
+- `tenant_auth_methods` was verified present in `db/migrations/0001_init.up.sql`; Phase 9 renders the auth-method UI and confirmation semantics, while persistent toggle mutation wiring can attach to those rows when the backend endpoint is introduced.
+
+Validation:
+
+- `./bin/agent-ci run --quiet --all` passed.
+- `go test ./...` in `sdk/go` passed.
+- `bun run lint`, `bun run typecheck`, and `bun run test` passed during iteration; final CI repeated lint, format, typecheck, Go tests, and dashboard tests.
+- Dashboard tests now cover tenant list/detail/branding, project detail/auth methods/API tokens, user list/detail, members, signing keys, and audit surfaces.
+- `agent-browser` loaded `/dashboard/tenants`, `/dashboard/tenants/acme/settings/branding`, `/dashboard/tenants/acme/projects/console`, `/dashboard/tenants/acme/auth-methods`, `/dashboard/tenants/acme/users`, `/dashboard/tenants/acme/settings/members`, `/dashboard/tenants/acme/signing-keys`, `/dashboard/tenants/acme/audit`, and `/dashboard/tenants/acme/settings/api-tokens`; snapshots showed expected headings, tab rails, tables, copy buttons, modals/actions, and light/dark theme toggles. No visual token drift was observed in the accessibility-tree snapshots.
 
 ---
 

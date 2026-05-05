@@ -11,10 +11,13 @@ import {
   ErrorPage,
   FooterHelp,
   OverviewStates,
+  AuditLogScreen,
   PlaceholderPage,
   SetupStateGallery,
   SetupWizard,
   ShortcutOverlay,
+  TenantDetail,
+  TenantList,
   VersionToast,
 } from "@/screens";
 
@@ -23,6 +26,8 @@ type Route =
   | { kind: "gallery" }
   | { kind: "dashboard" }
   | { kind: "account" }
+  | { kind: "tenant-list" }
+  | { kind: "tenant-detail"; slug: string; tab: string; settingsTab?: string; detailSlug?: string }
   | { kind: "error"; code: "403" | "404" | "500" | "503" }
   | { kind: "placeholder"; title: string };
 
@@ -59,27 +64,19 @@ function parseRoute(pathname: string): Route {
     return { kind: "error", code: pathname.slice(-3) as "403" | "404" | "500" | "503" };
   if (pathname === "/dashboard" || pathname === "/") return { kind: "dashboard" };
   if (pathname === "/dashboard/account") return { kind: "account" };
+  if (pathname === "/dashboard/tenants") return { kind: "tenant-list" };
+  if (pathname.startsWith("/dashboard/tenants/")) return parseTenantRoute(pathname);
   if (routeTitles[pathname]) return { kind: "placeholder", title: routeTitles[pathname] };
-  if (pathname.startsWith("/dashboard/tenants/"))
-    return { kind: "placeholder", title: tenantRouteTitle(pathname) };
   return { kind: "error", code: "404" };
 }
 
-function tenantRouteTitle(pathname: string) {
-  if (pathname.includes("/projects/")) return "Project detail";
-  if (pathname.includes("/users/")) return "User detail";
-  if (pathname.endsWith("/projects")) return "Tenant projects";
-  if (pathname.endsWith("/users")) return "Tenant users";
-  if (pathname.endsWith("/auth-methods")) return "Auth methods";
-  if (pathname.endsWith("/signing-keys")) return "Signing keys";
-  if (pathname.endsWith("/audit")) return "Tenant audit";
-  if (pathname.includes("/settings/branding")) return "Branding";
-  if (pathname.includes("/settings/email")) return "Email provider";
-  if (pathname.includes("/settings/upstream")) return "Upstream providers";
-  if (pathname.includes("/settings/members")) return "Members and roles";
-  if (pathname.includes("/settings/api-tokens")) return "API tokens";
-  if (pathname.includes("/settings/danger")) return "Danger zone";
-  return "Tenant overview";
+function parseTenantRoute(pathname: string): Route {
+  const [, , , slug, maybeTab, maybeSubTab] = pathname.split("/");
+  if (!slug) return { kind: "error", code: "404" };
+  if (maybeTab === "settings") {
+    return { kind: "tenant-detail", slug, tab: "settings", settingsTab: maybeSubTab || "branding" };
+  }
+  return { kind: "tenant-detail", slug, tab: maybeTab || "overview", detailSlug: maybeSubTab };
 }
 
 export function App() {
@@ -152,6 +149,16 @@ function renderRoute(route: Route) {
   if (route.kind === "gallery") return <PrimitiveGallery />;
   if (route.kind === "dashboard") return <DashboardOverview />;
   if (route.kind === "account") return <AccountProfile />;
+  if (route.kind === "tenant-list") return <TenantList />;
+  if (route.kind === "tenant-detail")
+    return (
+      <TenantDetail
+        slug={route.slug}
+        tab={route.tab}
+        settingsTab={route.settingsTab}
+        detailSlug={route.detailSlug}
+      />
+    );
   if (route.kind === "error") return <ErrorPage code={route.code} />;
   if (route.kind === "placeholder" && route.title === "Setup state gallery")
     return <SetupStateGallery />;
@@ -159,6 +166,8 @@ function renderRoute(route: Route) {
     return <AccountStates />;
   if (route.kind === "placeholder" && route.title === "Overview state gallery")
     return <OverviewStates />;
+  if (route.kind === "placeholder" && route.title === "Instance audit")
+    return <AuditLogScreen scope="instance" />;
   if (route.kind === "placeholder") return <PlaceholderPage title={route.title} />;
   return <ErrorPage code="404" />;
 }

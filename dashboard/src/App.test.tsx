@@ -22,14 +22,98 @@ afterEach(() => {
 });
 
 function defaultFetchMock() {
-  return vi.fn(() =>
-    Promise.resolve(
+  return vi.fn((input: RequestInfo | URL) => {
+    void input;
+    return Promise.resolve(
       new Response(JSON.stringify({ version: "dev", commit: "test" }), { status: 200 }),
-    ),
-  );
+    );
+  });
 }
 
-function renderApp(path = "/dashboard", fetchMock = defaultFetchMock()) {
+function dashboardFetchMock() {
+  return vi.fn((input: RequestInfo | URL) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    if (url === "/api/v1/tenants/") {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: "00000000-0000-0000-0000-00000000acme",
+              slug: "acme",
+              name: "Acme Operations",
+              branding: { display_name: "Acme Login", powered_by: true },
+              member_count: 3,
+              project_count: 2,
+              user_count: 128,
+              email_provider_required: true,
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+    }
+    if (url === "/api/v1/projects/") {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: "00000000-0000-0000-0000-00000000app1",
+              slug: "console",
+              name: "Console App",
+              client_id: "client_cypra_acme_console",
+              issuer_url: "https://acme.cypra.localhost",
+              redirect_uris: ["https://app.example.com/api/auth/callback/cypra"],
+              allowed_scopes: ["openid", "email"],
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+    }
+    if (url === "/api/v1/pats/") {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: "00000000-0000-0000-0000-00000000pat1",
+              name: "Deploy automation",
+              scopes: ["tenants:read"],
+              created_at: "2026-05-01",
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+    }
+    if (url === "/api/v1/users/") {
+      return Promise.resolve(
+        new Response(
+          JSON.stringify([
+            {
+              id: "00000000-0000-0000-0000-00000000ada1",
+              email: "ada@example.com",
+              sub: "usr_acme_ada",
+              state: "active",
+              enrolled_methods: ["passkey"],
+            },
+          ]),
+          { status: 200 },
+        ),
+      );
+    }
+    if (url.includes("/branding")) {
+      return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+    }
+    return Promise.resolve(
+      new Response(JSON.stringify({ version: "dev", commit: "test" }), { status: 200 }),
+    );
+  });
+}
+
+function renderApp(
+  path = "/dashboard",
+  fetchMock: (input: RequestInfo | URL) => Promise<Response> = defaultFetchMock(),
+) {
   history.replaceState(null, "", path);
   vi.stubGlobal("fetch", fetchMock);
   const client = new QueryClient({
@@ -86,6 +170,104 @@ describe("App", () => {
       "/api/v1/instance/admins/me",
       expect.objectContaining({ method: "PATCH" }),
     );
+  });
+
+  it("renders the searchable tenant list", async () => {
+    renderApp("/dashboard/tenants", dashboardFetchMock());
+
+    expect(await screen.findByRole("heading", { name: "Tenants" })).toBeInTheDocument();
+    expect((await screen.findAllByText("Acme Operations")).length).toBeGreaterThan(0);
+
+    const searchInputs = screen.getAllByLabelText("Search tenants");
+    await userEvent.type(searchInputs[searchInputs.length - 1], "missing");
+
+    expect(screen.getByText("No tenants match missing.")).toBeInTheDocument();
+  });
+
+  it("renders tenant overview and branding settings routes", async () => {
+    renderApp("/dashboard/tenants/acme/settings/branding", dashboardFetchMock());
+
+    expect(await screen.findByRole("heading", { name: "Acme Login" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Branding" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Accent color")).toBeInTheDocument();
+  });
+
+  it("renders project detail, auth methods, and API tokens surfaces", async () => {
+    const fetchMock = dashboardFetchMock();
+    renderApp("/dashboard/tenants/acme/projects/console", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "Console App" })).toBeInTheDocument();
+    expect(screen.getByText("Rotate client secret")).toBeInTheDocument();
+
+    cleanup();
+    renderApp("/dashboard/tenants/acme/auth-methods", fetchMock);
+
+    expect(await screen.findByText("Email + Password")).toBeInTheDocument();
+    expect(screen.getByText("OIDC upstreams")).toBeInTheDocument();
+
+    cleanup();
+    renderApp("/dashboard/tenants/acme/settings/api-tokens", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "API tokens" })).toBeInTheDocument();
+    expect(screen.getByText("Deploy automation")).toBeInTheDocument();
+  });
+
+  it("renders user list and user detail surfaces", async () => {
+    const fetchMock = dashboardFetchMock();
+    renderApp("/dashboard/tenants/acme/users", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "Users" })).toBeInTheDocument();
+    expect(screen.getByText("ada@example.com")).toBeInTheDocument();
+
+    cleanup();
+    renderApp("/dashboard/tenants/acme/users/00000000-0000-0000-0000-00000000ada1", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "ada@example.com" })).toBeInTheDocument();
+    expect(screen.getByText("Reset password")).toBeInTheDocument();
+  });
+
+  it("renders members, signing keys, and audit surfaces", async () => {
+    const fetchMock = dashboardFetchMock();
+    renderApp("/dashboard/tenants/acme/settings/members", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "Members & roles" })).toBeInTheDocument();
+    expect(screen.getByText("Pending invites")).toBeInTheDocument();
+
+    cleanup();
+    renderApp("/dashboard/tenants/acme/signing-keys", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "Signing keys" })).toBeInTheDocument();
+    expect(screen.getByText("Rotate now")).toBeInTheDocument();
+
+    cleanup();
+    renderApp("/dashboard/tenants/acme/audit", fetchMock);
+
+    expect(await screen.findByRole("heading", { name: "Tenant audit" })).toBeInTheDocument();
+    expect(screen.getByText("Export NDJSON")).toBeInTheDocument();
+  });
+
+  it("has no axe violations on Phase 9 dashboard routes", async () => {
+    const routes = [
+      ["/dashboard/tenants", "Tenants"],
+      ["/dashboard/tenants/acme/settings/branding", "Branding"],
+      ["/dashboard/tenants/acme/projects/console", "Console App"],
+      ["/dashboard/tenants/acme/auth-methods", "Email + Password"],
+      ["/dashboard/tenants/acme/users", "Users"],
+      ["/dashboard/tenants/acme/settings/members", "Members & roles"],
+      ["/dashboard/tenants/acme/signing-keys", "Signing keys"],
+      ["/dashboard/tenants/acme/audit", "Tenant audit"],
+      ["/dashboard/tenants/acme/settings/api-tokens", "API tokens"],
+    ] as const;
+
+    for (const [route, heading] of routes) {
+      renderApp(route, dashboardFetchMock());
+      await screen.findByRole("heading", { name: heading });
+
+      const results = await axe.run(document.body);
+
+      expect(results.violations, route).toEqual([]);
+      cleanup();
+    }
   });
 });
 
