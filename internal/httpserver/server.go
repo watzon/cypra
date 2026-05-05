@@ -85,7 +85,7 @@ func (s *Server) Router() http.Handler {
 	r.Route("/api/v1", func(api chi.Router) {
 		api.Use(s.tenantResolver)
 		api.Use(s.rlsSetter)
-		api.Use(auth.Middleware)
+		api.Use(auth.MiddlewareWithPAT(s.DB))
 		api.Get("/version", s.version)
 		if s.DevOpenAPI {
 			api.Get("/openapi.json", s.openapi)
@@ -134,6 +134,12 @@ func (s *Server) Router() http.Handler {
 			rt.Use(auth.RequireTenantRole)
 			rt.Get("/", s.listUsers)
 			rt.Post("/", s.createUser)
+		})
+		api.Route("/pats", func(rt chi.Router) {
+			rt.Use(auth.RequireTenantRole)
+			rt.Get("/", s.listPATs)
+			rt.Post("/", s.createPAT)
+			rt.Delete("/{id}", s.revokePAT)
 		})
 	})
 	return r

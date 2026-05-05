@@ -5,8 +5,12 @@ package auth
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"strings"
+
+	"github.com/google/uuid"
+	"github.com/watzon/cypra/internal/pat"
 )
 
 type Actor struct {
@@ -14,26 +18,48 @@ type Actor struct {
 	InstanceAdmin   bool
 	TenantRole      string
 	PersonalTokenID string
+	TenantID        uuid.UUID
+	UserID          uuid.UUID
+	Scopes          []string
 }
 
 type actorKey struct{}
 
 func Middleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		actor := Actor{}
-		if r.Header.Get("X-Cypra-Instance-Admin") == "true" {
-			actor.Kind = "instance_admin"
-			actor.InstanceAdmin = true
-		}
-		if role := r.Header.Get("X-Cypra-Tenant-Role"); role != "" {
-			actor.Kind = "tenant_admin"
-			actor.TenantRole = role
-		}
-		if authz := r.Header.Get("Authorization"); strings.HasPrefix(authz, "Bearer ") {
-			actor.PersonalTokenID = strings.TrimPrefix(authz, "Bearer ")
-		}
-		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), actorKey{}, actor)))
-	})
+	return MiddlewareWithPAT(nil)(next)
+}
+
+func MiddlewareWithPAT(db *sql.DB) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			actor := Actor{}
+			if r.Header.Get("X-Cypra-Instance-Admin") == "true" {
+				actor.Kind = "instance_admin"
+				actor.InstanceAdmin = true
+			}
+			if role := r.Header.Get("X-Cypra-Tenant-Role"); role != "" {
+				actor.Kind = "tenant_admin"
+				actor.TenantRole = role
+			}
+			if authz := r.Header.Get("Authorization"); strings.HasPrefix(authz, "Bearer ") {
+				plaintext := strings.TrimPrefix(authz, "Bearer ")
+				actor.PersonalTokenID = plaintext
+				if db != nil {
+					token, err := (pat.Service{DB: db}).Authenticate(r.Context(), plaintext)
+					if err != nil {
+						writeError(w, http.StatusUnauthorized, "auth.pat_invalid")
+						return
+					}
+					actor.Kind = "pat"
+					actor.TenantRole = "admin"
+					actor.TenantID = token.TenantID
+					actor.UserID = token.UserID
+					actor.Scopes = token.Scopes
+				}
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), actorKey{}, actor)))
+		})
+	}
 }
 
 func ActorFromContext(ctx context.Context) Actor {
