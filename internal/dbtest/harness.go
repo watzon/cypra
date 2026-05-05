@@ -4,6 +4,7 @@ package dbtest
 //revive:disable:exported
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"fmt"
@@ -20,6 +21,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/watzon/cypra/internal/crypto"
 	"github.com/watzon/cypra/internal/db"
 	postgresdriver "gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -113,12 +115,29 @@ func SeedTenant(t *testing.T, sqlDB *sql.DB, slug string) uuid.UUID {
 	if err != nil {
 		t.Fatalf("seed tenant %s: %v", slug, err)
 	}
+	SeedSigningKey(t, sqlDB, tenantID)
 	return tenantID
 }
 
 func SeedSecondTenant(t *testing.T, sqlDB *sql.DB, slug string) uuid.UUID {
 	t.Helper()
 	return SeedTenant(t, sqlDB, slug)
+}
+
+func TestMasterKey() []byte {
+	return bytes.Repeat([]byte{9}, crypto.MasterKeyBytes)
+}
+
+func SeedSigningKey(t *testing.T, sqlDB *sql.DB, tenantID uuid.UUID) {
+	t.Helper()
+	key, err := crypto.GenerateSigningKey(tenantID, 1, crypto.SigningAlgRS256, TestMasterKey(), time.Now().UTC())
+	if err != nil {
+		t.Fatalf("generate tenant signing key: %v", err)
+	}
+	_, err = sqlDB.Exec(`INSERT INTO oidc_signing_keys (tenant_id, kid, algorithm, public_key_jwk, private_key_encrypted, state, activated_at, retires_at) VALUES ($1, $2, $3, $4, $5, 'active', $6, $7)`, tenantID, key.KID, key.Algorithm, []byte(key.PublicJWK), key.PrivateKeyEncrypted, key.ActivatedAt, key.RetiresAt)
+	if err != nil {
+		t.Fatalf("seed tenant signing key: %v", err)
+	}
 }
 
 func MigrationFiles(t *testing.T, pattern string, reverse bool) []string {

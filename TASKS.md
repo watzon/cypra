@@ -145,45 +145,49 @@ Verification: `./bin/agent-ci run --quiet --all` passed after loading the `agent
 
 ## Phase 2: Crypto, secrets, sessions, and bootstrap
 
-**Status:** not started
+**Status:** complete
 **Dependencies:** Phase 1
 **Deliverable:** `internal/crypto` exposes Argon2id password hashing, AES-GCM envelope encryption (per-row DEK + master KEK loaded from env or file at boot), and OIDC keypair generation/rotation primitives. Per-tenant signing keys rotate via a 90-day schedule with 30-day overlap (state machine: `active → overlap → retired`, plus `sunsetting` for tenant-deletion). The session manager mints JWT access tokens (15 min) + opaque refresh tokens with family-tree reuse detection. The bootstrap setup-token flow is end-to-end testable: a fresh DB produces a single-use token printed under a `redacted-on-export: true` slog attribute, redeemable exactly once, revokable via a future `cypra admin reset-bootstrap` (CLI lands in Phase 6 — at this phase the function is reachable from tests only). Master-key rotation is resumable (`master_key_rotations` table tracks `phase` and `rows_done`). ADRs 0004, 0005, 0006 filled in.
 
 ### Tasks
 
-- [ ] Implement `internal/crypto/argon2.go`: Argon2id parameters per OWASP 2025 recommendation, with named constants and a denylist hook for rejected passwords.
-- [ ] Implement `internal/crypto/envelope.go`: per-row DEK (AES-256-GCM) wrapped under a master KEK held in memory only. `Encrypt(plaintext, kek) → (ciphertext, encrypted_dek)`; `Decrypt(ciphertext, encrypted_dek, kek) → plaintext`. Master KEK loaded once at process start via `LoadMasterKey(env, file)`; loss = irrecoverable.
-- [ ] Implement `internal/crypto/master_key_rotation.go`: writes a `master_key_rotations` row with `phase='rewrap'`; iterates every encrypted column in batches; re-wraps each row's DEK under the new KEK in a transaction; updates `rows_done`. `Resume(rotationID)` continues from `rows_done`. New writes during rotation use the new KEK; verifier code accepts both KEKs while `phase != 'done'`. `ConfirmCutover(rotationID)` marks `phase='done'` and clears the old KEK from memory.
-- [ ] Implement `internal/crypto/signing_keys.go`: per-tenant OIDC keypair generation (RS256 default; ES256 selectable). `kid` is `<tenant_id>:<seq>` so cross-tenant lookups are structurally impossible. Store private key envelope-encrypted; public key as JWK in JSONB.
-- [ ] Implement signing-key rotation state machine in `internal/oidc/rotation.go`: 90-day rotation, 30-day overlap, automatic via background ticker; `ForceRotate(tenantID)` triggers off-schedule. State transitions persisted; old keys move to `retired` after the overlap window. Tenant-deletion path sets all keys to `sunsetting` with `sunset_until = now() + 30d`.
-- [ ] Implement `internal/sessions/jwt.go`: 15-minute access tokens signed with the tenant's `active` signing key; claims include `iss = https://<tenant>.<install-domain>`, `sub = <tenant_id>:<user_id>`, `iat`, `exp`, `nbf`, `aud`, `scope`. Verifier accepts `active ∪ overlap ∪ sunsetting` keys with ±60 s leeway.
-- [ ] Extend `internal/dbtest` with `SeedTenant(t, slug)` + `SeedSecondTenant(t, slug)` helpers that insert a fully-formed tenant row (with its first signing keypair already minted) — every Phase 2+ test that needs to exercise per-tenant signing/JWT/refresh logic uses these helpers, since the tenant CRUD HTTP surface doesn't land until Phase 3.
-- [ ] Implement `internal/sessions/refresh.go`: opaque refresh tokens (32 bytes random), stored hashed in `oidc_refresh_tokens`, with `family_id` and `parent_id`. `Mint(tenant, client, user, scope, parent_id)` creates a new row in the parent's family. `Consume(token)` atomically checks `consumed_at IS NULL` via `UPDATE … RETURNING`; if NULL, mint a child and return; if NOT NULL, **reuse detected** — set `revoked_at` on every row with the same `family_id`, emit a `cypra_oidc_refresh_reuse_detected_total` metric and an audit entry, return error.
-- [ ] Implement the bootstrap flow in `internal/bootstrap`: `IsFirstBoot()` checks `instance_admins` + `bootstrap_tokens`. `MintSetupToken()` generates 32 bytes random, INSERTs into `bootstrap_tokens` with 24 h expiry, COMMITs, then logs the plaintext token via `slog` with `redacted-on-export: true` attribute. `RedeemSetupToken(plaintext)` atomically checks `consumed_at IS NULL AND revoked_at IS NULL AND expires_at > now()`, marks `consumed_at`, returns the right to mint the first instance admin. `RevokeSetupToken()` (for `cypra admin reset-bootstrap`) sets `revoked_at` on any live token and mints a fresh one if `instance_admins` is empty.
-- [ ] Author crash-resistance test for bootstrap: simulate a process crash between `INSERT bootstrap_tokens` COMMIT and the slog emit; assert that on restart, `cypra admin reset-bootstrap` re-mints. Document the failure-mode behavior (token row exists, plaintext lost — recoverable via reset-bootstrap).
-- [ ] Author master-key-rotation crash-resistance test: kill the process mid-rewrap (after some `rows_done`); restart with both old + new KEK; `Resume(rotationID)` continues to completion; cutover succeeds.
-- [ ] Author refresh-token reuse property-based test: build random family graphs (parent → child → grandchild → …), randomly choose a node to "reuse", assert all descendants are revoked.
-- [ ] Author refresh-token race test: two goroutines present the same parent simultaneously; assert exactly one mints a child and the other gets `consumed_at != NULL` on its second-attempt (next-call) reuse-detection.
-- [ ] Implement Argon2id deny-list (top-N common passwords from a static list) and a unit test asserting common passwords are rejected with a specific error code.
-- [ ] Fill in ADR-0004 (envelope encryption + master-key rotation), ADR-0005 (signing-key rotation schedule), ADR-0006 (bootstrap setup-token).
+- [x] Implement `internal/crypto/argon2.go`: Argon2id parameters per OWASP 2025 recommendation, with named constants and a denylist hook for rejected passwords.
+- [x] Implement `internal/crypto/envelope.go`: per-row DEK (AES-256-GCM) wrapped under a master KEK held in memory only. `Encrypt(plaintext, kek) → (ciphertext, encrypted_dek)`; `Decrypt(ciphertext, encrypted_dek, kek) → plaintext`. Master KEK loaded once at process start via `LoadMasterKey(env, file)`; loss = irrecoverable.
+- [x] Implement `internal/crypto/master_key_rotation.go`: writes a `master_key_rotations` row with `phase='rewrap'`; iterates every encrypted column in batches; re-wraps each row's DEK under the new KEK in a transaction; updates `rows_done`. `Resume(rotationID)` continues from `rows_done`. New writes during rotation use the new KEK; verifier code accepts both KEKs while `phase != 'done'`. `ConfirmCutover(rotationID)` marks `phase='done'` and clears the old KEK from memory.
+- [x] Implement `internal/crypto/signing_keys.go`: per-tenant OIDC keypair generation (RS256 default; ES256 selectable). `kid` is `<tenant_id>:<seq>` so cross-tenant lookups are structurally impossible. Store private key envelope-encrypted; public key as JWK in JSONB.
+- [x] Implement signing-key rotation state machine in `internal/oidc/rotation.go`: 90-day rotation, 30-day overlap, automatic via background ticker; `ForceRotate(tenantID)` triggers off-schedule. State transitions persisted; old keys move to `retired` after the overlap window. Tenant-deletion path sets all keys to `sunsetting` with `sunset_until = now() + 30d`.
+- [x] Implement `internal/sessions/jwt.go`: 15-minute access tokens signed with the tenant's `active` signing key; claims include `iss = https://<tenant>.<install-domain>`, `sub = <tenant_id>:<user_id>`, `iat`, `exp`, `nbf`, `aud`, `scope`. Verifier accepts `active ∪ overlap ∪ sunsetting` keys with ±60 s leeway.
+- [x] Extend `internal/dbtest` with `SeedTenant(t, slug)` + `SeedSecondTenant(t, slug)` helpers that insert a fully-formed tenant row (with its first signing keypair already minted) — every Phase 2+ test that needs to exercise per-tenant signing/JWT/refresh logic uses these helpers, since the tenant CRUD HTTP surface doesn't land until Phase 3.
+- [x] Implement `internal/sessions/refresh.go`: opaque refresh tokens (32 bytes random), stored hashed in `oidc_refresh_tokens`, with `family_id` and `parent_id`. `Mint(tenant, client, user, scope, parent_id)` creates a new row in the parent's family. `Consume(token)` atomically checks `consumed_at IS NULL` via `UPDATE … RETURNING`; if NULL, mint a child and return; if NOT NULL, **reuse detected** — set `revoked_at` on every row with the same `family_id`, emit a `cypra_oidc_refresh_reuse_detected_total` metric and an audit entry, return error.
+- [x] Implement the bootstrap flow in `internal/bootstrap`: `IsFirstBoot()` checks `instance_admins` + `bootstrap_tokens`. `MintSetupToken()` generates 32 bytes random, INSERTs into `bootstrap_tokens` with 24 h expiry, COMMITs, then logs the plaintext token via `slog` with `redacted-on-export: true` attribute. `RedeemSetupToken(plaintext)` atomically checks `consumed_at IS NULL AND revoked_at IS NULL AND expires_at > now()`, marks `consumed_at`, returns the right to mint the first instance admin. `RevokeSetupToken()` (for `cypra admin reset-bootstrap`) sets `revoked_at` on any live token and mints a fresh one if `instance_admins` is empty.
+- [x] Author crash-resistance test for bootstrap: simulate a process crash between `INSERT bootstrap_tokens` COMMIT and the slog emit; assert that on restart, `cypra admin reset-bootstrap` re-mints. Document the failure-mode behavior (token row exists, plaintext lost — recoverable via reset-bootstrap).
+- [x] Author master-key-rotation crash-resistance test: kill the process mid-rewrap (after some `rows_done`); restart with both old + new KEK; `Resume(rotationID)` continues to completion; cutover succeeds.
+- [x] Author refresh-token reuse property-based test: build random family graphs (parent → child → grandchild → …), randomly choose a node to "reuse", assert all descendants are revoked.
+- [x] Author refresh-token race test: two goroutines present the same parent simultaneously; assert exactly one mints a child and the other gets `consumed_at != NULL` on its second-attempt (next-call) reuse-detection.
+- [x] Implement Argon2id deny-list (top-N common passwords from a static list) and a unit test asserting common passwords are rejected with a specific error code.
+- [x] Fill in ADR-0004 (envelope encryption + master-key rotation), ADR-0005 (signing-key rotation schedule), ADR-0006 (bootstrap setup-token).
 
 ### Acceptance
 
-- [ ] Argon2id encode/verify round-trip works at the documented parameters.
-- [ ] Envelope encryption: encrypt → decrypt round-trip with the same KEK; decrypt with a different KEK fails with a typed error.
-- [ ] Master-key rotation completes online with concurrent writes; resumes after process kill.
-- [ ] Per-tenant signing-key generation + rotation: rotating moves `active → overlap`; mints with `active`; verifier accepts both.
-- [ ] JWT issuance + verification: claims match expected shape; `iss` is per-tenant; clock skew honored at ±60 s.
-- [ ] Refresh-token rotation: present-rotate-present-old triggers family-wide revocation.
-- [ ] Bootstrap: fresh DB → `MintSetupToken` → `RedeemSetupToken` → first instance admin minted → second `MintSetupToken` is refused (admin exists). After `RevokeSetupToken`, a fresh token is mintable only if `instance_admins` is empty.
-- [ ] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
-- [ ] **Hygiene gate:** lint / format / typecheck clean; no plaintext secrets logged anywhere; `redacted-on-export` attribute present on bootstrap-token log emission (asserted by a log-shape test).
-- [ ] **Test gate:** unit tests cover every crypto primitive; integration tests cover signing-key rotation, master-key rotation crash-resume, refresh-token race + reuse, bootstrap mint/redeem/revoke.
-- [ ] **Phase boundary invariant:** clean clone → install → test succeeds.
+- [x] Argon2id encode/verify round-trip works at the documented parameters.
+- [x] Envelope encryption: encrypt → decrypt round-trip with the same KEK; decrypt with a different KEK fails with a typed error.
+- [x] Master-key rotation completes online with concurrent writes; resumes after process kill.
+- [x] Per-tenant signing-key generation + rotation: rotating moves `active → overlap`; mints with `active`; verifier accepts both.
+- [x] JWT issuance + verification: claims match expected shape; `iss` is per-tenant; clock skew honored at ±60 s.
+- [x] Refresh-token rotation: present-rotate-present-old triggers family-wide revocation.
+- [x] Bootstrap: fresh DB → `MintSetupToken` → `RedeemSetupToken` → first instance admin minted → second `MintSetupToken` is refused (admin exists). After `RevokeSetupToken`, a fresh token is mintable only if `instance_admins` is empty.
+- [x] **CI gate:** load the `agent-ci` skill, then run `agent-ci run --quiet --all`; it is green.
+- [x] **Hygiene gate:** lint / format / typecheck clean; no plaintext secrets logged anywhere; `redacted-on-export` attribute present on bootstrap-token log emission (asserted by a log-shape test).
+- [x] **Test gate:** unit tests cover every crypto primitive; integration tests cover signing-key rotation, master-key rotation crash-resume, refresh-token race + reuse, bootstrap mint/redeem/revoke.
+- [x] **Phase boundary invariant:** clean clone → install → test succeeds.
 
 ### Handoff
 
-_Filled at phase completion._
+Phase 2 landed the core security primitives: Argon2id password hashing with common-password rejection, AES-GCM envelope encryption, resumable master-key DEK rewrap, per-tenant OIDC signing-key generation and rotation, JWT access-token mint/verify, opaque refresh-token family rotation with reuse detection, and the first-boot setup-token flow. `internal/dbtest.SeedTenant` now creates a fully formed tenant with an active signing key for Phase 2+ tests.
+
+Deviations and notes: master-key rotation is implemented as a generic registered encrypted-column service; new writes during rotation are expected to use the new KEK and are not rewrapped by the old-KEK pass. The bootstrap reset path is function-level for now because the CLI lands in Phase 6, matching the phase note.
+
+Verification: `./bin/agent-ci run --quiet --all` passed after loading the `agent-ci` skill. This included `golangci-lint run` with 0 issues, Prettier check clean, `go vet ./...`, frontend typecheck, `go test ./...`, and frontend Vitest. New tests cover Argon2id round-trip/rejection, envelope encrypt/decrypt and wrong-KEK failure, signing key JWK/private-key handling, signing-key rotation and sunsetting, JWT claim shape and ±60 s leeway, refresh reuse/race/family revocation plus audit/metric emission, bootstrap mint/redeem/revoke/reset recovery, and master-key rotation resume with a concurrent new write.
 
 ---
 
