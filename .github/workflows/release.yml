@@ -1,0 +1,38 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+      - "sdk/go/v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release-skeleton:
+    if: startsWith(github.ref_name, 'v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Record release skeleton
+        run: |
+          printf 'Release packaging lands in Phase 14 for %s\n' "${GITHUB_REF_NAME}"
+
+  sdk-go:
+    if: startsWith(github.ref_name, 'sdk/go/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: sdk/go/go.mod
+          cache-dependency-path: sdk/go/go.sum
+      - name: Test SDK
+        working-directory: sdk/go
+        run: go test ./...
+      - name: Prime Go module proxy
+        working-directory: sdk/go
+        run: |
+          module="github.com/watzon/cypra/sdk/go@${GITHUB_REF_NAME#sdk/go/}"
+          GOPROXY=https://proxy.golang.org go list -m "$module"

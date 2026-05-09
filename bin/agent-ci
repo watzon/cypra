@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ "${1:-}" != "run" ]]; then
+  printf '{"tool":"agent-ci","status":"error","message":"usage: agent-ci run [--quiet] [--all]"}\n' >&2
+  exit 2
+fi
+
+shift
+
+quiet=false
+all=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --quiet)
+      quiet=true
+      ;;
+    --all)
+      all=true
+      ;;
+    --pause-on-failure)
+      ;;
+    *)
+      printf '{"tool":"agent-ci","status":"error","message":"unknown argument: %s"}\n' "$1" >&2
+      exit 2
+      ;;
+  esac
+  shift
+done
+
+printf '{"tool":"agent-ci","status":"started","quiet":%s,"all":%s,"target":"make ci-pipeline"}\n' "$quiet" "$all"
+make ci-pipeline
+printf '{"tool":"agent-ci","status":"passed","target":"make ci-pipeline"}\n'

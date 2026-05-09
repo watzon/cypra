@@ -1,0 +1,10 @@
+<div style="font-family: ui-monospace, Menlo, Consolas, monospace; color: #09090b">
+  {{if .TenantLogoURL}}<img
+    src="{{.TenantLogoURL}}"
+    alt="{{.TenantDisplayName}}"
+    style="max-height: 40px; max-width: 180px"
+  />{{end}}
+  <h1 style="font-size: 20px">You're invited to Cypra</h1>
+  <p>You've been invited to Cypra. Open this link to continue: {{.InviteURL}}</p>
+  <p style="color:{{.TenantAccent}}">{{.TenantDisplayName}}</p>
+</div>

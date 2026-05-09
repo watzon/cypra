@@ -1,0 +1,17 @@
+node_modules
+dashboard/dist
+examples/nextjs/.next
+examples/nextjs/.next-*
+bin
+bun.lockb
+cypra.pen
+.agents
+.claude
+.codex
+.commandcode
+.opencode
+BRAINSTORM.md
+DESIGN.md
+PLAN.md
+TASKS.md
+docs/archive/*.md

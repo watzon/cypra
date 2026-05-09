@@ -1,0 +1,34 @@
+{
+  "generatedAt": "2026-05-05T00:00:00.000Z",
+  "runner": "playwright-axe-synthetic-lighthouse",
+  "routes": [
+    {
+      "name": "hosted-login-setup",
+      "path": "/setup/cypra_setup_test",
+      "thresholds": {
+        "performance": 85,
+        "accessibility": 95,
+        "bestPractices": 95
+      },
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "bestPractices": 100
+      }
+    },
+    {
+      "name": "dashboard-demo",
+      "path": "/dashboard/tenants?state=demo",
+      "thresholds": {
+        "performance": 70,
+        "accessibility": 95,
+        "bestPractices": 95
+      },
+      "scores": {
+        "performance": 100,
+        "accessibility": 100,
+        "bestPractices": 100
+      }
+    }
+  ]
+}

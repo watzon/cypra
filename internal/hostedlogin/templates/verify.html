@@ -1,0 +1,4 @@
+{{ define "content" }}
+<p>{{ if .Message }}{{ .Message }}{{ else }}Verifying your email link.{{ end }}</p>
+<a class="button" href="/login">Continue</a>
+{{ end }}{{ template "base" . }}

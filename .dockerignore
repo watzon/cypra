@@ -1,0 +1,11 @@
+.git
+.github
+.data
+bin
+node_modules
+dashboard/node_modules
+dashboard/dist
+test-results
+coverage
+*.cover
+*.log

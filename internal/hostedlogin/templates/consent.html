@@ -1,0 +1,24 @@
+{{ define "content" }}
+<p>Review the requested OIDC scopes before continuing.</p>
+<form
+  class="stack"
+  hx-post="/oidc/consent"
+  hx-target="#consent-result"
+  hx-swap="innerHTML"
+  method="post"
+>
+  {{ range .Scopes }}
+  <div class="scope">
+    {{ if .New }}<span class="new">+ new</span>{{ end }}<strong>{{ .Name }}</strong>
+    <p>{{ .Description }}</p>
+  </div>
+  {{ end }} {{ if .ContinueURL }}<input
+    name="continue"
+    type="hidden"
+    value="{{ .ContinueURL }}"
+  />{{ end }}
+  <button name="decision" value="allow" type="submit">Allow</button>
+  <button class="secondary" name="decision" value="deny" type="submit">Deny</button>
+</form>
+<div id="consent-result" role="status" aria-live="polite"></div>
+{{ end }}{{ template "base" . }}
