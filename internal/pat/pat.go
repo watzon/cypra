@@ -29,6 +29,7 @@ type Token struct {
 	Last4      string     `json:"last4"`
 	Scopes     []string   `json:"scopes"`
 	CreatedAt  time.Time  `json:"created_at"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
 	RevokedAt  *time.Time `json:"revoked_at,omitempty"`
 }
@@ -39,21 +40,25 @@ type CreatedToken struct {
 }
 
 func (s Service) Create(ctx context.Context, tenantID, userID uuid.UUID, name string, scopes []string) (CreatedToken, error) {
+	return s.CreateWithExpiry(ctx, tenantID, userID, name, scopes, nil)
+}
+
+func (s Service) CreateWithExpiry(ctx context.Context, tenantID, userID uuid.UUID, name string, scopes []string, expiresAt *time.Time) (CreatedToken, error) {
 	plaintext, err := randomToken()
 	if err != nil {
 		return CreatedToken{}, err
 	}
 	id := uuid.New()
 	var created time.Time
-	err = s.DB.QueryRowContext(ctx, `INSERT INTO personal_access_tokens (id, tenant_id, user_id, name, token_hash, token_suffix, scopes) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING created_at`, id, tenantID, userID, name, hashToken(plaintext), suffix(plaintext), pq.Array(scopes)).Scan(&created)
+	err = s.DB.QueryRowContext(ctx, `INSERT INTO personal_access_tokens (id, tenant_id, user_id, name, token_hash, token_suffix, scopes, expires_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING created_at`, id, tenantID, userID, name, hashToken(plaintext), suffix(plaintext), pq.Array(scopes), expiresAt).Scan(&created)
 	if err != nil {
 		return CreatedToken{}, fmt.Errorf("create pat: %w", err)
 	}
-	return CreatedToken{Token: Token{ID: id, TenantID: tenantID, UserID: userID, Name: name, Last4: suffix(plaintext), Scopes: scopes, CreatedAt: created}, Plaintext: plaintext}, nil
+	return CreatedToken{Token: Token{ID: id, TenantID: tenantID, UserID: userID, Name: name, Last4: suffix(plaintext), Scopes: scopes, CreatedAt: created, ExpiresAt: expiresAt}, Plaintext: plaintext}, nil
 }
 
 func (s Service) List(ctx context.Context, tenantID, userID uuid.UUID) ([]Token, error) {
-	rows, err := s.DB.QueryContext(ctx, `SELECT id, tenant_id, user_id, name, token_suffix, scopes, created_at, last_used_at, revoked_at FROM personal_access_tokens WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC`, tenantID, userID)
+	rows, err := s.DB.QueryContext(ctx, `SELECT id, tenant_id, user_id, name, token_suffix, scopes, created_at, expires_at, last_used_at, revoked_at FROM personal_access_tokens WHERE tenant_id = $1 AND user_id = $2 ORDER BY created_at DESC`, tenantID, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -61,9 +66,12 @@ func (s Service) List(ctx context.Context, tenantID, userID uuid.UUID) ([]Token,
 	var tokens []Token
 	for rows.Next() {
 		var token Token
-		var lastUsed, revoked sql.NullTime
-		if err := rows.Scan(&token.ID, &token.TenantID, &token.UserID, &token.Name, &token.Last4, pq.Array(&token.Scopes), &token.CreatedAt, &lastUsed, &revoked); err != nil {
+		var expires, lastUsed, revoked sql.NullTime
+		if err := rows.Scan(&token.ID, &token.TenantID, &token.UserID, &token.Name, &token.Last4, pq.Array(&token.Scopes), &token.CreatedAt, &expires, &lastUsed, &revoked); err != nil {
 			return nil, err
+		}
+		if expires.Valid {
+			token.ExpiresAt = &expires.Time
 		}
 		if lastUsed.Valid {
 			token.LastUsedAt = &lastUsed.Time
@@ -89,13 +97,16 @@ func (s Service) RevokeForUser(ctx context.Context, tenantID, userID uuid.UUID, 
 
 func (s Service) Authenticate(ctx context.Context, plaintext string) (Token, error) {
 	var token Token
-	var lastUsed, revoked sql.NullTime
-	err := s.DB.QueryRowContext(ctx, `UPDATE personal_access_tokens SET last_used_at = now() WHERE token_hash = $1 AND revoked_at IS NULL RETURNING id, tenant_id, user_id, name, token_suffix, scopes, created_at, last_used_at, revoked_at`, hashToken(plaintext)).Scan(&token.ID, &token.TenantID, &token.UserID, &token.Name, &token.Last4, pq.Array(&token.Scopes), &token.CreatedAt, &lastUsed, &revoked)
+	var expires, lastUsed, revoked sql.NullTime
+	err := s.DB.QueryRowContext(ctx, `UPDATE personal_access_tokens SET last_used_at = now() WHERE token_hash = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now()) RETURNING id, tenant_id, user_id, name, token_suffix, scopes, created_at, expires_at, last_used_at, revoked_at`, hashToken(plaintext)).Scan(&token.ID, &token.TenantID, &token.UserID, &token.Name, &token.Last4, pq.Array(&token.Scopes), &token.CreatedAt, &expires, &lastUsed, &revoked)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Token{}, ErrInvalidToken
 	}
 	if lastUsed.Valid {
 		token.LastUsedAt = &lastUsed.Time
+	}
+	if expires.Valid {
+		token.ExpiresAt = &expires.Time
 	}
 	if revoked.Valid {
 		token.RevokedAt = &revoked.Time

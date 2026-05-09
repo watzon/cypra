@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -57,6 +58,17 @@ func TestResolverRequiresTenantProvider(t *testing.T) {
 	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
 	resolver := email.Resolver{DB: harness.SQL}
 	if _, err := resolver.Resolve(context.Background(), tenantID); err != email.ErrProviderRequired {
+		t.Fatalf("resolve error = %v", err)
+	}
+}
+
+func TestResolverTreatsDisabledProviderAsRequired(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	if _, err := harness.SQL.Exec(`INSERT INTO email_provider_configs (tenant_id, kind, config_encrypted, from_address, from_name, enabled) VALUES ($1, 'terminal', '{}'::bytea, 'noreply@example.com', 'Cypra', false)`, tenantID); err != nil {
+		t.Fatalf("seed disabled provider: %v", err)
+	}
+	if _, err := (email.Resolver{DB: harness.SQL}).Resolve(context.Background(), tenantID); !errors.Is(err, email.ErrProviderRequired) {
 		t.Fatalf("resolve error = %v", err)
 	}
 }

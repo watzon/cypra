@@ -1,11 +1,30 @@
 package email
 
 import (
+	"bytes"
+	"embed"
 	"encoding/json"
-	"fmt"
-	"html/template"
+	htmltemplate "html/template"
 	"strings"
+	texttemplate "text/template"
 )
+
+//go:embed templates/*.txt templates/*.html
+var emailTemplateFS embed.FS
+
+type templateSpec struct {
+	Subject string
+	Text    string
+	HTML    string
+}
+
+var emailTemplates = map[string]templateSpec{
+	"admin-invite":        {Subject: "You're invited to Cypra", Text: "templates/admin-invite.txt", HTML: "templates/admin-invite.html"},
+	"magic-link":          {Subject: "Your Cypra sign-in link", Text: "templates/magic-link.txt", HTML: "templates/magic-link.html"},
+	"password-reset":      {Subject: "Reset your password", Text: "templates/password-reset.txt", HTML: "templates/password-reset.html"},
+	"email-verification":  {Subject: "Verify your email", Text: "templates/email-verification.txt", HTML: "templates/email-verification.html"},
+	"breach-notification": {Subject: "Security notice", Text: "templates/breach-notification.txt", HTML: "templates/breach-notification.html"},
+}
 
 // Render converts an outbox template and payload into an email message.
 func Render(template, to string, payload json.RawMessage) (Message, error) {
@@ -15,32 +34,70 @@ func Render(template, to string, payload json.RawMessage) (Message, error) {
 			return Message{}, err
 		}
 	}
-	switch template {
-	case "admin-invite":
-		return brandedMessage(to, "You're invited to Cypra", fmt.Sprintf("You've been invited to Cypra. Open this link to continue: %v", values["invite_url"]), values), nil
-	case "magic-link":
-		return brandedMessage(to, "Your Cypra sign-in link", fmt.Sprintf("Open this link to sign in: %v", values["magic_link_url"]), values), nil
-	case "password-reset":
-		return brandedMessage(to, "Reset your password", fmt.Sprintf("Open this link to reset your password: %v", values["reset_url"]), values), nil
-	case "email-verification":
-		return brandedMessage(to, "Verify your email", fmt.Sprintf("Open this link to verify your email: %v", values["verify_url"]), values), nil
-	case "breach-notification":
-		return brandedMessage(to, "Security notice", fmt.Sprintf("Security notice: %v", values["message"]), values), nil
-	default:
+	spec, ok := emailTemplates[template]
+	if !ok {
 		return Message{To: to, Subject: template, Text: string(payload)}, nil
+	}
+	data := emailTemplateData(values)
+	text, err := renderTextTemplate(spec.Text, data)
+	if err != nil {
+		return Message{}, err
+	}
+	html, err := renderHTMLTemplate(spec.HTML, data)
+	if err != nil {
+		return Message{}, err
+	}
+	return Message{To: to, Subject: spec.Subject, Text: text, HTML: html}, nil
+}
+
+type emailTemplateView struct {
+	InviteURL         string
+	MagicLinkURL      string
+	MagicLinkToken    string
+	ResetURL          string
+	VerifyURL         string
+	Message           string
+	TenantAccent      string
+	TenantLogoURL     string
+	TenantDisplayName string
+}
+
+func emailTemplateData(values map[string]any) emailTemplateView {
+	return emailTemplateView{
+		InviteURL:         stringValue(values["invite_url"], ""),
+		MagicLinkURL:      stringValue(values["magic_link_url"], ""),
+		MagicLinkToken:    stringValue(values["token"], ""),
+		ResetURL:          stringValue(values["reset_url"], ""),
+		VerifyURL:         stringValue(values["verify_url"], ""),
+		Message:           stringValue(values["message"], ""),
+		TenantAccent:      stringValue(values["tenant_accent"], "#0D9488"),
+		TenantLogoURL:     stringValue(values["tenant_logo_url"], ""),
+		TenantDisplayName: stringValue(values["tenant_display_name"], "Cypra"),
 	}
 }
 
-func brandedMessage(to, subject, text string, values map[string]any) Message {
-	accent := stringValue(values["tenant_accent"], "#0D9488")
-	logo := stringValue(values["tenant_logo_url"], "")
-	displayName := stringValue(values["tenant_display_name"], "Cypra")
-	var logoHTML string
-	if logo != "" {
-		logoHTML = fmt.Sprintf(`<img src="%s" alt="%s" style="max-height:40px;max-width:180px" />`, template.HTMLEscapeString(logo), template.HTMLEscapeString(displayName))
+func renderTextTemplate(path string, data emailTemplateView) (string, error) {
+	tpl, err := texttemplate.ParseFS(emailTemplateFS, path)
+	if err != nil {
+		return "", err
 	}
-	html := fmt.Sprintf(`<div style="font-family:ui-monospace,Menlo,Consolas,monospace;color:#09090B">%s<h1 style="font-size:20px">%s</h1><p>%s</p><p style="color:%s">%s</p></div>`, logoHTML, template.HTMLEscapeString(subject), template.HTMLEscapeString(text), template.HTMLEscapeString(accent), template.HTMLEscapeString(displayName))
-	return Message{To: to, Subject: subject, Text: text, HTML: html}
+	var out bytes.Buffer
+	if err := tpl.Execute(&out, data); err != nil {
+		return "", err
+	}
+	return out.String(), nil
+}
+
+func renderHTMLTemplate(path string, data emailTemplateView) (string, error) {
+	tpl, err := htmltemplate.ParseFS(emailTemplateFS, path)
+	if err != nil {
+		return "", err
+	}
+	var out bytes.Buffer
+	if err := tpl.Execute(&out, data); err != nil {
+		return "", err
+	}
+	return out.String(), nil
 }
 
 func stringValue(value any, fallback string) string {

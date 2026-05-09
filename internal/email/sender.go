@@ -113,7 +113,7 @@ func (r Resolver) Resolve(ctx context.Context, tenantID uuid.UUID) (Sender, erro
 	var encrypted []byte
 	var fromAddress string
 	var fromName string
-	err := r.DB.QueryRowContext(ctx, `SELECT kind, config_encrypted, from_address, from_name FROM email_provider_configs WHERE tenant_id = $1 LIMIT 1`, tenantID).Scan(&kind, &encrypted, &fromAddress, &fromName)
+	err := r.DB.QueryRowContext(ctx, `SELECT kind, config_encrypted, from_address, from_name FROM email_provider_configs WHERE tenant_id = $1 AND enabled = true LIMIT 1`, tenantID).Scan(&kind, &encrypted, &fromAddress, &fromName)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrProviderRequired
 	}

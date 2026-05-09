@@ -1,0 +1,1 @@
+You've been invited to Cypra. Open this link to continue: {{.InviteURL}}
