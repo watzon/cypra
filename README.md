@@ -3,92 +3,198 @@
 [![Build](https://github.com/watzon/cypra/actions/workflows/build.yml/badge.svg)](https://github.com/watzon/cypra/actions/workflows/build.yml)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
 
-Cypra is an open-source, self-hosted, multi-tenant authentication platform: a Go server with an embedded React dashboard, Postgres storage, hosted login, and a per-tenant OIDC issuer designed to be bootable by a small team in an afternoon.
+Cypra is a self-hosted, multi-tenant authentication server for technical operators who want a small, inspectable alternative to managed auth platforms and heavyweight identity stacks.
 
-The current implementation source of truth lives in [`PLAN.md`](./PLAN.md), [`DESIGN.md`](./DESIGN.md), and [`BRAINSTORM.md`](./BRAINSTORM.md). The original v1 product plan is archived at [`docs/archive/PLAN-2026-05-09-v1-product-plan.md`](./docs/archive/PLAN-2026-05-09-v1-product-plan.md), and the historical phase task log is archived at [`docs/archive/TASKS-2026-05-09-legacy-phases.md`](./docs/archive/TASKS-2026-05-09-legacy-phases.md). Execution is tracked in [`TASKS.md`](./TASKS.md).
+It ships as one Go server with an embedded React dashboard, Postgres persistence, hosted login pages, passkeys, password and magic-link flows, tenant-scoped OIDC issuers, audit logs, backup/export tooling, and a Go SDK.
 
-## Architecture
+> [!IMPORTANT]
+> Cypra is not ready for external production testers yet. The codebase is locally runnable and heavily tested, but the active readiness plan is still closing security, deployment, release, and UX gates before the first VPS tester rollout. Track that work in [`PLAN.md`](./PLAN.md) and [`TASKS.md`](./TASKS.md).
 
-Cypra ships as one Go binary with an embedded dashboard SPA. The server exposes hosted login, per-tenant OIDC, REST admin APIs, health/readiness checks, metrics, storage URLs, and the dashboard from the same process. Postgres is the only required external data service; storage can be local disk or S3-compatible.
+## Why Cypra Exists
 
-Tenant isolation is enforced at three layers: host-based tenant resolution, `TenantScopedDB`, and Postgres RLS. Each tenant has its own OIDC issuer (`https://<tenant>.<install-domain>`), WebAuthn RP ID, signing-key namespace, users, sessions, and OIDC clients.
+Cypra is for teams that want to own their auth stack without inheriting a cluster-sized control plane.
 
-Screenshots and visual walkthroughs are captured during the Phase 12/13 local canonical demo. See [`docs/firstrun.md`](./docs/firstrun.md) for the first-run path and [`tests/e2e/lighthouse-baseline.json`](./tests/e2e/lighthouse-baseline.json) for the current hosted-login/dashboard baseline.
+- **Self-hosted by default:** run Cypra on a small VPS with Docker Compose and Postgres.
+- **Tenant-aware from the core:** each tenant has its own issuer, users, clients, WebAuthn RP ID, signing keys, sessions, and branding surface.
+- **Operator-friendly:** setup wizard, dashboard, recovery commands, health/readiness checks, metrics, audit export, and backup/import flows are part of the product.
+- **OIDC-compatible:** downstream apps use normal OIDC clients; examples include Next.js/Auth.js and a Go server.
+- **Security-oriented:** tenant isolation uses host resolution, a tenant-scoped DB boundary, and Postgres RLS; secrets use envelope encryption; sessions and refresh tokens have reuse detection.
+
+## Current Status
+
+Cypra is in an external-tester readiness push.
+
+What is already strong locally:
+
+- `./bin/agent-ci run --quiet --all` passes.
+- Coverage floors pass for security-critical packages.
+- Managed e2e, accessibility, performance, image-size, and cold-start gates exist.
+- The Dockerfile is compact and production-oriented: multi-stage build, distroless non-root runtime, migrations included.
+- The dashboard and hosted login have a coherent design system documented in [`DESIGN.md`](./DESIGN.md).
+
+What still blocks the first external tester wave:
+
+- Security hardening around factor management, consent, proxy trust, cookies, PATs, and master-key validation.
+- Production deployment hardening for the VPS Compose/Caddy path.
+- Release automation, GHCR publishing, GitHub Release artifacts, and deployed smoke evidence.
+- Dashboard and hosted-login polish to remove no-op actions, placeholder copy, and prototype-grade interactions.
+
+## Architecture At A Glance
+
+```text
+Browser / app
+  -> hosted login / dashboard / OIDC / API
+  -> single Cypra Go server
+  -> Postgres
+  -> local-disk or S3-compatible object storage
+```
+
+The same server process exposes:
+
+- Hosted login routes (`/login`, `/signup`, `/reset`, `/2fa`, `/oidc/consent`)
+- Per-tenant OIDC discovery, JWKS, authorize, token, userinfo, and revoke endpoints
+- Dashboard and admin REST APIs
+- Setup and recovery flows
+- `/healthz`, `/readyz`, `/metrics`, and storage proxy routes
+
+Tenant isolation is enforced in layers: host-based tenant resolution, explicit tenant-scoped database APIs, Postgres RLS policies, per-tenant issuer URLs, and per-tenant signing-key namespaces.
+
+## Features
+
+| Area           | Included                                                                                                    |
+| -------------- | ----------------------------------------------------------------------------------------------------------- |
+| Authentication | Password, magic link, passkeys/WebAuthn, TOTP, WebAuthn 2FA, backup codes, Google upstream OAuth            |
+| OIDC           | Per-tenant issuer, discovery, JWKS, auth code + PKCE, refresh-token rotation, userinfo, revoke, consent     |
+| Admin          | Setup token, instance admins, tenant/project/user management, PATs, signing keys, provider configuration    |
+| Operations     | Health/readiness, metrics, OTEL hooks, audit export, GDPR export/delete, backup/export/import, recovery CLI |
+| UI             | Embedded dashboard, server-rendered hosted login, tenant accent/logo/display-name branding                  |
+| SDKs/examples  | Go admin/OIDC SDK, Next.js/Auth.js example, Go server example                                               |
+
+Known non-goals for the current readiness push: SAML, SMS, embeddable widgets, TypeScript SDK, tenant CNAME automation, Kubernetes/Helm, multi-region SaaS deployment, and compliance certification claims.
 
 ## Prerequisites
 
-- Go 1.26.1 via the pinned toolchain, with `go.mod` targeting Go 1.25.
-- Bun 1.3.11.
-- Docker Compose.
-- `portless` for HTTPS and wildcard tenant-subdomain local development.
-- `golangci-lint`, `gofumpt`, and `goimports`.
+- Go via the pinned toolchain in [`go.mod`](./go.mod)
+- Bun `1.3.11`
+- Docker Engine with Compose v2
+- `golangci-lint`, `gofumpt`, and `goimports`
+- For full local HTTPS/wildcard development: `portless`
+- For live-reloading local dev: `air`
 
-## From Zero To Tests Pass
+## Quick Start: Run The Checks
 
 ```sh
 git clone https://github.com/watzon/cypra.git
 cd cypra
 bun install --frozen-lockfile
 go mod download
-make ci
-```
-
-The agent-friendly equivalent is:
-
-```sh
 ./bin/agent-ci run --quiet --all
 ```
 
+Equivalent project target:
+
+```sh
+make ci
+```
+
+The CI pipeline installs dependencies, builds the dashboard and Go server, runs lint/format/typecheck, Go tests, dashboard tests, coverage floors, p99 performance checks, compressed image-size checks, and cold-start checks.
+
 ## Local Development
 
-Start the local development stack:
+Start the full local developer stack:
 
 ```sh
 make dev
 ```
 
-`make dev` creates `.env` from `.env.example` if needed, starts the compose-managed dev dependencies, starts portless with wildcard routing, registers `https://cypra.localhost` to Cypra, runs migrations, starts the dashboard Vite server, starts Cypra, and stops the dev compose services when you exit.
+`make dev` creates `.env` from `.env.example` if needed, starts local Postgres, starts `portless` wildcard routing, registers `https://cypra.localhost`, runs migrations, starts Vite for the dashboard, and runs the Go server through `air`.
 
-To manage only the compose dependencies:
+Useful local routes:
+
+- `https://cypra.localhost`
+- `https://<tenant>.cypra.localhost`
+
+Manage only the local dependency stack:
 
 ```sh
 make dev-up
 make dev-down
 ```
 
-Local HTTPS routes are served through `portless`:
-
-- `https://cypra.localhost`
-- `https://*.cypra.localhost`
-
-## Quick Start With Docker Compose
-
-The reference compose stack is Cypra plus Postgres:
+Reset local development data:
 
 ```sh
-docker compose -f deploy/docker-compose.yml up
+make dev-reset
 ```
 
-For TLS termination with Caddy, use the `with-tls` profile after configuring DNS and `deploy/Caddyfile.example`:
+> [!WARNING]
+> `make dev-reset` deletes the local Cypra Postgres volume. It is intended only for local development.
+
+## First Run Path
+
+The local canonical demo walks from a fresh install to a downstream Next.js sign-in:
+
+1. Start Cypra with `make dev`.
+2. Open the setup URL printed in the server logs.
+3. Redeem the setup token, enroll a passkey, and save backup codes.
+4. Create tenant `acme` and project `console`.
+5. Configure local providers.
+6. Start `examples/nextjs` with the project issuer/client values.
+7. Sign in through Cypra from the Next.js app.
+
+Full walkthrough: [`docs/firstrun.md`](./docs/firstrun.md).
+
+Run the managed browser smoke:
 
 ```sh
-docker compose -f deploy/docker-compose.yml --profile with-tls up
+CYPRA_E2E_MANAGED=1 bun run test:e2e -- tests/e2e/examples-smoke.spec.ts tests/e2e/canonical-demo/canonical-demo.spec.ts
 ```
 
-The Railway one-click recipe is documented in [`docs/deploy/railway-template.md`](./docs/deploy/railway-template.md). Publication of the separate Railway template repository is a deployment task.
+## Common Commands
 
-## Tests
+| Command                            | Purpose                                                                |
+| ---------------------------------- | ---------------------------------------------------------------------- |
+| `make install`                     | Install Bun and Go dependencies                                        |
+| `make build`                       | Build dashboard assets and the `bin/cypra` server binary               |
+| `make test`                        | Run Go tests, coverage floors, and dashboard tests                     |
+| `make lint`                        | Run Go, dashboard, no-op UI, audit-write, and escape-hatch lint checks |
+| `make typecheck`                   | Run Go vet and TypeScript checks                                       |
+| `make ci`                          | Run the full local CI pipeline                                         |
+| `./bin/agent-ci run --quiet --all` | Agent-friendly wrapper around the same CI pipeline                     |
 
-- `make test` runs Go and dashboard tests.
-- `make lint` runs Go and dashboard linters.
-- `make typecheck` runs Go vet and TypeScript checks.
-- `make ci-pipeline` is the exact pipeline used by `./bin/agent-ci` and GitHub Actions.
+## Deployment Notes
+
+Deployment docs exist, but they are still being hardened before external testers should rely on them.
+
+- VPS reference path: [`docs/deploy/vps.md`](./docs/deploy/vps.md)
+- Compose and Caddy reference: [`deploy/README.md`](./deploy/README.md)
+- Observability: [`docs/deploy/observability.md`](./docs/deploy/observability.md)
+- Railway template notes: [`docs/deploy/railway-template.md`](./docs/deploy/railway-template.md)
+
+The first external tester release requires a versioned GHCR image, verified release artifacts, a fresh VPS trial, deployed smoke evidence, metrics/tracing evidence, and owner approval. See [`TASKS.md`](./TASKS.md) for the active gate list.
+
+## Repository Map
+
+| Path             | Purpose                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------- |
+| `cmd/cypra/`     | CLI entrypoint and backup/import commands                                             |
+| `internal/`      | Go server, auth, OIDC, storage, DB, sessions, observability, and HTTP handlers        |
+| `dashboard/`     | Embedded React dashboard                                                              |
+| `db/migrations/` | SQL migrations                                                                        |
+| `deploy/`        | Compose, Caddy, and alerting references                                               |
+| `docs/`          | Architecture, security, deployment, playbooks, tutorials, ADRs, and readiness notes   |
+| `examples/`      | Downstream app examples                                                               |
+| `sdk/go/`        | Go SDK packages                                                                       |
+| `tests/e2e/`     | Playwright e2e, accessibility, canonical demo, backup/import, and example smoke tests |
 
 ## Documentation
 
-- [`docs/architecture/overview.md`](./docs/architecture/overview.md) explains the runtime architecture.
-- [`docs/security/threat-model.md`](./docs/security/threat-model.md) covers threats, secret handling, and GDPR posture.
-- [`docs/contributing/testing.md`](./docs/contributing/testing.md) documents CI and coverage floors.
-- [`docs/contributing/extending.md`](./docs/contributing/extending.md) explains auth, email, and storage extension points.
-- [`docs/deploy/vps.md`](./docs/deploy/vps.md) describes the single-host VPS recipe.
-- [`docs/deploy/observability.md`](./docs/deploy/observability.md) covers metrics, logs, traces, and error tracking.
+- Product/readiness plan: [`PLAN.md`](./PLAN.md)
+- Design system and UI behavior: [`DESIGN.md`](./DESIGN.md)
+- Execution tracker: [`TASKS.md`](./TASKS.md)
+- Architecture overview: [`docs/architecture/overview.md`](./docs/architecture/overview.md)
+- Threat model: [`docs/security/threat-model.md`](./docs/security/threat-model.md)
+- Testing guide: [`docs/contributing/testing.md`](./docs/contributing/testing.md)
+- Extension guide: [`docs/contributing/extending.md`](./docs/contributing/extending.md)
+
+The original broader product plan and historical implementation log are archived under [`docs/archive/`](./docs/archive/).
