@@ -2,6 +2,8 @@
 
 This directory contains the reference single-host deployment files.
 
+For local development, prefer the repository root `make dev` target. It uses this compose file for dependencies, loads values from `.env`, and registers the local HTTPS route with portless.
+
 ## Default Profile
 
 Runs Cypra and Postgres:

@@ -14,8 +14,12 @@ Secret rows use envelope encryption. Each write generates a random 256-bit DEK a
 
 Master-key rotation is an online rewrap: `master_key_rotations` tracks `phase`, `rows_total`, `rows_done`, and errors. Rotation code iterates registered encrypted columns, unwraps each DEK with the old KEK, wraps it under the new KEK, and updates `rows_done` after each row. Resume starts from `rows_done`; cutover marks `phase='done'`.
 
+Encrypted columns use two persisted shapes. Most row secrets store a binary prefix envelope: `encrypted_dek || ciphertext`. OIDC signing private keys store a JSON envelope with separate `encrypted_dek` and `ciphertext` fields. Rotation targets declare their shape explicitly so only the wrapped DEK changes; ciphertext bytes are preserved.
+
+Each row rewrap and its `rows_done` update commit in the same database transaction. A crash before commit leaves both unchanged; a crash after commit leaves both advanced. Resume can therefore restart from `rows_done` without trying to unwrap an already-rewrapped row with the old KEK.
+
 ## Consequences
 
 - Losing the KEK is irrecoverable for encrypted rows.
-- Rotation can recover after process interruption without restarting from the first row.
+- Rotation can recover after process interruption without restarting from the first row and without corrupting mixed envelope shapes.
 - New encrypted columns must be added to the rotation target list and covered by tests.

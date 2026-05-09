@@ -9,6 +9,8 @@ CYPRA_ISSUER=https://acme.cypra.localhost
 CYPRA_CLIENT_ID=client_cypra_acme_console
 CYPRA_CLIENT_SECRET=...
 AUTH_SECRET=dev-secret-change-me
+AUTH_URL=http://localhost:3000
+AUTH_TRUST_HOST=true
 ```
 
 ## Run
@@ -18,4 +20,4 @@ bun install
 bun run dev
 ```
 
-Visit `http://localhost:3000` and choose "Sign in with Cypra".
+Register `http://localhost:3000/api/auth/callback/cypra` as an allowed redirect URI on the Cypra OIDC client. Visit `http://localhost:3000` and choose "Sign in with Cypra". The example uses Auth.js' generic OIDC provider and exposes Cypra `sub` / `email` claims on the Auth.js session.

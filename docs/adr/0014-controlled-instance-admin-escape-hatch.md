@@ -10,10 +10,12 @@ Most Cypra data access is tenant-scoped. Some operator actions, such as listing 
 
 ## Decision
 
-`internal/db` exposes `ContextAsInstanceAdmin` and `TenantScopedDB.AsInstanceAdmin(ctx)`. Call sites must opt into the marker before using cross-tenant access. Phase 6 CLI admin paths use direct DB access for break-glass operations and log one-time secrets with `redacted-on-export=true`.
+`internal/db` exposes `ContextAsInstanceAdmin` and `TenantScopedDB.AsInstanceAdmin(ctx, reason)`. Call sites must opt into the marker and provide a reason before using cross-tenant access. The returned access layer is intentionally constrained: it exposes only allowlisted instance-admin actions and writes an audit entry with `cross_tenant=true` before running the operation.
+
+Direct raw `TenantScopedDB.DB()` access is not available. Production HTTP handlers must use tenant-scoped helpers by default; cross-tenant access is reserved for documented instance-admin paths and operator recovery workflows.
 
 ## Consequences
 
 - Cross-tenant intent is visible at call sites instead of hidden in generic query helpers.
-- Future lint rules can restrict `AsInstanceAdmin` imports to CLI admin and instance API packages.
+- Cross-tenant use has a narrow API surface, a reason string, and an audit trail instead of unrestricted `*gorm.DB` access.
 - RLS remains the database backstop; app-level helpers do not weaken runtime role grants.

@@ -6,7 +6,7 @@ export default function Home() {
         Configure Auth.js with the tenant issuer in <code>CYPRA_ISSUER</code>, then start a sign-in
         flow against Cypra.
       </p>
-      <a href="/api/auth/signin/cypra">Sign in with Cypra</a>
+      <a href="/api/auth/signin">Sign in with Cypra</a>
     </main>
   );
 }

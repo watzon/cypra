@@ -41,19 +41,22 @@ The agent-friendly equivalent is:
 
 ## Local Development
 
-Start Postgres:
-
-```sh
-docker compose -f deploy/docker-compose.yml up -d postgres
-```
-
-Run the development target:
+Start the local development stack:
 
 ```sh
 make dev
 ```
 
-Local HTTPS routes are expected to be served through `portless`:
+`make dev` creates `.env` from `.env.example` if needed, starts the compose-managed dev dependencies, starts portless with wildcard routing, registers `https://cypra.localhost` to Cypra, runs migrations, starts the dashboard Vite server, starts Cypra, and stops the dev compose services when you exit.
+
+To manage only the compose dependencies:
+
+```sh
+make dev-up
+make dev-down
+```
+
+Local HTTPS routes are served through `portless`:
 
 - `https://cypra.localhost`
 - `https://*.cypra.localhost`

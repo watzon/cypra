@@ -23,12 +23,14 @@ Start Postgres and run the app stack:
 make dev
 ```
 
+`make dev` creates `.env` from `.env.example` if it does not exist, starts the compose-managed development dependencies, starts portless with wildcard routing, registers `https://cypra.localhost` to Cypra, runs migrations, starts the dashboard Vite server, and stops the dev compose services when you exit. Use `make dev-up` and `make dev-down` when you only need the compose dependencies.
+
 The development URLs are:
 
 - `https://cypra.localhost` for the instance dashboard.
 - `https://acme.cypra.localhost` style tenant subdomains.
 
-Install and start `portless` before using WebAuthn or tenant-subdomain flows locally. The project relies on HTTPS and wildcard `.localhost` routing so dev and production cookie, RP ID, and issuer behavior stay aligned.
+Install `portless` before using WebAuthn or tenant-subdomain flows locally. `make dev` starts the proxy and registers the Cypra route. The project relies on HTTPS and wildcard `.localhost` routing so dev and production cookie, RP ID, and issuer behavior stay aligned.
 
 Agents configuring or troubleshooting this setup should load the `portless` skill and preserve the `https://cypra.localhost` plus `https://*.cypra.localhost` convention.
 
@@ -49,7 +51,7 @@ make ci
 - `make test` runs Go and dashboard tests.
 - `make lint` runs Go and dashboard linters.
 - `make typecheck` runs Go vet and TypeScript checks.
-- `make image-size` reports the compiled binary size.
+- `make image-size` builds the production Docker image, measures the gzip-compressed image archive, and fails over 80 MB.
 
 ## Commit Messages
 
