@@ -2,8 +2,9 @@
 
 FROM oven/bun:1.3.11-alpine AS dashboard-build
 WORKDIR /src
-COPY package.json bun.lock ./
+COPY package.json bun.lockb ./
 COPY dashboard/package.json dashboard/package.json
+COPY examples/nextjs/package.json examples/nextjs/package.json
 RUN bun install --frozen-lockfile
 COPY dashboard dashboard
 WORKDIR /src/dashboard
@@ -19,6 +20,7 @@ COPY --from=dashboard-build /src/dashboard/dist dashboard/dist
 RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w" -o /out/cypra ./cmd/cypra
 
 FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=go-build /src/db/migrations /db/migrations
 COPY --from=go-build /out/cypra /usr/local/bin/cypra
 USER nonroot:nonroot
 EXPOSE 8080

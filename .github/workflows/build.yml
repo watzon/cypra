@@ -71,10 +71,24 @@ jobs:
         run: make ci-pipeline
 
       - name: Run example e2e harness smoke
+        env:
+          CYPRA_E2E_MANAGED: "1"
         run: bunx playwright test tests/e2e/examples-smoke.spec.ts
 
       - name: Run canonical demo dry-run smoke
+        env:
+          CYPRA_E2E_MANAGED: "1"
         run: bunx playwright test tests/e2e/canonical-demo/canonical-demo.spec.ts
+
+      - name: Run backup import e2e
+        env:
+          CYPRA_E2E_MANAGED: "1"
+        run: bunx playwright test tests/e2e/backup-import.spec.ts
+
+      - name: Run accessibility route matrix
+        env:
+          CYPRA_E2E_MANAGED: "1"
+        run: bunx playwright test tests/e2e/accessibility.spec.ts
 
       - name: Run Lighthouse baseline
         run: bun run lighthouse:baseline
@@ -86,10 +100,14 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
       - name: Pull OpenID conformance suite
         run: docker pull openid/conformance-suite:latest
 
-      - name: Run OpenID conformance suite placeholder
+      - name: Run seeded tenant OpenID conformance smoke
         run: |
-          docker run --rm openid/conformance-suite:latest --help >/dev/null
-          echo "Nightly job hook is wired; Phase 12 canonical-demo seeds the hosted stack target."
+          go test ./tests/openidconformance -run TestSeededTenantOIDCConformanceSmoke -count=1 -v

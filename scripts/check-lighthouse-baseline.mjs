@@ -1,11 +1,8 @@
-import { chromium } from "playwright";
+import lighthouse from "lighthouse";
+import * as chromeLauncher from "chrome-launcher";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { spawn } from "node:child_process";
-import { createRequire } from "node:module";
-
-const require = createRequire(import.meta.url);
-const axeSource = readFileSync(require.resolve("axe-core/axe.min.js"), "utf8");
 
 const routes = [
   {
@@ -39,62 +36,42 @@ preview.stderr.on("data", (chunk) => {
   serverOutput += chunk.toString();
 });
 
+let chrome;
 try {
   await waitForServer(`${baseURL}/setup/cypra_setup_test`);
-  const browser = await chromium.launch();
+  chrome = await chromeLauncher.launch({ chromeFlags: ["--headless=new", "--no-sandbox"] });
   const latest = {
     generatedAt: new Date().toISOString(),
-    runner: "playwright-axe-synthetic-lighthouse",
+    runner: "lighthouse",
     routes: [],
   };
 
-  try {
-    for (const route of routes) {
-      const page = await browser.newPage({ viewport: { width: 1366, height: 900 } });
-      const consoleErrors = [];
-      const pageErrors = [];
-      page.on("console", (message) => {
-        if (message.type() === "error") consoleErrors.push(message.text());
-      });
-      page.on("pageerror", (error) => pageErrors.push(error.message));
-
-      const started = performance.now();
-      await page.goto(`${baseURL}${route.path}`, { waitUntil: "networkidle" });
-      const elapsedMs = Math.round(performance.now() - started);
-      await page.addScriptTag({ content: axeSource });
-      const axe = await page.evaluate(async () => globalThis.axe.run(document.body));
-      const nav = await page.evaluate(() => {
-        const entry = performance.getEntriesByType("navigation")[0];
-        return entry ? { duration: entry.duration, transferSize: entry.transferSize } : null;
-      });
-      await page.close();
-
-      const scores = {
-        performance: performanceScore(elapsedMs),
-        accessibility:
-          axe.violations.length === 0 ? 100 : Math.max(0, 100 - axe.violations.length * 20),
-        bestPractices: consoleErrors.length === 0 && pageErrors.length === 0 ? 100 : 90,
-      };
-      latest.routes.push({
-        name: route.name,
-        path: route.path,
-        thresholds: route.thresholds,
-        scores,
-        metrics: {
-          elapsedMs,
-          navigationDurationMs: nav?.duration ?? null,
-          transferSize: nav?.transferSize ?? null,
-        },
-        violations: axe.violations.map((violation) => ({
-          id: violation.id,
-          impact: violation.impact,
-        })),
-        consoleErrors,
-        pageErrors,
-      });
-    }
-  } finally {
-    await browser.close();
+  for (const route of routes) {
+    const result = await lighthouse(`${baseURL}${route.path}`, {
+      port: chrome.port,
+      output: "json",
+      logLevel: "error",
+      onlyCategories: ["performance", "accessibility", "best-practices"],
+      throttlingMethod: "provided",
+    });
+    if (!result?.lhr) throw new Error(`Lighthouse did not return an LHR for ${route.name}`);
+    const categories = result.lhr.categories;
+    latest.routes.push({
+      name: route.name,
+      path: route.path,
+      thresholds: route.thresholds,
+      scores: {
+        performance: score(categories.performance?.score),
+        accessibility: score(categories.accessibility?.score),
+        bestPractices: score(categories["best-practices"]?.score),
+      },
+      metrics: {
+        firstContentfulPaintMs: auditNumeric(result.lhr, "first-contentful-paint"),
+        largestContentfulPaintMs: auditNumeric(result.lhr, "largest-contentful-paint"),
+        totalBlockingTimeMs: auditNumeric(result.lhr, "total-blocking-time"),
+        cumulativeLayoutShift: auditNumeric(result.lhr, "cumulative-layout-shift"),
+      },
+    });
   }
 
   mkdirSync(dirname(latestPath), { recursive: true });
@@ -116,15 +93,17 @@ try {
   }
   console.log(`Lighthouse baseline passed for ${latest.routes.length} routes.`);
 } finally {
+  await chrome?.kill();
   preview.kill("SIGTERM");
 }
 
-function performanceScore(elapsedMs) {
-  if (elapsedMs <= 750) return 100;
-  if (elapsedMs <= 1250) return 90;
-  if (elapsedMs <= 2000) return 80;
-  if (elapsedMs <= 3000) return 70;
-  return 50;
+function score(value) {
+  return Math.round((value ?? 0) * 100);
+}
+
+function auditNumeric(lhr, id) {
+  const value = lhr.audits[id]?.numericValue;
+  return typeof value === "number" ? Math.round(value * 100) / 100 : null;
 }
 
 async function waitForServer(url) {

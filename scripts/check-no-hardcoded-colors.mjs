@@ -2,9 +2,9 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 
 const root = process.cwd();
-const allowed = new Set(["dashboard/src/tokens.css"]);
+const allowed = new Set(["dashboard/src/tokens.css", "internal/hostedlogin/templates/base.html"]);
 const ignoredDirs = new Set([".git", "node_modules", "dist", "bin"]);
-const checkedExtensions = new Set([".css", ".ts", ".tsx", ".js", ".jsx"]);
+const checkedExtensions = new Set([".css", ".ts", ".tsx", ".js", ".jsx", ".html"]);
 const hexColor = /#[0-9a-fA-F]{3,8}\b/g;
 const failures = [];
 
@@ -30,10 +30,12 @@ function walk(dir) {
   }
 }
 
-walk(join(root, "dashboard", "src"));
+for (const target of [join(root, "dashboard", "src"), join(root, "internal", "hostedlogin")]) {
+  walk(target);
+}
 
 if (failures.length > 0) {
-  console.error("Hardcoded hex colors are only allowed in dashboard/src/tokens.css");
+  console.error("Hardcoded hex colors are only allowed in design token source files");
   for (const failure of failures) console.error(failure);
   process.exit(1);
 }

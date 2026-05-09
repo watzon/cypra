@@ -7,7 +7,9 @@ import axe from "axe-core";
 import { chromium } from "playwright";
 
 function usage() {
-  console.error("usage: agent-browser walk <url> [--out <file>]");
+  console.error(
+    "usage: agent-browser walk <url> [--out <file>] [--color-scheme light|dark] [--viewport <width>x<height>]",
+  );
 }
 
 const [, , command, url, ...args] = process.argv;
@@ -18,12 +20,35 @@ if (command !== "walk" || !url) {
 }
 
 let out = path.join(".agent-browser", `${Date.now()}-walk.json`);
+let colorScheme = "light";
+let viewport = { width: 1280, height: 720 };
 
 for (let index = 0; index < args.length; index += 1) {
   const arg = args[index];
 
   if (arg === "--out" && args[index + 1]) {
     out = args[index + 1];
+    index += 1;
+    continue;
+  }
+
+  if (arg === "--color-scheme" && args[index + 1]) {
+    colorScheme = args[index + 1];
+    if (colorScheme !== "light" && colorScheme !== "dark") {
+      console.error(`invalid color scheme: ${colorScheme}`);
+      process.exit(2);
+    }
+    index += 1;
+    continue;
+  }
+
+  if (arg === "--viewport" && args[index + 1]) {
+    const match = /^(\d+)x(\d+)$/.exec(args[index + 1]);
+    if (!match) {
+      console.error(`invalid viewport: ${args[index + 1]}`);
+      process.exit(2);
+    }
+    viewport = { width: Number(match[1]), height: Number(match[2]) };
     index += 1;
     continue;
   }
@@ -35,7 +60,7 @@ for (let index = 0; index < args.length; index += 1) {
 const browser = await chromium.launch();
 
 try {
-  const page = await browser.newPage();
+  const page = await browser.newPage({ colorScheme, viewport });
   await page.goto(url, { waitUntil: "networkidle" });
   await page.addScriptTag({ content: axe.source });
 
@@ -47,6 +72,8 @@ try {
     url,
     capturedAt: new Date().toISOString(),
     title: await page.title(),
+    colorScheme,
+    viewport,
     accessibilityTree,
     axe: axeResults,
   };

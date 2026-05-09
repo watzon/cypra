@@ -1,0 +1,44 @@
+# Air config for `make dev`. See https://github.com/air-verse/air for details.
+# Watches Go sources, rebuilds and restarts the cypra serve binary in tmp/.
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o tmp/cypra ./cmd/cypra"
+  entrypoint = "tmp/cypra"
+  args_bin = ["serve"]
+  delay = 200
+  include_ext = ["go", "tmpl", "tpl", "html", "sql"]
+  include_dir = ["cmd", "internal", "db", "sdk"]
+  exclude_dir = [
+    "tmp",
+    "bin",
+    "node_modules",
+    "dashboard",
+    "deploy",
+    "docs",
+    "examples",
+    ".agents",
+    ".claude",
+    ".cloak",
+    "test-results",
+    "coverage",
+    ".data",
+  ]
+  exclude_regex = ["_test\\.go$"]
+  kill_delay = "1s"
+  send_interrupt = true
+  stop_on_error = false
+
+[log]
+  time = false
+
+[color]
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[misc]
+  clean_on_exit = true

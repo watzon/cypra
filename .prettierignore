@@ -1,5 +1,7 @@
 node_modules
 dashboard/dist
+examples/nextjs/.next
+examples/nextjs/.next-*
 bin
 bun.lockb
 cypra.pen
