@@ -29,8 +29,11 @@ type Provider struct {
 	DefaultScopes []string
 }
 
-func (p Provider) Kind() string                { return "oidc:" + p.Slug }
-func (p Provider) Display() upstream.Display   { return upstream.Display{Label: p.DisplayName, Hint: p.Issuer} }
+func (p Provider) Kind() string { return "oidc:" + p.Slug }
+func (p Provider) Display() upstream.Display {
+	return upstream.Display{Label: p.DisplayName, Hint: p.Issuer}
+}
+
 func (p Provider) GetDefaultScopes() []string {
 	if len(p.DefaultScopes) == 0 {
 		return []string{"openid", "email", "profile"}

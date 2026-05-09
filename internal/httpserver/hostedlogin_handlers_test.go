@@ -7,6 +7,7 @@ import (
 	"encoding/base32"
 	"encoding/base64"
 	"encoding/json"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -200,7 +201,7 @@ func TestHostedLoginHTMXPasswordFailureUsesUniformError(t *testing.T) {
 	if rec.Code != http.StatusUnauthorized {
 		t.Fatalf("status = %d body = %s", rec.Code, rec.Body.String())
 	}
-	if !strings.Contains(rec.Body.String(), uniformAuthError) {
+	if !strings.Contains(rec.Body.String(), html.EscapeString(uniformAuthError)) {
 		t.Fatalf("body = %s", rec.Body.String())
 	}
 }

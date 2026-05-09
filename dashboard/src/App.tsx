@@ -57,7 +57,7 @@ function parseRoute(pathname: string): Route {
     // /setup/<token>            -> step "admin"
     // /setup/<token>/<step>     -> explicit step
     const token = segments[1] ?? "";
-    const stepSegment = (segments[2] ?? "admin") as SetupStep;
+    const stepSegment = segments[2] ?? "admin";
     const step: SetupStep =
       stepSegment === "admin" || stepSegment === "passkey" || stepSegment === "backup"
         ? stepSegment

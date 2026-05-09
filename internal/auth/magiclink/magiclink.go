@@ -19,8 +19,8 @@ import (
 //revive:disable:exported
 
 var (
-	ErrInvalidToken    = errors.New("invalid magic link token")
-	ErrTooManyActive   = errors.New("magic_link.too_many_active")
+	ErrInvalidToken  = errors.New("invalid magic link token")
+	ErrTooManyActive = errors.New("magic_link.too_many_active")
 )
 
 type Service struct{ DB *sql.DB }

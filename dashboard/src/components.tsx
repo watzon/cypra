@@ -98,9 +98,7 @@ export function Button({
         {children}
       </span>
       {kbd ? (
-        <kbd className="rounded bg-bg-code px-1.5 py-0.5 text-[12px] text-text-primary">
-          {kbd}
-        </kbd>
+        <kbd className="rounded bg-bg-code px-1.5 py-0.5 text-[12px] text-text-primary">{kbd}</kbd>
       ) : null}
       {trailing}
     </button>
@@ -198,10 +196,12 @@ export function TextInput({
             "focus:outline-2 focus:outline-offset-0 focus:outline-border-focus",
             size === "sm" && "h-8 px-2.5 text-[13px]",
             size === "md" && "h-10 px-3 text-[14px]",
-            variant === "default" && "border-border-default bg-bg-surface hover:border-border-emphasis",
+            variant === "default" &&
+              "border-border-default bg-bg-surface hover:border-border-emphasis",
             variant === "borderless" && "border-transparent bg-transparent",
             readonly && "border-border-subtle bg-bg-code hover:border-border-subtle",
-            disabled && "border-border-default bg-bg-surface opacity-50 hover:border-border-default",
+            disabled &&
+              "border-border-default bg-bg-surface opacity-50 hover:border-border-default",
             error && "border-status-error hover:border-status-error",
             state === "success" && "border-status-success hover:border-status-success",
             className,
@@ -235,7 +235,7 @@ export function TextInput({
   );
 }
 
-type ImageUploadProps = {
+interface ImageUploadProps {
   label?: string;
   helper?: string;
   error?: string;
@@ -246,7 +246,7 @@ type ImageUploadProps = {
   disabled?: boolean;
   onChange?: (file: File | null) => void;
   id?: string;
-};
+}
 
 export function ImageUpload({
   label,
@@ -412,7 +412,7 @@ export function ImageUpload({
             event.preventDefault();
             setDragOver(false);
             if (disabled) return;
-            handleFile(event.dataTransfer.files?.[0]);
+            handleFile(event.dataTransfer.files[0]);
           }}
           className={cn(
             "flex flex-col items-center justify-center gap-1.5 rounded-[var(--radius-md)] border border-dashed px-4 py-6 text-center outline-none transition duration-[var(--dur-instant)]",
@@ -452,7 +452,7 @@ export function ImageUpload({
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024) return `${String(bytes)} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
@@ -759,11 +759,7 @@ export function Switch({
       <span
         className={cn(
           "flex h-5 w-9 items-center rounded-[var(--radius-pill)] p-0.5 transition duration-[var(--dur-fast)] group-focus-visible:outline-2 group-focus-visible:outline-offset-2 group-focus-visible:outline-border-focus",
-          pending
-            ? "bg-accent-primary-mu"
-            : checked
-              ? "bg-accent-primary"
-              : "bg-border-emphasis",
+          pending ? "bg-accent-primary-mu" : checked ? "bg-accent-primary" : "bg-border-emphasis",
         )}
       >
         <span
@@ -874,14 +870,9 @@ export function InlineAlert({
         accent.border,
       )}
     >
-      <accent.Icon
-        className={cn("mt-0.5 h-4 w-4 flex-shrink-0", accent.icon)}
-        aria-hidden="true"
-      />
+      <accent.Icon className={cn("mt-0.5 h-4 w-4 flex-shrink-0", accent.icon)} aria-hidden="true" />
       <div className="grid flex-1 gap-1">
-        {title ? (
-          <p className="text-[13px] font-semibold text-text-primary">{title}</p>
-        ) : null}
+        {title ? <p className="text-[13px] font-semibold text-text-primary">{title}</p> : null}
         <div className="text-[13px] leading-[1.5] text-text-secondary">{message}</div>
       </div>
       {action ? <div className="flex-shrink-0">{action}</div> : null}
@@ -993,7 +984,6 @@ export function Modal({
 export function Drawer({
   title,
   open,
-  side = "right",
   width = 480,
   children,
   footer,
@@ -1001,7 +991,6 @@ export function Drawer({
 }: PropsWithChildren<{
   title: string;
   open: boolean;
-  side?: "right";
   width?: number;
   footer?: ReactNode;
   onClose: () => void;
@@ -1029,10 +1018,7 @@ export function Drawer({
         onClick={onClose}
       />
       <section
-        className={cn(
-          "flex h-full flex-col border-l border-border-emphasis bg-bg-elevated shadow-[var(--shadow-lg)]",
-          side === "right" ? "ml-auto" : "",
-        )}
+        className="ml-auto flex h-full flex-col border-l border-border-emphasis bg-bg-elevated shadow-[var(--shadow-lg)]"
         style={{ width }}
       >
         <header className="flex items-center justify-between gap-3 border-b border-border-subtle px-5 py-4">
@@ -1600,15 +1586,15 @@ export function TenantSwitcher({
     slug: tenant.slug,
   }));
   const list = tenants ?? fetchedList ?? [];
-  const resolvedState: TenantSwitcherState = state ?? (
-    tenants === undefined && tenantsQuery.isLoading
+  const resolvedState: TenantSwitcherState =
+    state ??
+    (tenants === undefined && tenantsQuery.isLoading
       ? "loading"
       : tenants === undefined && tenantsQuery.isError
         ? "error"
         : list.length === 0
           ? "empty"
-          : "default"
-  );
+          : "default");
   const filtered = query
     ? list.filter(
         (tenant) =>
@@ -1867,13 +1853,11 @@ export function KeyRotationTimeline({
     );
   }
 
-  const trackSegments: KeyRotationSegment[] =
-    segments ??
-    [
-      { kid: "k_42", state: "sunsetting", width: 30 },
-      { kid: "k_43", state: "overlap", width: 20 },
-      { kid: keyID.split("_").pop() ?? "k_44", state: "active", width: 50 },
-    ];
+  const trackSegments: KeyRotationSegment[] = segments ?? [
+    { kid: "k_42", state: "sunsetting", width: 30 },
+    { kid: "k_43", state: "overlap", width: 20 },
+    { kid: keyID.split("_").pop() ?? "k_44", state: "active", width: 50 },
+  ];
 
   return (
     <div className="grid gap-3 rounded-[var(--radius-md)] border border-border-subtle bg-bg-surface p-4">
@@ -1958,9 +1942,7 @@ export function AuditEntry({
       <span
         className={cn(
           "rounded-[var(--radius-sm)] px-2 py-0.5 text-[11px] font-semibold tracking-[0.06em]",
-          redacted
-            ? "bg-bg-code text-text-tertiary"
-            : "bg-accent-primary-mu text-accent-primary",
+          redacted ? "bg-bg-code text-text-tertiary" : "bg-accent-primary-mu text-accent-primary",
         )}
       >
         {redacted ? "redacted" : action}
@@ -2080,14 +2062,28 @@ export function BackupCodeGrid({
         ))}
       </div>
       <div className="flex items-center gap-2">
-        <Button variant="secondary" size="sm" leading={<Icons.Copy className="h-3.5 w-3.5" />} onClick={copyAll}>
+        <Button
+          variant="secondary"
+          size="sm"
+          leading={<Icons.Copy className="h-3.5 w-3.5" />}
+          onClick={copyAll}
+        >
           Copy all
         </Button>
         <Button
           variant="secondary"
           size="sm"
           leading={
-            <svg viewBox="0 0 14 14" className="h-3.5 w-3.5" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              viewBox="0 0 14 14"
+              className="h-3.5 w-3.5"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M7 1.5v8.5M3.5 6.5L7 10l3.5-3.5M2 12h10" />
             </svg>
           }
@@ -2216,7 +2212,7 @@ export function PermissionMatrix({
       <div className="overflow-hidden rounded-[var(--radius-md)] border border-border-default bg-bg-surface">
         <div
           className="grid items-center bg-bg-code px-4 py-3"
-          style={{ gridTemplateColumns: `160px repeat(${permissions.length}, 120px)` }}
+          style={{ gridTemplateColumns: `160px repeat(${String(permissions.length)}, 120px)` }}
         >
           <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-text-tertiary">
             Role
@@ -2234,7 +2230,7 @@ export function PermissionMatrix({
           <div
             key={row.role}
             className="grid items-center border-t border-border-subtle px-4 py-3"
-            style={{ gridTemplateColumns: `160px repeat(${permissions.length}, 120px)` }}
+            style={{ gridTemplateColumns: `160px repeat(${String(permissions.length)}, 120px)` }}
           >
             <span className="text-[13px] font-medium text-text-primary">{row.role}</span>
             {row.cells.map((state, index) => (
@@ -2304,7 +2300,9 @@ function PermissionMatrixSaveBar({
     <div className="flex items-center gap-4 rounded-[var(--radius-md)] border border-border-emphasis bg-bg-elevated px-4 py-3 shadow-[var(--shadow-lg)]">
       <span className="h-3.5 w-3.5 rounded-full bg-status-pending" aria-hidden="true" />
       <span className="flex-1 text-[13px] font-medium text-text-primary">
-        {state === "saving" ? "Saving…" : `${dirtyCount} ${dirtyCount === 1 ? "row" : "rows"} changed`}
+        {state === "saving"
+          ? "Saving…"
+          : `${String(dirtyCount)} ${dirtyCount === 1 ? "row" : "rows"} changed`}
       </span>
       <Button variant="secondary" size="sm" onClick={onDiscard} disabled={state === "saving"}>
         Discard
@@ -3087,10 +3085,7 @@ export function SidebarNav({
               onCreateTenant={onCreateTenant}
             />
           </div>
-          <nav
-            className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto"
-            aria-label={label}
-          >
+          <nav className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto" aria-label={label}>
             {primaryItems.map((item) => (
               <SidebarNavLink
                 key={item.href}

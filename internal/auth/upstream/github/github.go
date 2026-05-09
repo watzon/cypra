@@ -16,10 +16,10 @@ import (
 )
 
 const (
-	defaultAuthURL    = "https://github.com/login/oauth/authorize"
-	defaultTokenURL   = "https://github.com/login/oauth/access_token"
-	defaultUserURL    = "https://api.github.com/user"
-	defaultEmailsURL  = "https://api.github.com/user/emails"
+	defaultAuthURL   = "https://github.com/login/oauth/authorize"
+	defaultTokenURL  = "https://github.com/login/oauth/access_token" // #nosec G101 -- OAuth token endpoint URL, not a credential.
+	defaultUserURL   = "https://api.github.com/user"
+	defaultEmailsURL = "https://api.github.com/user/emails"
 )
 
 type Provider struct {
@@ -34,9 +34,11 @@ func init() {
 	upstream.Register(Provider{})
 }
 
-func (Provider) Kind() string                { return "github" }
-func (Provider) Display() upstream.Display   { return upstream.Display{Label: "GitHub", IconURL: "/static/social/github.svg"} }
-func (Provider) DefaultScopes() []string     { return []string{"read:user", "user:email"} }
+func (Provider) Kind() string { return "github" }
+func (Provider) Display() upstream.Display {
+	return upstream.Display{Label: "GitHub", IconURL: "/static/social/github.svg"}
+}
+func (Provider) DefaultScopes() []string { return []string{"read:user", "user:email"} }
 
 func (p Provider) AuthCodeURL(_ context.Context, creds upstream.Credentials, params upstream.AuthParams) (upstream.AuthCodeRequest, error) {
 	nonce, err := upstream.RandomNonce()

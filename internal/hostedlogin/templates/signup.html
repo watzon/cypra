@@ -1,20 +1,16 @@
-{{ define "content" }}
-{{ if .Error }}<p class="error">{{ .Error }}</p>{{ end }}
-{{ if not .AnyMethodEnabled }}
+{{ define "content" }} {{ if .Error }}
+<p class="error">{{ .Error }}</p>
+{{ end }} {{ if not .AnyMethodEnabled }}
 <div class="empty-state">
   <p>This tenant has no sign-up methods enabled yet.</p>
   <p class="muted">Ask an administrator to enable an auth method in the Cypra dashboard.</p>
 </div>
-{{ else }}
-{{ $needEmail := or .PasskeyEnabled .PasswordEnabled .MagicLinkEnabled }}
-{{ $primarySocial := "" }}
-{{ if hasPrefix .PrimaryMethod "social:" }}{{ $primarySocial = trimPrefix .PrimaryMethod "social:" }}{{ end }}
-{{ $primaryOIDC := "" }}
-{{ if hasPrefix .PrimaryMethod "oidc:" }}{{ $primaryOIDC = trimPrefix .PrimaryMethod "oidc:" }}{{ end }}
-
-{{ if eq .PrimaryMethod "google" }}
-{{ if .GoogleURL }}<a class="button primary" href="{{ .GoogleURL }}">Continue with Google</a>{{ end }}
-{{ if $needEmail }}
+{{ else }} {{ $needEmail := or .PasskeyEnabled .PasswordEnabled .MagicLinkEnabled }} {{
+$primarySocial := "" }} {{ if hasPrefix .PrimaryMethod "social:" }}{{ $primarySocial = trimPrefix
+.PrimaryMethod "social:" }}{{ end }} {{ $primaryOIDC := "" }} {{ if hasPrefix .PrimaryMethod "oidc:"
+}}{{ $primaryOIDC = trimPrefix .PrimaryMethod "oidc:" }}{{ end }} {{ if eq .PrimaryMethod "google"
+}} {{ if .GoogleURL }}<a class="button primary" href="{{ .GoogleURL }}">Continue with Google</a>{{
+end }} {{ if $needEmail }}
 <div class="divider"><span>or sign up with email</span></div>
 <div class="stack">
   <label
@@ -29,10 +25,11 @@
     />
   </label>
 </div>
-{{ end }}
-{{ else if $primarySocial }}
-{{ range .SocialButtons }}{{ if eq .Kind $primarySocial }}<a class="button primary" href="{{ .URL }}">Continue with {{ .Label }}</a>{{ end }}{{ end }}
-{{ if $needEmail }}
+{{ end }} {{ else if $primarySocial }} {{ range .SocialButtons }}{{ if eq .Kind $primarySocial }}<a
+  class="button primary"
+  href="{{ .URL }}"
+  >Continue with {{ .Label }}</a
+>{{ end }}{{ end }} {{ if $needEmail }}
 <div class="divider"><span>or sign up with email</span></div>
 <div class="stack">
   <label
@@ -47,10 +44,11 @@
     />
   </label>
 </div>
-{{ end }}
-{{ else if $primaryOIDC }}
-{{ range .OIDCButtons }}{{ if eq .Slug $primaryOIDC }}<a class="button primary" href="{{ .URL }}">Continue with {{ .DisplayName }}</a>{{ end }}{{ end }}
-{{ if $needEmail }}
+{{ end }} {{ else if $primaryOIDC }} {{ range .OIDCButtons }}{{ if eq .Slug $primaryOIDC }}<a
+  class="button primary"
+  href="{{ .URL }}"
+  >Continue with {{ .DisplayName }}</a
+>{{ end }}{{ end }} {{ if $needEmail }}
 <div class="divider"><span>or sign up with email</span></div>
 <div class="stack">
   <label
@@ -65,8 +63,7 @@
     />
   </label>
 </div>
-{{ end }}
-{{ else }}
+{{ end }} {{ else }}
 <div class="stack">
   {{ if $needEmail }}
   <label
@@ -80,8 +77,7 @@
       value="{{ .Email }}"
     />
   </label>
-  {{ end }}
-  {{ if eq .PrimaryMethod "password" }}
+  {{ end }} {{ if eq .PrimaryMethod "password" }}
   <form
     class="stack"
     hx-post="/signup"
@@ -118,27 +114,28 @@
     data-rp-id="{{ .RPID }}"
     data-email-from="signup-email"
     data-passkey-result="signup-result"
-    {{ if .ContinueURL }}data-continue-url="/oidc/authorize?continue={{ .ContinueURL }}"{{ end }}
+    {{
+    if
+    .ContinueURL
+    }}data-continue-url="/oidc/authorize?continue={{ .ContinueURL }}"
+    {{
+    end
+    }}
   >
     Continue with passkey
   </button>
   {{ end }}
 </div>
-{{ end }}
-
-{{ $hasSecondary := false }}
-{{ if and .PasskeyEnabled (ne .PrimaryMethod "passkey") }}{{ $hasSecondary = true }}{{ end }}
-{{ if and .PasswordEnabled (ne .PrimaryMethod "password") }}{{ $hasSecondary = true }}{{ end }}
-{{ if and .MagicLinkEnabled (ne .PrimaryMethod "magic_link") }}{{ $hasSecondary = true }}{{ end }}
-{{ if and .GoogleURL (ne .PrimaryMethod "google") }}{{ $hasSecondary = true }}{{ end }}
-{{ range .SocialButtons }}{{ if ne .Kind $primarySocial }}{{ $hasSecondary = true }}{{ end }}{{ end }}
-{{ range .OIDCButtons }}{{ if ne .Slug $primaryOIDC }}{{ $hasSecondary = true }}{{ end }}{{ end }}
-
-{{ if and $hasSecondary (ne .PrimaryMethod "google") (eq $primarySocial "") (eq $primaryOIDC "") }}
+{{ end }} {{ $hasSecondary := false }} {{ if and .PasskeyEnabled (ne .PrimaryMethod "passkey") }}{{
+$hasSecondary = true }}{{ end }} {{ if and .PasswordEnabled (ne .PrimaryMethod "password") }}{{
+$hasSecondary = true }}{{ end }} {{ if and .MagicLinkEnabled (ne .PrimaryMethod "magic_link") }}{{
+$hasSecondary = true }}{{ end }} {{ if and .GoogleURL (ne .PrimaryMethod "google") }}{{
+$hasSecondary = true }}{{ end }} {{ range .SocialButtons }}{{ if ne .Kind $primarySocial }}{{
+$hasSecondary = true }}{{ end }}{{ end }} {{ range .OIDCButtons }}{{ if ne .Slug $primaryOIDC }}{{
+$hasSecondary = true }}{{ end }}{{ end }} {{ if and $hasSecondary (ne .PrimaryMethod "google") (eq
+$primarySocial "") (eq $primaryOIDC "") }}
 <div class="divider"><span>or</span></div>
-{{ end }}
-
-{{ if and .PasskeyEnabled (ne .PrimaryMethod "passkey") }}
+{{ end }} {{ if and .PasskeyEnabled (ne .PrimaryMethod "passkey") }}
 <button
   type="button"
   class="secondary alt-row"
@@ -146,13 +143,17 @@
   data-rp-id="{{ .RPID }}"
   data-email-from="signup-email"
   data-passkey-result="signup-result"
-  {{ if .ContinueURL }}data-continue-url="/oidc/authorize?continue={{ .ContinueURL }}"{{ end }}
+  {{
+  if
+  .ContinueURL
+  }}data-continue-url="/oidc/authorize?continue={{ .ContinueURL }}"
+  {{
+  end
+  }}
 >
   Continue with passkey
 </button>
-{{ end }}
-
-{{ if and .PasswordEnabled (ne .PrimaryMethod "password") }}
+{{ end }} {{ if and .PasswordEnabled (ne .PrimaryMethod "password") }}
 <details class="alt-row">
   <summary>Use a password</summary>
   <form
@@ -172,9 +173,7 @@
     <button class="secondary" type="submit">Sign up with password</button>
   </form>
 </details>
-{{ end }}
-
-{{ if and .MagicLinkEnabled (ne .PrimaryMethod "magic_link") }}
+{{ end }} {{ if and .MagicLinkEnabled (ne .PrimaryMethod "magic_link") }}
 <form
   class="alt-row"
   hx-post="/signup"
@@ -187,11 +186,19 @@
   {{ if .ContinueURL }}<input name="continue" type="hidden" value="{{ .ContinueURL }}" />{{ end }}
   <button class="secondary" type="submit">Send a sign-up link</button>
 </form>
-{{ end }}
-
-{{ if and .GoogleURL (ne .PrimaryMethod "google") }}<a class="button secondary alt-row" href="{{ .GoogleURL }}">Continue with Google</a>{{ end }}
-{{ range .SocialButtons }}{{ if ne .Kind $primarySocial }}<a class="button secondary alt-row" href="{{ .URL }}">Continue with {{ .Label }}</a>{{ end }}{{ end }}
-{{ range .OIDCButtons }}{{ if ne .Slug $primaryOIDC }}<a class="button secondary alt-row" href="{{ .URL }}">Continue with {{ .DisplayName }}</a>{{ end }}{{ end }}
+{{ end }} {{ if and .GoogleURL (ne .PrimaryMethod "google") }}<a
+  class="button secondary alt-row"
+  href="{{ .GoogleURL }}"
+  >Continue with Google</a
+>{{ end }} {{ range .SocialButtons }}{{ if ne .Kind $primarySocial }}<a
+  class="button secondary alt-row"
+  href="{{ .URL }}"
+  >Continue with {{ .Label }}</a
+>{{ end }}{{ end }} {{ range .OIDCButtons }}{{ if ne .Slug $primaryOIDC }}<a
+  class="button secondary alt-row"
+  href="{{ .URL }}"
+  >Continue with {{ .DisplayName }}</a
+>{{ end }}{{ end }}
 <a class="button ghost alt-row" href="/login">I already have an account</a>
 <div id="signup-result" role="status" aria-live="polite"></div>
 <div class="bot-slot" data-verifier="noop"></div>
@@ -204,5 +211,4 @@
     });
   });
 </script>
-{{ end }}
-{{ end }}{{ template "base" . }}
+{{ end }} {{ end }}{{ template "base" . }}

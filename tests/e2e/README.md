@@ -1,6 +1,6 @@
 # Cypra E2E Harness
 
-Playwright harness introduced in Phase 11 and extended by the Phase 12 canonical demo.
+Playwright harness for live-stack and managed-stack browser coverage.
 
 The harness can run against an existing local Cypra stack or can start a managed local Cypra + Postgres stack for the current test process. The managed path includes a deterministic SMTP stub, Google upstream stub, and downstream Next.js app orchestration.
 
@@ -33,6 +33,12 @@ Run backup/import browser proof:
 
 ```sh
 CYPRA_E2E_MANAGED=1 bunx playwright test tests/e2e/backup-import.spec.ts
+```
+
+Run the accessibility route matrix:
+
+```sh
+CYPRA_E2E_MANAGED=1 bunx playwright test tests/e2e/accessibility.spec.ts
 ```
 
 The managed path starts a fresh Compose-scoped Postgres service, runs migrations, mints a setup token, launches `cypra serve`, runs the browser flow, then tears the stack down with volumes removed.

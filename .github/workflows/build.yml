@@ -75,7 +75,7 @@ jobs:
           CYPRA_E2E_MANAGED: "1"
         run: bunx playwright test tests/e2e/examples-smoke.spec.ts
 
-      - name: Run canonical demo dry-run smoke
+      - name: Run canonical demo e2e
         env:
           CYPRA_E2E_MANAGED: "1"
         run: bunx playwright test tests/e2e/canonical-demo/canonical-demo.spec.ts

@@ -78,6 +78,7 @@ import {
   type AuditEntryRecord,
   type AuthMethodRecord,
   type AuthProviderMethod,
+  type DashboardSummaryRecord,
   type RegistrationSettingsRecord,
   type SignupMode,
   type MFAFactorsRecord,
@@ -348,13 +349,7 @@ function PasskeyEnrollingState() {
 
 type SetupWizardStep = "admin" | "passkey" | "backup";
 
-export function SetupWizard({
-  token,
-  step,
-}: {
-  token: string;
-  step: SetupWizardStep;
-}) {
+export function SetupWizard({ token, step }: { token: string; step: SetupWizardStep }) {
   const [email, setEmail] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [codes, setCodes] = useState<string[]>([]);
@@ -458,15 +453,13 @@ export function SetupWizard({
                 Initialize this Cypra instance
               </h2>
               <p className="text-[14px] leading-[1.571] text-text-secondary">
-                Name your first instance admin. We&apos;ll enroll a passkey and save backup codes
-                in the next steps.
+                Name your first instance admin. We&apos;ll enroll a passkey and save backup codes in
+                the next steps.
               </p>
             </header>
             <div className="grid w-full gap-4 rounded-[var(--radius-lg)] border border-border-subtle bg-bg-surface p-6">
               {status === "checking" ? <LoadingState /> : null}
-              {status === "valid" && error ? (
-                <Toast variant="error" message={error} />
-              ) : null}
+              {status === "valid" && error ? <Toast variant="error" message={error} /> : null}
               <TextInput
                 label="Admin email"
                 type="email"
@@ -499,8 +492,8 @@ export function SetupWizard({
                 Enroll your passkey
               </h2>
               <p className="text-[14px] leading-[1.571] text-text-secondary">
-                Touch your security key or use your fingerprint to enroll a passkey for the
-                instance admin you just named.
+                Touch your security key or use your fingerprint to enroll a passkey for the instance
+                admin you just named.
               </p>
             </header>
             <div className="grid w-full gap-4 rounded-[var(--radius-lg)] border border-border-subtle bg-bg-surface p-6">
@@ -516,18 +509,10 @@ export function SetupWizard({
                 </>
               )}
               <div className="flex justify-end gap-2">
-                <Button
-                  variant="ghost"
-                  disabled={busy}
-                  onClick={() => navigateStep("admin")}
-                >
+                <Button variant="ghost" disabled={busy} onClick={() => navigateStep("admin")}>
                   Back
                 </Button>
-                <Button
-                  variant="primary"
-                  disabled={busy}
-                  onClick={() => void onCompleteSetup()}
-                >
+                <Button variant="primary" disabled={busy} onClick={() => void onCompleteSetup()}>
                   {busy ? "Working…" : "Enroll passkey"}
                 </Button>
               </div>
@@ -547,11 +532,7 @@ export function SetupWizard({
             <div className="grid w-full gap-4">
               <BackupCodeGrid codes={codes} onConfirmedChange={setCodesSaved} />
               <div className="flex justify-end">
-                <Button
-                  variant="primary"
-                  disabled={!codesSaved}
-                  onClick={openDashboard}
-                >
+                <Button variant="primary" disabled={!codesSaved} onClick={openDashboard}>
                   Go to dashboard
                 </Button>
               </div>
@@ -566,10 +547,7 @@ export function SetupWizard({
 function SetupWizardSteps({ current }: { current: number }) {
   const steps = ["Admin", "Passkey", "Backup codes"];
   return (
-    <ol
-      aria-label="Setup steps"
-      className="flex items-center gap-2 text-[13px] font-medium"
-    >
+    <ol aria-label="Setup steps" className="flex items-center gap-2 text-[13px] font-medium">
       {steps.map((label, index) => {
         const isActive = index === current;
         const isComplete = index < current;
@@ -638,7 +616,9 @@ export function DashboardOverview() {
   };
   const summary = isForcedDemo ? demoSummary : summaryQuery.data;
   const summaryLoading = isForcedLoading || (summaryQuery.isLoading && queriesEnabled);
-  const summaryError = isForcedError || (summaryQuery.isError && !summaryQuery.error?.message?.includes("auth.forbidden"));
+  const summaryError =
+    isForcedError ||
+    (summaryQuery.isError && !summaryQuery.error.message.includes("auth.forbidden"));
   const summaryForbidden = isForcedNoPerm || summaryQuery.error?.message === "auth.forbidden";
 
   const tenantsCount = summary?.tenants ?? 0;
@@ -646,11 +626,7 @@ export function DashboardOverview() {
   const usersCount = summary?.users ?? 0;
   const isEmpty =
     isForcedEmpty ||
-    (queriesEnabled &&
-      !summaryLoading &&
-      !summaryError &&
-      !summaryForbidden &&
-      tenantsCount === 0);
+    (queriesEnabled && !summaryLoading && !summaryError && !summaryForbidden && tenantsCount === 0);
 
   const recentAudit = summary?.recent_audit ?? [];
 
@@ -858,10 +834,7 @@ function InstanceRecentActivityCard({
               </span>
               <IdentifierPill value={entry.resource_id} label="Resource ID" />
               <span className="flex-1" />
-              <Icons.ChevronRight
-                className="h-3.5 w-3.5 text-text-tertiary"
-                aria-hidden="true"
-              />
+              <Icons.ChevronRight className="h-3.5 w-3.5 text-text-tertiary" aria-hidden="true" />
             </li>
           ))}
         </ul>
@@ -915,16 +888,6 @@ function bufferToBase64Url(buffer: ArrayBuffer): string {
   let binary = "";
   for (const byte of bytes) binary += String.fromCharCode(byte);
   return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-
-function Metric({ title, value, status }: { title: string; value: string; status: string }) {
-  return (
-    <Card>
-      <div className="text-[13px] text-text-secondary">{title}</div>
-      <div className="mt-2 text-[32px] font-semibold leading-10">{value}</div>
-      <p className="mt-2 text-[13px] text-text-secondary">{status}</p>
-    </Card>
-  );
 }
 
 export function TenantList() {
@@ -996,10 +959,7 @@ export function TenantList() {
       ) : (
         <>
           <div className="overflow-hidden rounded-[var(--radius-md)] border border-border-subtle bg-bg-surface">
-            <table
-              className="w-full border-collapse text-left text-[13px]"
-              data-responsive="stack"
-            >
+            <table className="w-full border-collapse text-left text-[13px]" data-responsive="stack">
               <thead className="bg-bg-code text-text-tertiary">
                 <tr>
                   <th className="w-[280px] px-4 py-2.5 font-medium">Tenant</th>
@@ -1034,9 +994,7 @@ export function TenantList() {
                       <td className="px-4 py-2">
                         <IdentifierPill value={tenant.slug} label="Tenant slug" />
                       </td>
-                      <td className="px-4 py-2 text-text-secondary">
-                        {tenant.member_count ?? 0}
-                      </td>
+                      <td className="px-4 py-2 text-text-secondary">{tenant.member_count ?? 0}</td>
                       <td className="px-4 py-2 font-mono text-text-tertiary">
                         {formatTenantCreatedAt(tenant.created_at)}
                       </td>
@@ -1273,22 +1231,22 @@ function TenantOverview({ tenant }: { tenant: TenantRecord }) {
   const skLoading = isForcedLoading || (signingKeysQuery.isLoading && queriesEnabled);
   const skError =
     isForcedError ||
-    (isForcedTilesError && true) ||
-    (signingKeysQuery.isError && !signingKeysQuery.error?.message?.includes("auth.forbidden"));
+    isForcedTilesError ||
+    (signingKeysQuery.isError && !signingKeysQuery.error.message.includes("auth.forbidden"));
   const skForbidden =
     isForcedTilesPermDenied || signingKeysQuery.error?.message === "auth.forbidden";
   const amLoading = isForcedLoading || (authMethodsQuery.isLoading && queriesEnabled);
   const amError =
     isForcedError ||
     isForcedTilesError ||
-    (authMethodsQuery.isError && authMethodsQuery.error?.message !== "auth.forbidden");
+    (authMethodsQuery.isError && authMethodsQuery.error.message !== "auth.forbidden");
   const amForbidden =
     isForcedTilesPermDenied || authMethodsQuery.error?.message === "auth.forbidden";
   const auLoading = isForcedLoading || (auditQuery.isLoading && queriesEnabled);
   const auError =
     isForcedError ||
     isForcedTilesError ||
-    (auditQuery.isError && auditQuery.error?.message !== "auth.forbidden");
+    (auditQuery.isError && auditQuery.error.message !== "auth.forbidden");
   const auForbidden = isForcedTilesPermDenied || auditQuery.error?.message === "auth.forbidden";
 
   const noPermissions =
@@ -1446,24 +1404,30 @@ function authMethodLabel(method: AuthMethodRecord["method"]): string {
   }
 }
 
-type ProjectsTileProps = { loading: boolean; count: number };
-type UsersTileProps = { loading: boolean; count: number };
-type SigningKeyTileProps = {
+interface ProjectsTileProps {
+  loading: boolean;
+  count: number;
+}
+interface UsersTileProps {
+  loading: boolean;
+  count: number;
+}
+interface SigningKeyTileProps {
   loading: boolean;
   error: boolean;
   forbidden: boolean;
   active: boolean;
   nextRotation?: string;
   retry: () => void;
-};
-type AuthMethodsTileProps = {
+}
+interface AuthMethodsTileProps {
   loading: boolean;
   error: boolean;
   forbidden: boolean;
   count: number;
   names: string[];
   retry: () => void;
-};
+}
 
 function OverviewTilesGrid({
   projects,
@@ -1566,7 +1530,7 @@ function StatTile({
           className="h-8 w-16 rounded-[var(--radius-sm)] bg-bg-code"
           data-skeleton="true"
         />
-      ) : valueNode ? (
+      ) : valueNode !== undefined ? (
         valueNode
       ) : (
         <span className="text-[32px] font-semibold leading-none">{value}</span>
@@ -1768,7 +1732,7 @@ function RecentActivityRow({
 }
 
 function audiActorName(entry: AuditEntryRecord): string {
-  const explicit = entry.metadata?.["actor_name"];
+  const explicit = entry.metadata.actor_name;
   if (typeof explicit === "string" && explicit.length > 0) return explicit;
   if (entry.actor_kind === "instance_admin") return "Instance admin";
   if (entry.actor_kind === "tenant_admin") return "Tenant admin";
@@ -2617,13 +2581,7 @@ const SOCIAL_KIND_LABELS: Record<SocialProviderKind, string> = {
   discord: "Discord",
 };
 
-function AuthProvidersScreen({
-  tenant,
-  active,
-}: {
-  tenant: TenantRecord;
-  active: string;
-}) {
+function AuthProvidersScreen({ tenant, active }: { tenant: TenantRecord; active: string }) {
   const slug = tenant.slug;
   const baseHref = `/dashboard/tenants/${slug}/auth-providers`;
   const segments = active.split("/").filter(Boolean);
@@ -2632,7 +2590,12 @@ function AuthProvidersScreen({
   const topKey = (() => {
     const head = segments[0] ?? "overview";
     if (head === "overview") return "overview";
-    if (head === "identifiers" || head === "password" || head === "magic-link" || head === "passkey")
+    if (
+      head === "identifiers" ||
+      head === "password" ||
+      head === "magic-link" ||
+      head === "passkey"
+    )
       return "identifiers";
     if (head === "mfa" || head === "totp") return "mfa";
     if (head === "social" || head === "google") return "social";
@@ -2681,7 +2644,10 @@ function AuthProvidersScreen({
       ) : null}
       {topKey === "mfa" ? <MFATabSection tenant={tenant} active={subKey ?? "totp"} /> : null}
       {topKey === "social" ? (
-        <SocialSSOTabSection tenant={tenant} active={(subKey as SocialProviderKind) ?? "google"} />
+        <SocialSSOTabSection
+          tenant={tenant}
+          active={subKey ? (subKey as SocialProviderKind) : "google"}
+        />
       ) : null}
       {topKey === "enterprise-sso" ? (
         <EnterpriseSSOTabSection tenant={tenant} active={subKey} />
@@ -2767,13 +2733,7 @@ function SocialSSOTabSection({
   );
 }
 
-function SocialProviderPanel({
-  tenant,
-  kind,
-}: {
-  tenant: TenantRecord;
-  kind: SocialProviderKind;
-}) {
+function SocialProviderPanel({ tenant, kind }: { tenant: TenantRecord; kind: SocialProviderKind }) {
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["social-connections", tenant.slug],
@@ -2853,7 +2813,10 @@ function SocialProviderPanel({
     allowedDomains !== (record?.allowed_domains ?? []).join(", ") ||
     allowSignup !== (record?.allow_signup ?? true);
   return (
-    <Card title={SOCIAL_KIND_LABELS[kind]} subtitle={`OAuth identity provider — ${SOCIAL_KIND_LABELS[kind]}`}>
+    <Card
+      title={SOCIAL_KIND_LABELS[kind]}
+      subtitle={`OAuth identity provider — ${SOCIAL_KIND_LABELS[kind]}`}
+    >
       <SettingsRow
         flush
         label="Enabled"
@@ -2863,7 +2826,11 @@ function SocialProviderPanel({
       <SettingsRow
         flush
         label="Client ID"
-        helper={record?.client_id_set ? "Stored encrypted. Replace by typing a new value." : "OAuth client identifier from the provider console."}
+        helper={
+          record?.client_id_set
+            ? "Stored encrypted. Replace by typing a new value."
+            : "OAuth client identifier from the provider console."
+        }
         control={
           <TextInput
             label="Client ID"
@@ -2876,7 +2843,11 @@ function SocialProviderPanel({
       <SettingsRow
         flush
         label="Client secret"
-        helper={record?.client_id_set ? "Stored encrypted. Replace by typing a new value." : "OAuth client secret from the provider console."}
+        helper={
+          record?.client_id_set
+            ? "Stored encrypted. Replace by typing a new value."
+            : "OAuth client secret from the provider console."
+        }
         control={
           <TextInput
             label="Client secret"
@@ -2907,13 +2878,7 @@ function SocialProviderPanel({
         control={<Switch label="Allow signup" checked={allowSignup} onChange={setAllowSignup} />}
       />
       {error ? <InlineAlert variant="error" message={formatErrorCode(error)} /> : null}
-      {dirty ? (
-        <SaveBar
-          onSave={() => void onSave()}
-          onDiscard={reset}
-          message={record?.configured ? "Update credentials or policy" : "Save new connection"}
-        />
-      ) : null}
+      {dirty ? <SaveBar dirtyCount={1} onSave={() => void onSave()} onDiscard={reset} /> : null}
       {record?.configured ? (
         <button
           type="button"
@@ -2947,7 +2912,7 @@ function EnterpriseSSOTabSection({
     ...connections.map((c) => ({ key: c.slug, label: c.display_name })),
     { key: "__new", label: "+ Add connection" },
   ];
-  const activeKey = active ?? (connections[0]?.slug ?? "__new");
+  const activeKey = active ?? (connections.length > 0 ? connections[0].slug : "__new");
   return (
     <div className="grid gap-4">
       <Card>
@@ -2988,7 +2953,9 @@ function OIDCConnectionForm({
   const [issuerURL, setIssuerURL] = useState(existing?.issuer_url ?? "");
   const [clientID, setClientID] = useState("");
   const [clientSecret, setClientSecret] = useState("");
-  const [scopes, setScopes] = useState((existing?.scopes ?? ["openid", "email", "profile"]).join(", "));
+  const [scopes, setScopes] = useState(
+    (existing?.scopes ?? ["openid", "email", "profile"]).join(", "),
+  );
   const [enabled, setEnabled] = useState(existing?.enabled ?? false);
   const [allowedDomains, setAllowedDomains] = useState(
     (existing?.allowed_domains ?? []).join(", "),
@@ -3042,7 +3009,11 @@ function OIDCConnectionForm({
   return (
     <Card
       title={existing ? existing.display_name : "Add OIDC connection"}
-      subtitle={isNew ? "Configure a new enterprise OIDC identity provider." : "Edit this enterprise OIDC connection."}
+      subtitle={
+        isNew
+          ? "Configure a new enterprise OIDC identity provider."
+          : "Edit this enterprise OIDC connection."
+      }
     >
       {isNew ? (
         <SettingsRow
@@ -3087,7 +3058,11 @@ function OIDCConnectionForm({
       <SettingsRow
         flush
         label="Client ID"
-        helper={existing?.client_id_set ? "Stored encrypted. Replace by typing a new value." : "OAuth client identifier."}
+        helper={
+          existing?.client_id_set
+            ? "Stored encrypted. Replace by typing a new value."
+            : "OAuth client identifier."
+        }
         control={
           <TextInput
             label="Client ID"
@@ -3100,7 +3075,11 @@ function OIDCConnectionForm({
       <SettingsRow
         flush
         label="Client secret"
-        helper={existing?.client_id_set ? "Stored encrypted. Replace by typing a new value." : "OAuth client secret."}
+        helper={
+          existing?.client_id_set
+            ? "Stored encrypted. Replace by typing a new value."
+            : "OAuth client secret."
+        }
         control={
           <TextInput
             label="Client secret"
@@ -3149,6 +3128,7 @@ function OIDCConnectionForm({
       />
       {error ? <InlineAlert variant="error" message={formatErrorCode(error)} /> : null}
       <SaveBar
+        dirtyCount={1}
         onSave={() => void onSave()}
         onDiscard={() => {
           if (isNew) {
@@ -3161,7 +3141,7 @@ function OIDCConnectionForm({
             setScopes("openid, email, profile");
             setAllowedDomains("");
             setAllowSignup(true);
-          } else if (existing) {
+          } else {
             setDisplayName(existing.display_name);
             setIssuerURL(existing.issuer_url);
             setEnabled(existing.enabled);
@@ -3172,7 +3152,6 @@ function OIDCConnectionForm({
             setAllowSignup(existing.allow_signup ?? true);
           }
         }}
-        message={isNew ? "Create connection" : "Save changes"}
       />
       {existing ? (
         <button
@@ -3268,9 +3247,7 @@ function AuthProvidersOverview({ tenant }: { tenant: TenantRecord }) {
                   <h2 className="text-[20px] font-semibold leading-7">
                     {AUTH_PROVIDER_LABELS[provider.method]}
                   </h2>
-                  <span className="sr-only">
-                    {provider.enabled ? "Enabled" : "Disabled"}
-                  </span>
+                  <span className="sr-only">{provider.enabled ? "Enabled" : "Disabled"}</span>
                 </div>
                 <Tag variant="info">{provider.enrolled_count} enrolled</Tag>
               </div>
@@ -3294,7 +3271,8 @@ function AuthProvidersOverview({ tenant }: { tenant: TenantRecord }) {
 
 const SIGNUP_MODE_HELP: Record<SignupMode, string> = {
   open: "Anyone with a valid email can register through any enabled method.",
-  restricted: "Only addresses matching the allowlist can self-serve sign up. Invites bypass this list.",
+  restricted:
+    "Only addresses matching the allowlist can self-serve sign up. Invites bypass this list.",
   closed: "Self-serve registration is off entirely. Invites still work when enabled below.",
 };
 
@@ -3335,14 +3313,22 @@ function RegistrationSettingsCard({ tenant }: { tenant: TenantRecord }) {
         .split(/\r?\n/)
         .map((line) => line.trim())
         .filter(Boolean);
-      const next = await saveRegistrationSettings({ mode, allowlist, invites_enabled: invitesEnabled });
+      const next = await saveRegistrationSettings({
+        mode,
+        allowlist,
+        invites_enabled: invitesEnabled,
+      });
       setMode(next.mode);
       setAllowlistDraft(next.allowlist.join("\n"));
       setInvitesEnabled(next.invites_enabled);
       setDirty(false);
-      await queryClient.invalidateQueries({ queryKey: ["auth-providers-registration", tenant.slug] });
+      await queryClient.invalidateQueries({
+        queryKey: ["auth-providers-registration", tenant.slug],
+      });
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "auth_providers.registration_save_failed");
+      setError(
+        caught instanceof Error ? caught.message : "auth_providers.registration_save_failed",
+      );
     } finally {
       setSaving(false);
     }
@@ -3815,11 +3801,7 @@ function ProviderEnabledRow<T extends Record<string, unknown>>({
       label="Enabled"
       helper="When disabled this provider is hidden from the hosted-login page."
       control={
-        <Switch
-          label="Enabled"
-          checked={form.enabled}
-          onChange={(next) => form.setEnabled(next)}
-        />
+        <Switch label="Enabled" checked={form.enabled} onChange={(next) => form.setEnabled(next)} />
       }
     />
   );
@@ -3832,9 +3814,7 @@ function ProviderSaveBar<T extends Record<string, unknown>>({
 }) {
   return (
     <>
-      {form.error ? (
-        <InlineAlert variant="error" message={formatErrorCode(form.error)} />
-      ) : null}
+      {form.error ? <InlineAlert variant="error" message={formatErrorCode(form.error)} /> : null}
       {form.dirty ? (
         <SaveBar
           dirtyCount={1}
@@ -4927,7 +4907,7 @@ function BrandingTab({ tenant }: { tenant: TenantRecord }) {
         const result = await uploadTenantLogo(tenant.id, logoFile);
         setLogoFile(null);
         setLogoCleared(false);
-        setLogoPreviewURL(`${result.logo_url}?t=${Date.now()}`);
+        setLogoPreviewURL(`${result.logo_url}?t=${String(Date.now())}`);
       } else if (logoCleared) {
         await deleteTenantLogo(tenant.id);
         setLogoCleared(false);
@@ -5235,9 +5215,7 @@ function EmailProviderForm({ provider }: { provider: ProviderConfigRecord }) {
           }
         />
       ) : null}
-      {saveError ? (
-        <InlineAlert variant="error" message={formatErrorCode(saveError)} />
-      ) : null}
+      {saveError ? <InlineAlert variant="error" message={formatErrorCode(saveError)} /> : null}
       {showSaveBar ? (
         <SaveBar
           dirtyCount={1}
@@ -5305,7 +5283,7 @@ function EmailProviderForm({ provider }: { provider: ProviderConfigRecord }) {
   );
 }
 
-function UpstreamProviderScreen() {
+export function UpstreamProviderScreen() {
   const queryClient = useQueryClient();
   const providerQuery = useQuery({
     queryKey: ["provider-config", "upstream"],
@@ -5686,7 +5664,7 @@ export function AccountProfile() {
             : "Manage your passkeys, second factors, sessions, and personal access tokens."
         }
       />
-      {me && me.email ? <AccountIdentityStrip me={me} /> : null}
+      {me?.email ? <AccountIdentityStrip me={me} /> : null}
       <PasskeysSection
         passkeys={passkeys}
         loading={passkeysQuery.isLoading}
@@ -5750,11 +5728,11 @@ export function AccountProfile() {
 }
 
 function AccountIdentityStrip({ me }: { me: MeRecord }) {
-  const initials = (me.display_name || me.email)
+  const initials = me.display_name
     .split(/[\s@.]/)
     .filter(Boolean)
     .slice(0, 2)
-    .map((part) => part[0]?.toUpperCase() ?? "")
+    .map((part) => part[0].toUpperCase())
     .join("");
   return (
     <header className="flex items-center gap-5 rounded-[var(--radius-md)] border border-border-subtle bg-bg-surface px-6 py-5">
@@ -5801,9 +5779,7 @@ function SectionCard({
             </span>
             {title}
           </h2>
-          {description ? (
-            <p className="text-[13px] text-text-secondary">{description}</p>
-          ) : null}
+          {description ? <p className="text-[13px] text-text-secondary">{description}</p> : null}
         </div>
         {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
       </header>
@@ -6158,7 +6134,7 @@ function ActiveSessionsSection({
 
 function sessionLabel(session: SessionRecord): string {
   if (session.auth_kind === "pat") {
-    return session.user_agent || "Personal access token";
+    return session.user_agent ?? "Personal access token";
   }
   return session.user_agent ? truncate(session.user_agent, 60) : "Browser session";
 }
@@ -6370,7 +6346,7 @@ export function SetupStateGallery() {
         title="Setup token expired."
         body="Run cypra admin reset-bootstrap to issue a new token."
       />
-      <SetupWizard token="cypra_setup_0123456789abcdef" />
+      <SetupWizard token="cypra_setup_0123456789abcdef" step="admin" />
     </div>
   );
 }

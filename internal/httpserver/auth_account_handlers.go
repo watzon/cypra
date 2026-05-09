@@ -254,13 +254,13 @@ func (s *Server) authListSessions(w http.ResponseWriter, r *http.Request) {
 	out := []sessionRow{}
 	for rows.Next() {
 		var (
-			id         uuid.UUID
-			createdAt  time.Time
-			lastSeen   time.Time
-			expiresAt  time.Time
-			ip         sql.NullString
-			userAgent  sql.NullString
-			authKind   string
+			id        uuid.UUID
+			createdAt time.Time
+			lastSeen  time.Time
+			expiresAt time.Time
+			ip        sql.NullString
+			userAgent sql.NullString
+			authKind  string
 		)
 		if err := rows.Scan(&id, &createdAt, &lastSeen, &expiresAt, &ip, &userAgent, &authKind); err != nil {
 			writeError(w, http.StatusInternalServerError, "session.list_failed")

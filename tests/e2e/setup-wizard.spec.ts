@@ -96,7 +96,8 @@ test("setup wizard completes with a browser-generated WebAuthn attestation", asy
   expect(completePayload?.response.response.attestationObject).toBeTruthy();
   expect(completePayload?.response.response.transports).toContain("internal");
 
-  await page.getByRole("button", { name: "I've saved these" }).click();
+  await page.getByRole("button", { name: "I have saved these" }).click();
   await page.getByRole("button", { name: "Go to dashboard" }).click();
-  await expect(page.getByText("Next step: create your first tenant")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Overview" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create tenant" })).toBeVisible();
 });

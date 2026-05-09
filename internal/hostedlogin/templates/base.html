@@ -252,9 +252,9 @@
           class="brand-chip"
           src="{{ .Theme.LogoURL }}"
           alt="{{ .Theme.DisplayName }}"
-        />{{ else }}<span class="brand-chip" aria-hidden="true">{{
-          slice .Theme.DisplayName 0 1
-        }}</span>{{ end }}
+        />{{ else }}<span class="brand-chip" aria-hidden="true"
+          >{{ slice .Theme.DisplayName 0 1 }}</span
+        >{{ end }}
         <h1>{{ .Theme.DisplayName }}</h1>
         <p>{{ .Title }}</p>
       </div>

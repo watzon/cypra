@@ -48,7 +48,7 @@ func TestUploaderHappyPath(t *testing.T) {
 	if result.ByteSize != int64(len(pngBytes)) {
 		t.Fatalf("byte size = %d", result.ByteSize)
 	}
-	if got, err := os.ReadFile(filepath.Join(root, result.Key)); err != nil {
+	if got, err := os.ReadFile(filepath.Join(root, result.Key)); err != nil { // #nosec G304 -- test reads the uploaded key under a temp root.
 		t.Fatalf("read written file: %v", err)
 	} else if !bytes.Equal(got, pngBytes) {
 		t.Fatalf("file contents mismatch")

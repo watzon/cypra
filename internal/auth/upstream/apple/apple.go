@@ -24,7 +24,7 @@ import (
 
 const (
 	defaultAuthURL  = "https://appleid.apple.com/auth/authorize"
-	defaultTokenURL = "https://appleid.apple.com/auth/token"
+	defaultTokenURL = "https://appleid.apple.com/auth/token" // #nosec G101 -- OAuth token endpoint URL, not a credential.
 )
 
 type Provider struct {
@@ -37,9 +37,11 @@ func init() {
 	upstream.Register(Provider{})
 }
 
-func (Provider) Kind() string                { return "apple" }
-func (Provider) Display() upstream.Display   { return upstream.Display{Label: "Apple", IconURL: "/static/social/apple.svg", Hint: "Apple requires a pre-rendered client_secret JWT."} }
-func (Provider) DefaultScopes() []string     { return []string{"name", "email"} }
+func (Provider) Kind() string { return "apple" }
+func (Provider) Display() upstream.Display {
+	return upstream.Display{Label: "Apple", IconURL: "/static/social/apple.svg", Hint: "Apple requires a pre-rendered client_secret JWT."}
+}
+func (Provider) DefaultScopes() []string { return []string{"name", "email"} }
 
 func (p Provider) AuthCodeURL(_ context.Context, creds upstream.Credentials, params upstream.AuthParams) (upstream.AuthCodeRequest, error) {
 	nonce, err := upstream.RandomNonce()

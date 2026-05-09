@@ -900,10 +900,12 @@ export async function listSocialConnections(): Promise<SocialConnectionRecord[]>
     "/api/v1/auth-providers/social/",
     "auth_providers.social_list_failed",
   );
-  return payload.connections ?? [];
+  return payload.connections;
 }
 
-export async function getSocialConnection(kind: SocialProviderKind): Promise<SocialConnectionRecord> {
+export async function getSocialConnection(
+  kind: SocialProviderKind,
+): Promise<SocialConnectionRecord> {
   return fetchJSON<SocialConnectionRecord>(
     `/api/v1/auth-providers/social/${kind}`,
     "auth_providers.social_load_failed",
@@ -934,10 +936,12 @@ export async function listOIDCConnections(): Promise<OIDCConnectionRecord[]> {
     "/api/v1/auth-providers/oidc/",
     "auth_providers.oidc_list_failed",
   );
-  return payload.connections ?? [];
+  return payload.connections;
 }
 
-export async function createOIDCConnection(input: OIDCConnectionInput): Promise<OIDCConnectionRecord> {
+export async function createOIDCConnection(
+  input: OIDCConnectionInput,
+): Promise<OIDCConnectionRecord> {
   return postJSON<OIDCConnectionRecord>(
     "/api/v1/auth-providers/oidc/",
     input,

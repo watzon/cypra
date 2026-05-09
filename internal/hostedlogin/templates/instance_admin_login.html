@@ -1,8 +1,6 @@
 {{ define "content" }}
 <div class="stack">
-  <p>
-    Sign in as an instance admin. Use a registered passkey, or fall back to a backup code.
-  </p>
+  <p>Sign in as an instance admin. Use a registered passkey, or fall back to a backup code.</p>
   <div id="instance-admin-error" class="error" role="status" aria-live="polite"></div>
   <button id="instance-admin-passkey-button" type="button">Continue with passkey</button>
 </div>
@@ -11,23 +9,11 @@
   <form id="instance-admin-backup-form" class="stack inset">
     <label
       >Email
-      <input
-        id="instance-admin-email"
-        name="email"
-        type="email"
-        autocomplete="email"
-        required
-      />
+      <input id="instance-admin-email" name="email" type="email" autocomplete="email" required />
     </label>
     <label
       >Backup code
-      <input
-        name="code"
-        type="text"
-        autocomplete="one-time-code"
-        spellcheck="false"
-        required
-      />
+      <input name="code" type="text" autocomplete="one-time-code" spellcheck="false" required />
     </label>
     <button class="secondary" type="submit">Sign in with backup code</button>
   </form>

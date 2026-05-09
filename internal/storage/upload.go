@@ -65,7 +65,8 @@ func (u Uploader) Upload(ctx context.Context, params UploadParams) (*UploadResul
 	if err := u.Store.Put(ctx, Object{Key: key, ContentType: contentType, Bytes: body}); err != nil {
 		return nil, fmt.Errorf("put object: %w", err)
 	}
-	if _, err := u.DB.ExecContext(ctx,
+	if _, err := u.DB.ExecContext(
+		ctx,
 		`INSERT INTO storage_objects (id, tenant_id, owner_user_id, backend, key, content_type, byte_size)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		id, params.TenantID, ownerArg(params.OwnerUserID), u.Backend, key, contentType, len(body),
@@ -136,4 +137,3 @@ func SniffImageType(b []byte) string {
 		return ""
 	}
 }
-

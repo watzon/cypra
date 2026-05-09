@@ -33,25 +33,25 @@ func isSocialKind(kind string) bool {
 }
 
 type socialConnectionPayload struct {
-	Enabled        bool                `json:"enabled"`
-	ClientID       string              `json:"client_id"`
-	ClientSecret   string              `json:"client_secret"`
-	AllowedDomains []string            `json:"allowed_domains"`
-	AllowSignup    *bool               `json:"allow_signup,omitempty"`
-	Config         json.RawMessage     `json:"config,omitempty"`
+	Enabled        bool            `json:"enabled"`
+	ClientID       string          `json:"client_id"`
+	ClientSecret   string          `json:"client_secret"`
+	AllowedDomains []string        `json:"allowed_domains"`
+	AllowSignup    *bool           `json:"allow_signup,omitempty"`
+	Config         json.RawMessage `json:"config,omitempty"`
 }
 
 type socialConnectionRecord struct {
-	Kind           string                 `json:"kind"`
-	Label          string                 `json:"label"`
-	IconURL        string                 `json:"icon_url"`
-	Configured     bool                   `json:"configured"`
-	Enabled        bool                   `json:"enabled"`
-	ClientIDSet    bool                   `json:"client_id_set"`
-	AllowedDomains []string               `json:"allowed_domains"`
-	AllowSignup    *bool                  `json:"allow_signup,omitempty"`
-	Config         map[string]any         `json:"config"`
-	UpdatedAt      *time.Time             `json:"updated_at,omitempty"`
+	Kind           string         `json:"kind"`
+	Label          string         `json:"label"`
+	IconURL        string         `json:"icon_url"`
+	Configured     bool           `json:"configured"`
+	Enabled        bool           `json:"enabled"`
+	ClientIDSet    bool           `json:"client_id_set"`
+	AllowedDomains []string       `json:"allowed_domains"`
+	AllowSignup    *bool          `json:"allow_signup,omitempty"`
+	Config         map[string]any `json:"config"`
+	UpdatedAt      *time.Time     `json:"updated_at,omitempty"`
 }
 
 func (s *Server) listSocialConnections(w http.ResponseWriter, r *http.Request) {
@@ -71,7 +71,7 @@ func (s *Server) listSocialConnections(w http.ResponseWriter, r *http.Request) {
 	}
 	out := make([]socialConnectionRecord, 0, len(socialKinds))
 	for _, kind := range socialKinds {
-		display := upstream.Display{Label: strings.Title(kind)}
+		display := upstream.Display{Label: titleKind(kind)}
 		if p, err := upstream.Resolve(kind); err == nil {
 			display = p.Display()
 		}
@@ -400,7 +400,7 @@ func (s *Server) loadSocialRow(ctx context.Context, tenantID uuid.UUID, kind str
 }
 
 func (s *Server) loadSocialRecord(ctx context.Context, tenantID uuid.UUID, kind string) (socialConnectionRecord, error) {
-	display := upstream.Display{Label: strings.Title(kind)}
+	display := upstream.Display{Label: titleKind(kind)}
 	if p, err := upstream.Resolve(kind); err == nil {
 		display = p.Display()
 	}

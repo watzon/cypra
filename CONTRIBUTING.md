@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Go 1.26.1 via `.tool-versions` (`go.mod` supports Go 1.23+ with a pinned toolchain).
+- Go 1.26.1 via `.tool-versions` (`go.mod` targets Go 1.25 with a pinned toolchain).
 - Bun 1.3.11 via `.tool-versions` and `package.json` `packageManager`.
 - Docker Desktop or another Docker Compose compatible runtime.
 - `portless` for HTTPS local development on `https://cypra.localhost` and `https://*.cypra.localhost`.
@@ -62,3 +62,9 @@ Phase N: <title> -- complete
 ```
 
 Do not commit `.env`, local databases, `node_modules`, dashboard build output, or agent-local state.
+
+## License Headers
+
+Cypra is MIT licensed repository-wide. The server, dashboard, CLI, examples, and SDKs inherit the root `LICENSE` unless a file explicitly states otherwise.
+
+Source files do not require per-file license headers. Generated artifacts must preserve upstream notices when their tools emit them.

@@ -17,7 +17,7 @@ import (
 
 const (
 	defaultAuthURL  = "https://discord.com/oauth2/authorize"
-	defaultTokenURL = "https://discord.com/api/oauth2/token"
+	defaultTokenURL = "https://discord.com/api/oauth2/token" // #nosec G101 -- OAuth token endpoint URL, not a credential.
 	defaultUserURL  = "https://discord.com/api/users/@me"
 )
 
@@ -32,9 +32,11 @@ func init() {
 	upstream.Register(Provider{})
 }
 
-func (Provider) Kind() string                { return "discord" }
-func (Provider) Display() upstream.Display   { return upstream.Display{Label: "Discord", IconURL: "/static/social/discord.svg"} }
-func (Provider) DefaultScopes() []string     { return []string{"identify", "email"} }
+func (Provider) Kind() string { return "discord" }
+func (Provider) Display() upstream.Display {
+	return upstream.Display{Label: "Discord", IconURL: "/static/social/discord.svg"}
+}
+func (Provider) DefaultScopes() []string { return []string{"identify", "email"} }
 
 func (p Provider) AuthCodeURL(_ context.Context, creds upstream.Credentials, params upstream.AuthParams) (upstream.AuthCodeRequest, error) {
 	nonce, err := upstream.RandomNonce()

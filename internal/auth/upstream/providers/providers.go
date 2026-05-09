@@ -5,9 +5,9 @@
 package providers
 
 import (
-	_ "github.com/watzon/cypra/internal/auth/upstream/apple"
-	_ "github.com/watzon/cypra/internal/auth/upstream/discord"
-	_ "github.com/watzon/cypra/internal/auth/upstream/github"
-	_ "github.com/watzon/cypra/internal/auth/upstream/google"
-	_ "github.com/watzon/cypra/internal/auth/upstream/microsoft"
+	_ "github.com/watzon/cypra/internal/auth/upstream/apple"     // register Apple provider
+	_ "github.com/watzon/cypra/internal/auth/upstream/discord"   // register Discord provider
+	_ "github.com/watzon/cypra/internal/auth/upstream/github"    // register GitHub provider
+	_ "github.com/watzon/cypra/internal/auth/upstream/google"    // register Google provider
+	_ "github.com/watzon/cypra/internal/auth/upstream/microsoft" // register Microsoft provider
 )

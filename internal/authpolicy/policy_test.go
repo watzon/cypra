@@ -75,8 +75,8 @@ func TestMagicLinkPolicyDefaultsAndExplicitFalse(t *testing.T) {
 func TestGooglePolicyDomainAllowList(t *testing.T) {
 	p := authpolicy.GooglePolicy{AllowedDomains: []string{"example.com", "Acme.org"}}
 	cases := map[string]bool{
-		"alice@example.com": true,
-		"bob@acme.org":      true,
+		"alice@example.com":  true,
+		"bob@acme.org":       true,
 		"intruder@gmail.com": false,
 		"":                   false,
 		"no-at":              false,

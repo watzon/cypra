@@ -17,7 +17,7 @@ import (
 
 const (
 	defaultAuthURL  = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
-	defaultTokenURL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+	defaultTokenURL = "https://login.microsoftonline.com/common/oauth2/v2.0/token" // #nosec G101 -- OAuth token endpoint URL, not a credential.
 )
 
 type Provider struct {
@@ -30,9 +30,11 @@ func init() {
 	upstream.Register(Provider{})
 }
 
-func (Provider) Kind() string                 { return "microsoft" }
-func (Provider) Display() upstream.Display    { return upstream.Display{Label: "Microsoft", IconURL: "/static/social/microsoft.svg"} }
-func (Provider) DefaultScopes() []string      { return []string{"openid", "email", "profile"} }
+func (Provider) Kind() string { return "microsoft" }
+func (Provider) Display() upstream.Display {
+	return upstream.Display{Label: "Microsoft", IconURL: "/static/social/microsoft.svg"}
+}
+func (Provider) DefaultScopes() []string { return []string{"openid", "email", "profile"} }
 
 func (p Provider) AuthCodeURL(_ context.Context, creds upstream.Credentials, params upstream.AuthParams) (upstream.AuthCodeRequest, error) {
 	nonce, err := upstream.RandomNonce()

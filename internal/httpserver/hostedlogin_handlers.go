@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"html"
 	"net/http"
 	"net/url"
 	"strings"
@@ -300,7 +301,7 @@ func (s *Server) hostedSignupPassword(w http.ResponseWriter, r *http.Request, te
 		writeHTMXError(w, http.StatusConflict, uniformAuthError)
 		return
 	}
-	if err := (passwordauth.Service{DB: s.DB}).SetPassword(r.Context(), tenantID, userID, r.FormValue("password")); err != nil {
+	if err := (passwordauth.Service{DB: s.DB}).SetPassword(r.Context(), tenantID, userID, r.Form.Get("password")); err != nil {
 		writeHTMXError(w, http.StatusBadRequest, uniformAuthError)
 		return
 	}
@@ -647,7 +648,7 @@ func (s *Server) buildSocialButtons(ctx context.Context, _ uuid.UUID, rows []soc
 		if row.Kind == "google" {
 			continue
 		}
-		display := upstream.Display{Label: strings.Title(row.Kind)}
+		display := upstream.Display{Label: titleKind(row.Kind)}
 		if p, err := upstream.Resolve(row.Kind); err == nil {
 			display = p.Display()
 		}
@@ -835,11 +836,18 @@ func defaultScopes(raw string, upgraded bool) []hostedlogin.Scope {
 
 func writeHTMXMessage(w http.ResponseWriter, message string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = w.Write([]byte(`<p>` + message + `</p>`))
+	_, _ = w.Write([]byte(`<p>` + html.EscapeString(message) + `</p>`))
 }
 
 func writeHTMXError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
-	_, _ = w.Write([]byte(`<p class="error">` + message + `</p>`))
+	_, _ = w.Write([]byte(`<p class="error">` + html.EscapeString(message) + `</p>`))
+}
+
+func titleKind(kind string) string {
+	if kind == "" {
+		return ""
+	}
+	return strings.ToUpper(kind[:1]) + kind[1:]
 }

@@ -15,10 +15,10 @@ func TestCheckSignupDecisionTable(t *testing.T) {
 	ctx := context.Background()
 
 	cases := []struct {
-		name     string
-		setup    string // SQL to run on tenants/tenant_auth_methods before the call
-		input    authpolicy.SignupContext
-		want     error
+		name  string
+		setup string // SQL to run on tenants/tenant_auth_methods before the call
+		input authpolicy.SignupContext
+		want  error
 	}{
 		{
 			name:  "open + via invite + invites enabled",

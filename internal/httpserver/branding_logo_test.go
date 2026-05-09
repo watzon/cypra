@@ -62,7 +62,7 @@ func TestPutTenantLogoStoresAndExposesPublicURL(t *testing.T) {
 	if err := harness.SQL.QueryRow(`SELECT so.key FROM tenants t JOIN storage_objects so ON so.id = t.logo_object_id WHERE t.id = $1`, tenantID).Scan(&key); err != nil {
 		t.Fatalf("read storage object: %v", err)
 	}
-	if got, err := os.ReadFile(filepath.Join(root, key)); err != nil {
+	if got, err := os.ReadFile(filepath.Join(root, key)); err != nil { // #nosec G304 -- test reads a key returned by the storage layer under a temp root.
 		t.Fatalf("read written logo: %v", err)
 	} else if !bytes.Equal(got, pngBytes) {
 		t.Fatalf("logo bytes mismatch")

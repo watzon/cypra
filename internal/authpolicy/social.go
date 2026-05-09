@@ -19,10 +19,14 @@ const (
 )
 
 // MethodForSocial returns the canonical "social:<kind>" identifier.
-func MethodForSocial(kind string) Method { return MethodSocialPrefix + strings.ToLower(strings.TrimSpace(kind)) }
+func MethodForSocial(kind string) Method {
+	return MethodSocialPrefix + strings.ToLower(strings.TrimSpace(kind))
+}
 
 // MethodForOIDC returns the canonical "oidc:<slug>" identifier.
-func MethodForOIDC(slug string) Method { return MethodOIDCPrefix + strings.ToLower(strings.TrimSpace(slug)) }
+func MethodForOIDC(slug string) Method {
+	return MethodOIDCPrefix + strings.ToLower(strings.TrimSpace(slug))
+}
 
 // SplitMethod returns (family, sub) for namespaced methods. For built-in
 // methods family equals method and sub is empty.

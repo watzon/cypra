@@ -285,10 +285,9 @@ function dashboardFetchMock() {
     }
     if (url === "/api/v1/auth-providers/registration") {
       return Promise.resolve(
-        new Response(
-          JSON.stringify({ mode: "open", allowlist: [], invites_enabled: true }),
-          { status: 200 },
-        ),
+        new Response(JSON.stringify({ mode: "open", allowlist: [], invites_enabled: true }), {
+          status: 200,
+        }),
       );
     }
     if (url.startsWith("/api/v1/auth-providers/")) {
@@ -729,9 +728,7 @@ describe("App", () => {
     // Once codes are saved, the wizard hands off to the dashboard via a hard
     // navigation. JSDOM can't follow that, so we verify the button is present
     // and clickable — the navigation itself happens on real browsers.
-    expect(
-      await screen.findByRole("button", { name: "Go to dashboard" }),
-    ).not.toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Go to dashboard" })).not.toBeDisabled();
   });
 
   it("renders the primitive gallery", () => {
@@ -766,9 +763,7 @@ describe("App", () => {
     const tenantFetchMock = dashboardFetchMock();
     renderApp("/dashboard/tenants/acme", tenantFetchMock);
 
-    await userEvent.click(
-      (await screen.findAllByRole("button", { name: /^Theme:/ }))[0],
-    );
+    await userEvent.click((await screen.findAllByRole("button", { name: /^Theme:/ }))[0]);
 
     expect(localStorage.getItem("cypra.theme")).toBe("dark");
     expect(tenantFetchMock).toHaveBeenCalledWith(

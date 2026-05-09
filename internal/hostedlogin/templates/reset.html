@@ -1,12 +1,5 @@
-{{ define "content" }}
-{{ if .ResetToken }}
-<form
-  class="stack"
-  hx-post="/reset"
-  hx-target="#reset-result"
-  hx-swap="innerHTML"
-  method="post"
->
+{{ define "content" }} {{ if .ResetToken }}
+<form class="stack" hx-post="/reset" hx-target="#reset-result" hx-swap="innerHTML" method="post">
   <input name="token" type="hidden" value="{{ .ResetToken }}" />
   <label
     >New password
@@ -15,13 +8,7 @@
   <button type="submit">Reset password</button>
 </form>
 {{ else }}
-<form
-  class="stack"
-  hx-post="/reset"
-  hx-target="#reset-result"
-  hx-swap="innerHTML"
-  method="post"
->
+<form class="stack" hx-post="/reset" hx-target="#reset-result" hx-swap="innerHTML" method="post">
   <label>Email <input name="email" type="email" autocomplete="email" required /></label>
   <button type="submit">Send reset link</button>
 </form>

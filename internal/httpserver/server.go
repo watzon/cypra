@@ -34,21 +34,21 @@ import (
 )
 
 type Options struct {
-	DB            *sql.DB
-	TenantDB      *db.TenantScopedDB
-	PublicBaseURL string
-	Version       string
-	Commit        string
-	Logger        *slog.Logger
-	DevOpenAPI    bool
-	StorageReady  func(context.Context) error
-	KEKLoaded     bool
-	MasterKey     []byte
-	BotVerifier   botmitigation.Verifier
-	GoogleSecret  []byte
-	GoogleAuthURL string
-	DashboardFS   fs.FS
-	DashboardDev  string
+	DB             *sql.DB
+	TenantDB       *db.TenantScopedDB
+	PublicBaseURL  string
+	Version        string
+	Commit         string
+	Logger         *slog.Logger
+	DevOpenAPI     bool
+	StorageReady   func(context.Context) error
+	KEKLoaded      bool
+	MasterKey      []byte
+	BotVerifier    botmitigation.Verifier
+	GoogleSecret   []byte
+	GoogleAuthURL  string
+	DashboardFS    fs.FS
+	DashboardDev   string
 	Storage        storage.Store
 	StorageBackend string
 	// TrustDevHeaders gates whether the auth middleware honors the

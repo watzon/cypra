@@ -1,6 +1,7 @@
 (function () {
   function b64urlToBuffer(value) {
-    const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((value.length + 3) % 4);
+    const padded =
+      value.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((value.length + 3) % 4);
     const binary = window.atob(padded);
     const bytes = new Uint8Array(binary.length);
     for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
@@ -100,9 +101,7 @@
   }
 
   document.addEventListener("DOMContentLoaded", function () {
-    document
-      .getElementById("instance-admin-passkey-button")
-      ?.addEventListener("click", runPasskey);
+    document.getElementById("instance-admin-passkey-button")?.addEventListener("click", runPasskey);
     document
       .getElementById("instance-admin-backup-form")
       ?.addEventListener("submit", runBackupCode);

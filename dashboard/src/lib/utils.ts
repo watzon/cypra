@@ -31,15 +31,12 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Self-serve sign-up is closed for this tenant. Ask an administrator for an invite.",
   "auth.signup_restricted":
     "Sign-up is restricted to specific email addresses or domains for this tenant.",
-  "auth.signup_disabled_for_method":
-    "Sign-up is disabled for this auth method.",
-  "auth.invites_disabled":
-    "This tenant isn't accepting invites right now.",
+  "auth.signup_disabled_for_method": "Sign-up is disabled for this auth method.",
+  "auth.invites_disabled": "This tenant isn't accepting invites right now.",
   "auth_providers.registration_load_failed": "Couldn't load registration settings.",
   "auth_providers.registration_save_failed": "Couldn't save registration settings. Try again.",
   "auth_providers.registration_mode_invalid": "That sign-up mode isn't valid.",
-  "auth_providers.registration_allowlist_invalid":
-    "Allowlist contains too many entries (max 256).",
+  "auth_providers.registration_allowlist_invalid": "Allowlist contains too many entries (max 256).",
   "auth_providers.social_unknown_kind": "That social provider isn't supported.",
   "auth_providers.social_credentials_required":
     "Provide both a Client ID and Client secret to save this connection.",
@@ -53,8 +50,7 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Couldn't complete the OAuth exchange with the upstream provider.",
   "auth_providers.social_email_not_allowed":
     "The provider returned an email outside this tenant's allowed-domain list.",
-  "auth_providers.social_user_failed":
-    "Couldn't create or sign in the user from this provider.",
+  "auth_providers.social_user_failed": "Couldn't create or sign in the user from this provider.",
   "auth_providers.social_start_failed": "Couldn't start the upstream OAuth flow.",
   "auth_providers.oidc_invalid_slug":
     "Connection slug must be 1–63 characters using lowercase letters, digits, hyphens, or underscores.",
@@ -62,13 +58,11 @@ const ERROR_MESSAGES: Record<string, string> = {
     "Provide a display name, issuer URL, client ID, and client secret to add a connection.",
   "auth_providers.oidc_save_failed": "Couldn't save the OIDC connection. Try again.",
   "auth_providers.oidc_delete_failed": "Couldn't remove the OIDC connection. Try again.",
-  "auth_providers.oidc_slug_taken":
-    "A connection with that slug already exists for this tenant.",
+  "auth_providers.oidc_slug_taken": "A connection with that slug already exists for this tenant.",
   "auth_providers.oidc_not_found": "No OIDC connection found for that slug.",
   "auth_providers.oidc_not_configured":
     "This enterprise OIDC connection isn't enabled for this tenant.",
-  "auth_providers.oidc_decrypt_failed":
-    "Couldn't decrypt the stored OIDC client credentials.",
+  "auth_providers.oidc_decrypt_failed": "Couldn't decrypt the stored OIDC client credentials.",
   "auth_providers.oidc_invalid_state":
     "The sign-in state was invalid or expired. Start the flow again.",
   "auth_providers.oidc_exchange_failed":

@@ -1,11 +1,5 @@
 {{ define "content" }}
-<form
-  class="stack"
-  hx-post="/2fa"
-  hx-target="#factor-result"
-  hx-swap="innerHTML"
-  method="post"
->
+<form class="stack" hx-post="/2fa" hx-target="#factor-result" hx-swap="innerHTML" method="post">
   <label
     >Factor
     <select name="factor">

@@ -17,7 +17,7 @@ Screenshots and visual walkthroughs are captured during the Phase 12/13 local ca
 
 ## Prerequisites
 
-- Go 1.26.1, with `go.mod` accepting Go 1.23+.
+- Go 1.26.1 via the pinned toolchain, with `go.mod` targeting Go 1.25.
 - Bun 1.3.11.
 - Docker Compose.
 - `portless` for HTTPS and wildcard tenant-subdomain local development.
