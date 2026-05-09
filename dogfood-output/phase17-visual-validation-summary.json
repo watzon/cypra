@@ -1,0 +1,1086 @@
+{
+  "capturedAt": "2026-05-08T02:47:51.927Z",
+  "routes": 108,
+  "results": [
+    {
+      "surface": "dashboard",
+      "name": "dashboard",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "dashboard",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "dashboard",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "dashboard",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "account",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/account?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "dashboard",
+      "name": "account",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/account?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "dashboard",
+      "name": "account",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/account?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "dashboard",
+      "name": "account",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/account?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenants",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenants",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenants",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenants",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenant-overview",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenant-overview",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenant-overview",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenant-overview",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "projects",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/projects?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "projects",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/projects?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "projects",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/projects?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "projects",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/projects?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "project-detail",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/projects/console?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "project-detail",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/projects/console?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "project-detail",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/projects/console?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "project-detail",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/projects/console?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "users",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/users?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "users",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/users?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "users",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/users?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "users",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/users?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "user-detail",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/users/00000000-0000-0000-0000-00000000ada1?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "user-detail",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/users/00000000-0000-0000-0000-00000000ada1?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "user-detail",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/users/00000000-0000-0000-0000-00000000ada1?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "user-detail",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/users/00000000-0000-0000-0000-00000000ada1?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "auth-methods",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/auth-methods?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "auth-methods",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/auth-methods?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "auth-methods",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/auth-methods?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "auth-methods",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/auth-methods?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "signing-keys",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/signing-keys?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "signing-keys",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/signing-keys?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "signing-keys",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/signing-keys?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "signing-keys",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/signing-keys?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenant-audit",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/audit?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenant-audit",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/audit?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenant-audit",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/audit?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "tenant-audit",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/audit?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "branding",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/branding?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "branding",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/branding?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "branding",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/branding?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "branding",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/branding?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "api-tokens",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/api-tokens?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "api-tokens",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/api-tokens?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "api-tokens",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/api-tokens?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "api-tokens",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/api-tokens?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "members",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/members?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "members",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/members?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "members",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/members?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "members",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/members?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "email",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/email?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "email",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/email?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "email",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/email?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "email",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/email?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "upstream",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/upstream?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "upstream",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/upstream?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "upstream",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/upstream?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "upstream",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/upstream?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "danger",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/danger?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "danger",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/danger?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "danger",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/danger?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "danger",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/tenants/acme/settings/danger?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 2
+    },
+    {
+      "surface": "dashboard",
+      "name": "instance-admins",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/instance/admins?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "dashboard",
+      "name": "instance-admins",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/instance/admins?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "dashboard",
+      "name": "instance-admins",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/instance/admins?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "instance-admins",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/instance/admins?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "diagnostics",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/instance/diagnostics?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "diagnostics",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/instance/diagnostics?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "diagnostics",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/instance/diagnostics?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "diagnostics",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/instance/diagnostics?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "instance-audit",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/instance/audit?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "instance-audit",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/instance/audit?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "instance-audit",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://localhost:64615/dashboard/instance/audit?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "dashboard",
+      "name": "instance-audit",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://localhost:64615/dashboard/instance/audit?state=demo",
+      "title": "Cypra Dashboard",
+      "axeViolations": 0,
+      "axeIncomplete": 1
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-login",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/login",
+      "title": "Sign in - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-login",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/login",
+      "title": "Sign in - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-login",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/login",
+      "title": "Sign in - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-login",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/login",
+      "title": "Sign in - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-signup",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/signup",
+      "title": "Create account - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-signup",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/signup",
+      "title": "Create account - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-signup",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/signup",
+      "title": "Create account - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-signup",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/signup",
+      "title": "Create account - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-invite",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/invite",
+      "title": "Sign in - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-invite",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/invite",
+      "title": "Sign in - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-invite",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/invite",
+      "title": "Sign in - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-invite",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/invite",
+      "title": "Sign in - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-2fa",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/2fa",
+      "title": "Two-factor authentication - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-2fa",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/2fa",
+      "title": "Two-factor authentication - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-2fa",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/2fa",
+      "title": "Two-factor authentication - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-2fa",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/2fa",
+      "title": "Two-factor authentication - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-consent",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/oidc/consent?scope=openid%20email&continue=demo",
+      "title": "Consent - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-consent",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/oidc/consent?scope=openid%20email&continue=demo",
+      "title": "Consent - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-consent",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/oidc/consent?scope=openid%20email&continue=demo",
+      "title": "Consent - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-consent",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/oidc/consent?scope=openid%20email&continue=demo",
+      "title": "Consent - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-error",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/error?message=Demo%20error",
+      "title": "Sign-in error - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-error",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/error?message=Demo%20error",
+      "title": "Sign-in error - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-error",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/error?message=Demo%20error",
+      "title": "Sign-in error - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-error",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/error?message=Demo%20error",
+      "title": "Sign-in error - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-reset",
+      "viewport": "desktop",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/reset",
+      "title": "Reset password - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-reset",
+      "viewport": "desktop",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/reset",
+      "title": "Reset password - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-reset",
+      "viewport": "mobile",
+      "colorScheme": "light",
+      "url": "http://acme.localhost:64615/reset",
+      "title": "Reset password - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    },
+    {
+      "surface": "hosted",
+      "name": "hosted-reset",
+      "viewport": "mobile",
+      "colorScheme": "dark",
+      "url": "http://acme.localhost:64615/reset",
+      "title": "Reset password - Acme Operations",
+      "axeViolations": 0,
+      "axeIncomplete": 0
+    }
+  ]
+}
