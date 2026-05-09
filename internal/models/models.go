@@ -277,6 +277,39 @@ type UpstreamProvider struct {
 	CreatedAt             time.Time
 }
 
+func (UpstreamProvider) TableName() string { return "upstream_providers" }
+
+type SocialConnection struct {
+	ID                    uuid.UUID `gorm:"type:uuid;primaryKey"`
+	TenantID              uuid.UUID `gorm:"type:uuid"`
+	Kind                  string    `gorm:"type:social_provider_kind"`
+	ClientIDEncrypted     []byte
+	ClientSecretEncrypted []byte
+	Enabled               bool
+	Config                []byte `gorm:"type:jsonb"`
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
+func (SocialConnection) TableName() string { return "social_connections" }
+
+type OIDCConnection struct {
+	ID                    uuid.UUID `gorm:"type:uuid;primaryKey"`
+	TenantID              uuid.UUID `gorm:"type:uuid"`
+	Slug                  string
+	DisplayName           string
+	IssuerURL             string
+	ClientIDEncrypted     []byte
+	ClientSecretEncrypted []byte
+	Scopes                []string `gorm:"type:text[]"`
+	Config                []byte   `gorm:"type:jsonb"`
+	Enabled               bool
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
+func (OIDCConnection) TableName() string { return "oidc_connections" }
+
 type EmailProviderConfig struct {
 	ID              uuid.UUID `gorm:"type:uuid;primaryKey"`
 	TenantID        uuid.UUID `gorm:"type:uuid"`
@@ -308,6 +341,7 @@ type StorageObject struct {
 	Key         string    `gorm:"type:text"`
 	ContentType string    `gorm:"type:text"`
 	ByteSize    int64
+	OwnerUserID *uuid.UUID `gorm:"type:uuid"`
 	CreatedAt   time.Time
 	DeletedAt   *time.Time
 }

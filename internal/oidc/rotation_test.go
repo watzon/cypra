@@ -26,6 +26,24 @@ func TestForceRotateMovesActiveToOverlapAndCreatesActive(t *testing.T) {
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_signing_keys WHERE tenant_id = $1 AND state = 'overlap'`, 1, tenantID)
 }
 
+func TestForceRotateDuringOverlapPreservesSingleOverlap(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	kek := bytes.Repeat([]byte{1}, crypto.MasterKeyBytes)
+	service := oidc.NewRotationService(harness.SQL, kek)
+	service.SetNow(func() time.Time { return time.Unix(100, 0).UTC() })
+	if err := service.ForceRotate(context.Background(), tenantID); err != nil {
+		t.Fatalf("first force rotate: %v", err)
+	}
+	service.SetNow(func() time.Time { return time.Unix(200, 0).UTC() })
+	if err := service.ForceRotate(context.Background(), tenantID); err != nil {
+		t.Fatalf("second force rotate: %v", err)
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_signing_keys WHERE tenant_id = $1 AND state = 'active'`, 1, tenantID)
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_signing_keys WHERE tenant_id = $1 AND state = 'overlap'`, 1, tenantID)
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_signing_keys WHERE tenant_id = $1 AND state = 'retired'`, 1, tenantID)
+}
+
 func TestSunsetKeysAndPrune(t *testing.T) {
 	harness := dbtest.New(t)
 	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
@@ -72,4 +90,26 @@ func TestRotateDueRotatesActiveAndRetiresExpiredOverlap(t *testing.T) {
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_signing_keys WHERE tenant_id = $1 AND state = 'active'`, 1, tenantID)
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_signing_keys WHERE tenant_id = $1 AND state = 'overlap'`, 1, tenantID)
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_signing_keys WHERE tenant_id = $1 AND state = 'retired'`, 1, retireTenantID)
+}
+
+func TestRotationRunStopsOnContextCancel(t *testing.T) {
+	harness := dbtest.New(t)
+	dbtest.SeedTenant(t, harness.SQL, "acme")
+	kek := bytes.Repeat([]byte{1}, crypto.MasterKeyBytes)
+	service := oidc.NewRotationService(harness.SQL, kek)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- service.Run(ctx, 10*time.Millisecond)
+	}()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run returned error: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("rotation run did not stop after cancellation")
+	}
 }

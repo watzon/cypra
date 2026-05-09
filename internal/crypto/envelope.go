@@ -15,9 +15,10 @@ import (
 )
 
 const (
-	MasterKeyBytes = 32
-	DEKBytes       = 32
-	gcmNonceBytes  = 12
+	MasterKeyBytes    = 32
+	DEKBytes          = 32
+	gcmNonceBytes     = 12
+	encryptedDEKBytes = gcmNonceBytes + DEKBytes + 16
 )
 
 var (

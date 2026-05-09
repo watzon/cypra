@@ -9,6 +9,37 @@ import (
 	"strings"
 )
 
+type requestFieldsKey struct{}
+
+type RequestFields struct {
+	RequestID string
+	TenantID  string
+	ActorID   string
+}
+
+func ContextWithRequestFields(ctx context.Context, fields *RequestFields) context.Context {
+	return context.WithValue(ctx, requestFieldsKey{}, fields)
+}
+
+func SetTenantID(ctx context.Context, tenantID string) {
+	if fields, ok := ctx.Value(requestFieldsKey{}).(*RequestFields); ok {
+		fields.TenantID = tenantID
+	}
+}
+
+func SetActorID(ctx context.Context, actorID string) {
+	if fields, ok := ctx.Value(requestFieldsKey{}).(*RequestFields); ok {
+		fields.ActorID = actorID
+	}
+}
+
+func RequestFieldsFromContext(ctx context.Context) RequestFields {
+	if fields, ok := ctx.Value(requestFieldsKey{}).(*RequestFields); ok && fields != nil {
+		return *fields
+	}
+	return RequestFields{}
+}
+
 type RedactingHandler struct{ slog.Handler }
 
 func (h RedactingHandler) Handle(ctx context.Context, record slog.Record) error {
@@ -25,5 +56,5 @@ func (h RedactingHandler) Handle(ctx context.Context, record slog.Record) error 
 
 func isSensitive(key string) bool {
 	lower := strings.ToLower(key)
-	return strings.Contains(lower, "password") || strings.Contains(lower, "token") || strings.Contains(lower, "secret") || strings.Contains(lower, "email_body")
+	return strings.Contains(lower, "password") || strings.Contains(lower, "token") || strings.Contains(lower, "secret") || strings.Contains(lower, "email")
 }

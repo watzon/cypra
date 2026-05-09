@@ -2,6 +2,7 @@ package httpserver_test
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -10,6 +11,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/lib/pq"
@@ -36,7 +38,7 @@ func TestOIDCDiscoveryJWKSAndAuthCodeFlow(t *testing.T) {
 	if _, err := harness.SQL.Exec(`INSERT INTO oidc_clients (tenant_id, project_id, client_id, client_secret_encrypted, redirect_uris, allowed_scopes, token_endpoint_auth_method) VALUES ($1, $2, 'client', $3, $4, $5, 'client_secret_post')`, tenantID, projectID, secret, pq.Array([]string{"https://app.example.com/callback"}), pq.Array([]string{"openid", "email"})); err != nil {
 		t.Fatalf("seed client: %v", err)
 	}
-	server, err := httpserver.New(httpserver.Options{DB: harness.SQL, TenantDB: harness.TenantDB, PublicBaseURL: "https://cypra.localhost", Version: "test", Commit: "test", KEKLoaded: true, MasterKey: dbtest.TestMasterKey()})
+	server, err := httpserver.New(httpserver.Options{DB: harness.SQL, TenantDB: harness.TenantDB, PublicBaseURL: "https://cypra.localhost", Version: "test", Commit: "test", KEKLoaded: true, MasterKey: dbtest.TestMasterKey(), TrustDevHeaders: true})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
@@ -67,7 +69,6 @@ func TestOIDCDiscoveryJWKSAndAuthCodeFlow(t *testing.T) {
 	values.Set("nonce", "nonce")
 	values.Set("code_challenge", oidcChallenge(verifier))
 	values.Set("code_challenge_method", "S256")
-	values.Set("user_id", userID.String())
 	req = httptest.NewRequest(http.MethodGet, "/oidc/authorize?"+values.Encode(), nil)
 	req.Host = "acme.cypra.localhost"
 	resp = httptest.NewRecorder()
@@ -75,13 +76,79 @@ func TestOIDCDiscoveryJWKSAndAuthCodeFlow(t *testing.T) {
 	if resp.Code != http.StatusFound {
 		t.Fatalf("authorize = %d %s", resp.Code, resp.Body.String())
 	}
+	loginLocation, err := url.Parse(resp.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse login redirect: %v", err)
+	}
+	continuation := loginLocation.Query().Get("continue")
+	if loginLocation.Path != "/login" || continuation == "" {
+		t.Fatalf("login redirect location = %s", loginLocation.String())
+	}
+	sessionID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO sessions (id, subject_id, subject_kind, tenant_id, expires_at) VALUES ($1, $2, 'user', $3, $4)`, sessionID, userID, tenantID, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/oidc/authorize?continue="+url.QueryEscape(continuation), nil)
+	req.Host = "acme.cypra.localhost"
+	req.AddCookie(&http.Cookie{Name: "cypra_session", Value: sessionID.String()})
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusFound {
+		t.Fatalf("authorize continuation = %d %s", resp.Code, resp.Body.String())
+	}
+	consentLocation, err := url.Parse(resp.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse consent redirect: %v", err)
+	}
+	consentContinuation := consentLocation.Query().Get("continue")
+	if consentLocation.Path != "/oidc/consent" || consentContinuation == "" {
+		t.Fatalf("consent redirect location = %s", consentLocation.String())
+	}
+	consentForm := url.Values{"decision": {"allow"}, "continue": {consentContinuation}}
+	req = httptest.NewRequest(http.MethodPost, "/oidc/consent", strings.NewReader(consentForm.Encode()))
+	req.Host = "acme.cypra.localhost"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(&http.Cookie{Name: "cypra_session", Value: sessionID.String()})
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK || resp.Header().Get("HX-Redirect") == "" {
+		t.Fatalf("consent decision = %d %s headers=%v", resp.Code, resp.Body.String(), resp.Header())
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_consents WHERE tenant_id = $1 AND user_id = $2`, 1, tenantID, userID)
+
+	req = httptest.NewRequest(http.MethodGet, resp.Header().Get("HX-Redirect"), nil)
+	req.Host = "acme.cypra.localhost"
+	req.AddCookie(&http.Cookie{Name: "cypra_session", Value: sessionID.String()})
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusFound {
+		t.Fatalf("authorize after consent = %d %s", resp.Code, resp.Body.String())
+	}
 	location, err := url.Parse(resp.Header().Get("Location"))
 	if err != nil {
-		t.Fatalf("parse redirect: %v", err)
+		t.Fatalf("parse app redirect: %v", err)
 	}
 	code := location.Query().Get("code")
 	if code == "" || location.Query().Get("state") != "state" {
 		t.Fatalf("redirect location = %s", location.String())
+	}
+	badVerifier := "bad-verifier"
+	badCode, err := (oidc.Provider{DB: harness.SQL, KEK: dbtest.TestMasterKey(), InstallDomain: "cypra.localhost"}).Authorize(context.Background(), oidc.AuthorizeRequest{TenantID: tenantID, UserID: userID, ClientID: "client", RedirectURI: "https://app.example.com/callback", Scope: []string{"openid"}, CodeChallenge: oidcChallenge(badVerifier), CodeChallengeMethod: "S256"})
+	if err != nil {
+		t.Fatalf("authorize invalid-grant code: %v", err)
+	}
+	badForm := url.Values{"grant_type": {"authorization_code"}, "client_id": {"client"}, "client_secret": {"secret"}, "code": {badCode}, "redirect_uri": {"https://app.example.com/callback"}, "code_verifier": {"wrong"}}
+	req = httptest.NewRequest(http.MethodPost, "/oidc/token", strings.NewReader(badForm.Encode()))
+	req.Host = "acme.cypra.localhost"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp = httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusBadRequest || strings.Contains(resp.Body.String(), "pkce") {
+		t.Fatalf("invalid grant leaked detail: %d %s", resp.Code, resp.Body.String())
+	}
+	var tokenError map[string]string
+	if err := json.Unmarshal(resp.Body.Bytes(), &tokenError); err != nil || tokenError["error"] != "invalid_grant" || tokenError["error_description"] == "" {
+		t.Fatalf("invalid grant response = %+v err=%v", tokenError, err)
 	}
 
 	form := url.Values{"grant_type": {"authorization_code"}, "client_id": {"client"}, "client_secret": {"secret"}, "code": {code}, "redirect_uri": {"https://app.example.com/callback"}, "code_verifier": {verifier}}
@@ -109,6 +176,123 @@ func TestOIDCDiscoveryJWKSAndAuthCodeFlow(t *testing.T) {
 	router.ServeHTTP(resp, req)
 	if resp.Code != http.StatusOK || resp.Header().Get("Cache-Control") != "no-store" {
 		t.Fatalf("userinfo = %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestOIDCTokenRejectsClientOutsideResolvedTenant(t *testing.T) {
+	harness := dbtest.New(t)
+	dbtest.SeedTenant(t, harness.SQL, "acme")
+	bravoID := dbtest.SeedSecondTenant(t, harness.SQL, "bravo")
+	projectID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO projects (id, tenant_id, slug, name) VALUES ($1, $2, 'app', 'App')`, projectID, bravoID); err != nil {
+		t.Fatalf("seed bravo project: %v", err)
+	}
+	userID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO users (id, tenant_id, email, email_verified_at, metadata) VALUES ($1, $2, 'user@example.com', now(), '{}'::jsonb)`, userID, bravoID); err != nil {
+		t.Fatalf("seed bravo user: %v", err)
+	}
+	if _, err := harness.SQL.Exec(`INSERT INTO oidc_clients (tenant_id, project_id, client_id, redirect_uris, allowed_scopes, token_endpoint_auth_method) VALUES ($1, $2, 'bravo-client', $3, $4, 'none')`, bravoID, projectID, pq.Array([]string{"https://app.example.com/callback"}), pq.Array([]string{"openid"})); err != nil {
+		t.Fatalf("seed bravo client: %v", err)
+	}
+	provider := oidc.Provider{DB: harness.SQL, KEK: dbtest.TestMasterKey(), InstallDomain: "cypra.localhost"}
+	verifier := "bravo-verifier"
+	code, err := provider.Authorize(context.Background(), oidc.AuthorizeRequest{TenantID: bravoID, UserID: userID, ClientID: "bravo-client", RedirectURI: "https://app.example.com/callback", Scope: []string{"openid"}, CodeChallenge: oidcChallenge(verifier), CodeChallengeMethod: "S256"})
+	if err != nil {
+		t.Fatalf("authorize bravo client: %v", err)
+	}
+	server, err := httpserver.New(httpserver.Options{DB: harness.SQL, TenantDB: harness.TenantDB, PublicBaseURL: "https://cypra.localhost", Version: "test", Commit: "test", KEKLoaded: true, MasterKey: dbtest.TestMasterKey(), TrustDevHeaders: true})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	form := url.Values{"grant_type": {"authorization_code"}, "client_id": {"bravo-client"}, "code": {code}, "redirect_uri": {"https://app.example.com/callback"}, "code_verifier": {verifier}}
+	req := httptest.NewRequest(http.MethodPost, "/oidc/token", strings.NewReader(form.Encode()))
+	req.Host = "acme.cypra.localhost"
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp := httptest.NewRecorder()
+	server.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusBadRequest || !strings.Contains(resp.Body.String(), "invalid_client") {
+		t.Fatalf("cross-tenant token = %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestOIDCConsentJSONRecordsDecision(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	projectID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO projects (id, tenant_id, slug, name) VALUES ($1, $2, 'app', 'App')`, projectID, tenantID); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	userID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO users (id, tenant_id, email, email_verified_at, metadata) VALUES ($1, $2, 'user@example.com', now(), '{}'::jsonb)`, userID, tenantID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	clientID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO oidc_clients (id, tenant_id, project_id, client_id, redirect_uris, allowed_scopes, token_endpoint_auth_method) VALUES ($1, $2, $3, 'client', $4, $5, 'none')`, clientID, tenantID, projectID, pq.Array([]string{"https://app.example.com/callback"}), pq.Array([]string{"openid", "email"})); err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+	server, err := httpserver.New(httpserver.Options{DB: harness.SQL, TenantDB: harness.TenantDB, PublicBaseURL: "https://cypra.localhost", Version: "test", Commit: "test", KEKLoaded: true, MasterKey: dbtest.TestMasterKey(), TrustDevHeaders: true})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	payload := `{"decision":"allow","user_id":"` + userID.String() + `","client_id":"client","scopes":["openid","email"]}`
+	req := httptest.NewRequest(http.MethodPost, "/oidc/consent", strings.NewReader(payload))
+	req.Host = "acme.cypra.localhost"
+	req.Header.Set("Content-Type", "application/json")
+	resp := httptest.NewRecorder()
+	server.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("json consent = %d %s", resp.Code, resp.Body.String())
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_consents WHERE tenant_id = $1 AND user_id = $2 AND oidc_client_uuid = $3`, 1, tenantID, userID, clientID)
+}
+
+func TestOIDCAuthorizeForcesConsentOnScopeUpgrade(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	projectID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO projects (id, tenant_id, slug, name) VALUES ($1, $2, 'app', 'App')`, projectID, tenantID); err != nil {
+		t.Fatalf("seed project: %v", err)
+	}
+	userID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO users (id, tenant_id, email, email_verified_at, metadata) VALUES ($1, $2, 'user@example.com', now(), '{}'::jsonb)`, userID, tenantID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	clientUUID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO oidc_clients (id, tenant_id, project_id, client_id, redirect_uris, allowed_scopes, token_endpoint_auth_method) VALUES ($1, $2, $3, 'client', $4, $5, 'none')`, clientUUID, tenantID, projectID, pq.Array([]string{"https://app.example.com/callback"}), pq.Array([]string{"openid", "email"})); err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+	if _, err := harness.SQL.Exec(`INSERT INTO oidc_consents (tenant_id, user_id, oidc_client_uuid, scopes) VALUES ($1, $2, $3, $4)`, tenantID, userID, clientUUID, pq.Array([]string{"openid"})); err != nil {
+		t.Fatalf("seed consent: %v", err)
+	}
+	sessionID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO sessions (id, subject_id, subject_kind, tenant_id, expires_at) VALUES ($1, $2, 'user', $3, $4)`, sessionID, userID, tenantID, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+	server, err := httpserver.New(httpserver.Options{DB: harness.SQL, TenantDB: harness.TenantDB, PublicBaseURL: "https://cypra.localhost", Version: "test", Commit: "test", KEKLoaded: true, MasterKey: dbtest.TestMasterKey(), TrustDevHeaders: true})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+	values := url.Values{}
+	values.Set("client_id", "client")
+	values.Set("redirect_uri", "https://app.example.com/callback")
+	values.Set("scope", "openid email")
+	values.Set("code_challenge", oidcChallenge("upgrade-verifier"))
+	values.Set("code_challenge_method", "S256")
+	req := httptest.NewRequest(http.MethodGet, "/oidc/authorize?"+values.Encode(), nil)
+	req.Host = "acme.cypra.localhost"
+	req.AddCookie(&http.Cookie{Name: "cypra_session", Value: sessionID.String()})
+	resp := httptest.NewRecorder()
+	server.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusFound {
+		t.Fatalf("scope upgrade authorize = %d %s", resp.Code, resp.Body.String())
+	}
+	location, err := url.Parse(resp.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse consent redirect: %v", err)
+	}
+	if location.Path != "/oidc/consent" || location.Query().Get("upgraded") != "true" {
+		t.Fatalf("scope upgrade location = %s", location.String())
 	}
 }
 

@@ -10,6 +10,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -19,6 +20,10 @@ import (
 const RefreshTokenBytes = 32
 
 var ErrRefreshReuseDetected = errors.New("refresh token reuse detected")
+
+var refreshReuseDetectedTotal atomic.Uint64
+
+func RefreshReuseDetectedTotal() uint64 { return refreshReuseDetectedTotal.Load() }
 
 type RefreshService struct {
 	db            *sql.DB
@@ -120,6 +125,7 @@ func (s *RefreshService) handleReuse(ctx context.Context, tx *sql.Tx, tokenHash 
 	if err := tx.Commit(); err != nil {
 		return fmt.Errorf("commit refresh reuse: %w", err)
 	}
+	refreshReuseDetectedTotal.Add(1)
 	if s.reuseCallback != nil {
 		s.reuseCallback()
 	}

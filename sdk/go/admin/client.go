@@ -54,35 +54,6 @@ type User struct {
 	EnrolledMethods []string       `json:"enrolled_methods,omitempty"`
 }
 
-// Member mirrors a tenant membership row.
-type Member struct {
-	ID        string `json:"id"`
-	UserID    string `json:"user_id"`
-	Email     string `json:"email"`
-	Role      string `json:"role"`
-	CreatedAt string `json:"created_at"`
-}
-
-// OIDCClient mirrors an OIDC client row.
-type OIDCClient struct {
-	ID                      string   `json:"id"`
-	ProjectID               string   `json:"project_id"`
-	ClientID                string   `json:"client_id"`
-	RedirectURIs            []string `json:"redirect_uris"`
-	AllowedScopes           []string `json:"allowed_scopes"`
-	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
-}
-
-// SigningKey mirrors an OIDC signing key row.
-type SigningKey struct {
-	ID          string `json:"id"`
-	KID         string `json:"kid"`
-	State       string `json:"state"`
-	ActivatedAt string `json:"activated_at,omitempty"`
-	RetiresAt   string `json:"retires_at,omitempty"`
-	SunsetUntil string `json:"sunset_until,omitempty"`
-}
-
 // AuditEntry mirrors an audit export/list row.
 type AuditEntry struct {
 	ID           string         `json:"id"`
@@ -171,21 +142,6 @@ func (c *Client) DeleteUser(ctx context.Context, id string) error {
 	return c.do(ctx, http.MethodDelete, "/api/v1/users/"+url.PathEscape(id), nil, nil, false)
 }
 
-func (c *Client) ListMembers(ctx context.Context) ([]Member, error) {
-	var members []Member
-	return members, c.do(ctx, http.MethodGet, "/api/v1/members/", nil, &members, false)
-}
-
-func (c *Client) ListOIDCClients(ctx context.Context) ([]OIDCClient, error) {
-	var clients []OIDCClient
-	return clients, c.do(ctx, http.MethodGet, "/api/v1/oidc-clients/", nil, &clients, false)
-}
-
-func (c *Client) ListSigningKeys(ctx context.Context) ([]SigningKey, error) {
-	var keys []SigningKey
-	return keys, c.do(ctx, http.MethodGet, "/api/v1/signing-keys/", nil, &keys, false)
-}
-
 func (c *Client) ListAuditEntries(ctx context.Context) ([]AuditEntry, error) {
 	raw, err := c.ExportAudit(ctx)
 	if err != nil {
@@ -245,7 +201,7 @@ func (c *Client) doRaw(ctx context.Context, method, path string, body any, out a
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set("Accept", "application/json")
-	if c.PAT != "" {
+	if c.PAT != "" && !instanceAdmin {
 		req.Header.Set("Authorization", "Bearer "+c.PAT)
 	}
 	if instanceAdmin {

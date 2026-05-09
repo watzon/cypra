@@ -10,10 +10,16 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 )
 
 const DefaultDir = "db/migrations"
+
+type Status struct {
+	Current int
+	Pending []string
+}
 
 func Apply(ctx context.Context, db *sql.DB, dir string) error {
 	if dir == "" {
@@ -50,26 +56,38 @@ func Apply(ctx context.Context, db *sql.DB, dir string) error {
 }
 
 func Pending(ctx context.Context, db *sql.DB, dir string) (bool, error) {
+	status, err := CurrentStatus(ctx, db, dir)
+	if err != nil {
+		return false, err
+	}
+	return len(status.Pending) > 0, nil
+}
+
+func CurrentStatus(ctx context.Context, db *sql.DB, dir string) (Status, error) {
 	if dir == "" {
 		dir = DefaultDir
 	}
 	if err := ensureVersionTable(ctx, db); err != nil {
-		return false, err
+		return Status{}, err
 	}
 	applied, err := appliedVersions(ctx, db)
 	if err != nil {
-		return false, err
+		return Status{}, err
 	}
 	files, err := migrationFiles(dir, ".up.sql")
 	if err != nil {
-		return false, err
+		return Status{}, err
 	}
+	status := Status{Pending: []string{}}
 	for _, file := range files {
-		if !applied[migrationVersion(file)] {
-			return true, nil
+		version := migrationVersion(file)
+		if applied[version] {
+			status.Current = max(status.Current, migrationNumber(version))
+			continue
 		}
+		status.Pending = append(status.Pending, version)
 	}
-	return false, nil
+	return status, nil
 }
 
 func ensureVersionTable(ctx context.Context, db *sql.DB) error {
@@ -102,6 +120,15 @@ func migrationFiles(dir, suffix string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("glob migrations: %w", err)
 	}
+	if len(files) == 0 && dir == DefaultDir {
+		resolved, ok := findDefaultDir()
+		if ok && resolved != dir {
+			files, err = filepath.Glob(filepath.Join(resolved, "*"+suffix))
+			if err != nil {
+				return nil, fmt.Errorf("glob migrations: %w", err)
+			}
+		}
+	}
 	sort.Strings(files)
 	return files, nil
 }
@@ -109,4 +136,31 @@ func migrationFiles(dir, suffix string) ([]string, error) {
 func migrationVersion(file string) string {
 	base := filepath.Base(file)
 	return strings.TrimSuffix(base, ".up.sql")
+}
+
+func migrationNumber(version string) int {
+	prefix, _, _ := strings.Cut(version, "_")
+	number, err := strconv.Atoi(prefix)
+	if err != nil {
+		return 0
+	}
+	return number
+}
+
+func findDefaultDir() (string, bool) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", false
+	}
+	for {
+		candidate := filepath.Join(wd, DefaultDir)
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return candidate, true
+		}
+		parent := filepath.Dir(wd)
+		if parent == wd {
+			return "", false
+		}
+		wd = parent
+	}
 }

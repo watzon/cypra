@@ -3,8 +3,10 @@ package oidc
 
 import (
 	"context"
+	"errors"
 
 	coreosoidc "github.com/coreos/go-oidc/v3/oidc"
+	cypra "github.com/watzon/cypra/sdk/go"
 	"golang.org/x/oauth2"
 )
 
@@ -46,12 +48,20 @@ func (c *Client) AuthCodeURL(state string, opts ...oauth2.AuthCodeOption) string
 
 // Exchange exchanges an authorization code for tokens.
 func (c *Client) Exchange(ctx context.Context, code string, opts ...oauth2.AuthCodeOption) (*oauth2.Token, error) {
-	return c.config.Exchange(ctx, code, opts...)
+	token, err := c.config.Exchange(ctx, code, opts...)
+	if err != nil {
+		return nil, oidcError(err)
+	}
+	return token, nil
 }
 
 // RefreshToken refreshes an access token using a refresh token.
 func (c *Client) RefreshToken(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
-	return c.config.TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken}).Token()
+	token, err := c.config.TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken}).Token()
+	if err != nil {
+		return nil, oidcError(err)
+	}
+	return token, nil
 }
 
 // UserInfo fetches claims from the Cypra userinfo endpoint.
@@ -63,4 +73,12 @@ func (c *Client) UserInfo(ctx context.Context, tokenSource oauth2.TokenSource) (
 func (c *Client) Verify(ctx context.Context, rawIDToken string) (*coreosoidc.IDToken, error) {
 	verifier := c.provider.Verifier(&coreosoidc.Config{ClientID: c.ClientID})
 	return verifier.Verify(ctx, rawIDToken)
+}
+
+func oidcError(err error) error {
+	var retrieveErr *oauth2.RetrieveError
+	if !errors.As(err, &retrieveErr) || retrieveErr.Response == nil {
+		return err
+	}
+	return cypra.ErrorForStatus(retrieveErr.Response.StatusCode, retrieveErr.ErrorCode)
 }

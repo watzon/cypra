@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -19,6 +20,7 @@ import (
 	"github.com/lib/pq"
 	cypra "github.com/watzon/cypra/internal/crypto"
 	"github.com/watzon/cypra/internal/sessions"
+	"github.com/watzon/cypra/internal/storage"
 )
 
 var (
@@ -36,6 +38,7 @@ type Provider struct {
 	DB            *sql.DB
 	KEK           []byte
 	InstallDomain string
+	Storage       storage.Store
 	Now           func() time.Time
 }
 
@@ -62,6 +65,7 @@ type AuthorizeRequest struct {
 }
 
 type TokenRequest struct {
+	TenantID        uuid.UUID
 	TenantSlug      string
 	ClientID        string
 	ClientSecret    string
@@ -83,18 +87,9 @@ type TokenResponse struct {
 }
 
 func (p Provider) Authorize(ctx context.Context, req AuthorizeRequest) (string, error) {
-	client, err := p.LoadClient(ctx, req.TenantID, req.ClientID)
+	client, err := p.ValidateAuthorizeRequest(ctx, req)
 	if err != nil {
 		return "", err
-	}
-	if !RedirectURIMatches(client.RedirectURIs, req.RedirectURI) {
-		return "", ErrInvalidRedirectURI
-	}
-	if req.CodeChallenge == "" || req.CodeChallengeMethod != "S256" {
-		return "", ErrUnsupportedPKCEMode
-	}
-	if !scopeAllowed(req.Scope, client.AllowedScopes) {
-		return "", ErrInvalidScope
 	}
 	code, err := randomCode()
 	if err != nil {
@@ -105,6 +100,23 @@ func (p Provider) Authorize(ctx context.Context, req AuthorizeRequest) (string, 
 		return "", fmt.Errorf("insert authorization code: %w", err)
 	}
 	return code, nil
+}
+
+func (p Provider) ValidateAuthorizeRequest(ctx context.Context, req AuthorizeRequest) (Client, error) {
+	client, err := p.LoadClient(ctx, req.TenantID, req.ClientID)
+	if err != nil {
+		return Client{}, err
+	}
+	if !RedirectURIMatches(client.RedirectURIs, req.RedirectURI) {
+		return Client{}, ErrInvalidRedirectURI
+	}
+	if req.CodeChallenge == "" || req.CodeChallengeMethod != "S256" {
+		return Client{}, ErrUnsupportedPKCEMode
+	}
+	if !scopeAllowed(req.Scope, client.AllowedScopes) {
+		return Client{}, ErrInvalidScope
+	}
+	return client, nil
 }
 
 func (p Provider) Token(ctx context.Context, req TokenRequest) (TokenResponse, error) {
@@ -119,7 +131,7 @@ func (p Provider) Token(ctx context.Context, req TokenRequest) (TokenResponse, e
 }
 
 func (p Provider) exchangeAuthorizationCode(ctx context.Context, req TokenRequest) (TokenResponse, error) {
-	client, err := p.LoadClientByClientID(ctx, req.ClientID)
+	client, err := p.LoadClient(ctx, req.TenantID, req.ClientID)
 	if err != nil {
 		return TokenResponse{}, err
 	}
@@ -155,7 +167,7 @@ func (p Provider) exchangeAuthorizationCode(ctx context.Context, req TokenReques
 }
 
 func (p Provider) exchangeRefreshToken(ctx context.Context, req TokenRequest) (TokenResponse, error) {
-	client, err := p.LoadClientByClientID(ctx, req.ClientID)
+	client, err := p.LoadClient(ctx, req.TenantID, req.ClientID)
 	if err != nil {
 		return TokenResponse{}, err
 	}
@@ -163,7 +175,7 @@ func (p Provider) exchangeRefreshToken(ctx context.Context, req TokenRequest) (T
 		return TokenResponse{}, err
 	}
 	refresh, err := sessions.NewRefreshService(p.DB).Consume(ctx, req.RefreshToken, p.now().Add(30*24*time.Hour))
-	if err != nil || refresh.ClientID != client.ID {
+	if err != nil || refresh.TenantID != req.TenantID || refresh.ClientID != client.ID {
 		return TokenResponse{}, ErrInvalidGrant
 	}
 	response, err := p.mintAccessPair(ctx, req.TenantSlug, client, refresh.UserID, refresh.Scope)
@@ -204,16 +216,27 @@ func (p Provider) mintAccessPair(ctx context.Context, tenantSlug string, client 
 }
 
 func (p Provider) UserInfo(ctx context.Context, tenantSlug string, tenantID uuid.UUID, token string) (map[string]any, error) {
+	audience, err := claimsAudience(token)
+	if err != nil || audience == "" {
+		return nil, sessions.ErrInvalidToken
+	}
+	if _, err := p.LoadClient(ctx, tenantID, audience); err != nil {
+		return nil, sessions.ErrInvalidToken
+	}
 	keys, err := p.SigningKeys(ctx, tenantID)
 	if err != nil {
 		return nil, err
 	}
-	claims, err := sessions.VerifyAccessToken(token, keys, "https://"+tenantSlug+"."+p.InstallDomain, claimsAudience(token), p.now())
+	claims, err := sessions.VerifyAccessToken(token, keys, sessions.IssuerURL(tenantSlug, p.InstallDomain), audience, p.now())
 	if err != nil {
 		return nil, err
 	}
-	_, userText, ok := strings.Cut(claims.Subject, ":")
+	tenantText, userText, ok := strings.Cut(claims.Subject, ":")
 	if !ok {
+		return nil, sessions.ErrInvalidToken
+	}
+	subjectTenantID, err := uuid.Parse(tenantText)
+	if err != nil || subjectTenantID != tenantID {
 		return nil, sessions.ErrInvalidToken
 	}
 	userID, err := uuid.Parse(userText)
@@ -222,10 +245,26 @@ func (p Provider) UserInfo(ctx context.Context, tenantSlug string, tenantID uuid
 	}
 	var email string
 	var verified sql.NullTime
-	if err := p.DB.QueryRowContext(ctx, `SELECT email, email_verified_at FROM users WHERE tenant_id = $1 AND id = $2`, tenantID, userID).Scan(&email, &verified); err != nil {
+	var name string
+	var pictureKey sql.NullString
+	if err := p.DB.QueryRowContext(ctx, `SELECT u.email, u.email_verified_at, COALESCE(u.metadata->>'name', ''), o.key FROM users u LEFT JOIN storage_objects o ON o.tenant_id = u.tenant_id AND o.id = u.profile_picture_object_id AND o.deleted_at IS NULL WHERE u.tenant_id = $1 AND u.id = $2 AND u.deleted_at IS NULL`, tenantID, userID).Scan(&email, &verified, &name, &pictureKey); err != nil {
 		return nil, err
 	}
-	return map[string]any{"sub": claims.Subject, "email": email, "email_verified": verified.Valid, "updated_at": p.now().Unix()}, nil
+	response := map[string]any{"sub": claims.Subject, "email": email, "email_verified": verified.Valid, "updated_at": p.now().Unix()}
+	if name != "" {
+		response["name"] = name
+	}
+	if pictureKey.Valid && p.Storage != nil {
+		signed, err := p.Storage.SignedURL(pictureKey.String, 5*time.Minute)
+		if err != nil {
+			return nil, err
+		}
+		if strings.HasPrefix(signed, "/") {
+			signed = "https://" + tenantSlug + "." + p.InstallDomain + signed
+		}
+		response["picture"] = signed
+	}
+	return response, nil
 }
 
 func (p Provider) Revoke(ctx context.Context, token string) error {
@@ -248,18 +287,21 @@ func (p Provider) RecordConsent(ctx context.Context, tenantID, userID, clientUUI
 	return err
 }
 
+func (p Provider) ConsentCovers(ctx context.Context, tenantID, userID, clientUUID uuid.UUID, requested []string) (bool, bool, error) {
+	var granted []string
+	err := p.DB.QueryRowContext(ctx, `SELECT scopes FROM oidc_consents WHERE tenant_id = $1 AND user_id = $2 AND oidc_client_uuid = $3 AND revoked_at IS NULL`, tenantID, userID, clientUUID).Scan(pq.Array(&granted))
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, false, nil
+	}
+	if err != nil {
+		return false, false, err
+	}
+	return scopeAllowed(requested, granted), true, nil
+}
+
 func (p Provider) LoadClient(ctx context.Context, tenantID uuid.UUID, clientID string) (Client, error) {
 	var client Client
 	err := p.DB.QueryRowContext(ctx, `SELECT id, tenant_id, client_id, client_secret_encrypted, redirect_uris, allowed_scopes, token_endpoint_auth_method FROM oidc_clients WHERE tenant_id = $1 AND client_id = $2 AND deleted_at IS NULL`, tenantID, clientID).Scan(&client.ID, &client.TenantID, &client.ClientID, &client.ClientSecretEncrypted, pq.Array(&client.RedirectURIs), pq.Array(&client.AllowedScopes), &client.TokenEndpointAuthMethod)
-	if errors.Is(err, sql.ErrNoRows) {
-		return Client{}, ErrInvalidClient
-	}
-	return client, err
-}
-
-func (p Provider) LoadClientByClientID(ctx context.Context, clientID string) (Client, error) {
-	var client Client
-	err := p.DB.QueryRowContext(ctx, `SELECT id, tenant_id, client_id, client_secret_encrypted, redirect_uris, allowed_scopes, token_endpoint_auth_method FROM oidc_clients WHERE client_id = $1 AND deleted_at IS NULL`, clientID).Scan(&client.ID, &client.TenantID, &client.ClientID, &client.ClientSecretEncrypted, pq.Array(&client.RedirectURIs), pq.Array(&client.AllowedScopes), &client.TokenEndpointAuthMethod)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Client{}, ErrInvalidClient
 	}
@@ -368,7 +410,23 @@ func (p Provider) now() time.Time {
 	return time.Now().UTC()
 }
 
-func claimsAudience(string) string { return "" }
+func claimsAudience(token string) (string, error) {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return "", sessions.ErrInvalidToken
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", sessions.ErrInvalidToken
+	}
+	var claims struct {
+		Audience string `json:"aud"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "", sessions.ErrInvalidToken
+	}
+	return claims.Audience, nil
+}
 
 type authorizationCode struct {
 	tenantID      uuid.UUID

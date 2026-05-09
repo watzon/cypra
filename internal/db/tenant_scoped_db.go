@@ -22,10 +22,6 @@ func NewTenantScopedDB(db *gorm.DB) *TenantScopedDB {
 	return &TenantScopedDB{db: db}
 }
 
-func (tdb *TenantScopedDB) DB() *gorm.DB {
-	return tdb.db
-}
-
 func (tdb *TenantScopedDB) Find(ctx context.Context, tenantID uuid.UUID, dest any, conds ...any) error {
 	return tdb.withTenant(ctx, tenantID, func(tx *gorm.DB) error {
 		return tx.Find(dest, conds...).Error
@@ -90,7 +86,7 @@ func (tdb *TenantScopedDB) withTenant(ctx context.Context, tenantID uuid.UUID, f
 	if tenantID == uuid.Nil {
 		return ErrTenantContextMissing
 	}
-	return tdb.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+	return tdb.db.WithContext(ContextWithTenant(ctx, tenantID)).Transaction(func(tx *gorm.DB) error {
 		if err := setTenant(tx, tenantID); err != nil {
 			return err
 		}
@@ -101,14 +97,26 @@ func (tdb *TenantScopedDB) withTenant(ctx context.Context, tenantID uuid.UUID, f
 }
 
 func setTenant(tx *gorm.DB, tenantID uuid.UUID) error {
-	return tx.Exec("SELECT set_config('cypra.tenant_id', ?, true)", tenantID.String()).Error
+	return setTenantConfig(tx, tenantID.String(), true)
 }
 
 func resetTenantAfter(tx *gorm.DB, fn func() error) error {
 	err := fn()
-	resetErr := tx.Exec("SELECT set_config('cypra.tenant_id', '', false)").Error
+	resetErr := setTenantConfig(tx, "", false)
 	if err != nil {
 		return err
 	}
 	return resetErr
+}
+
+func setTenantConfig(tx *gorm.DB, value string, local bool) error {
+	ctx := tx.Statement.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if tx.Statement.ConnPool == nil {
+		return tx.Exec("SELECT set_config('cypra.tenant_id', ?, ?)", value, local).Error
+	}
+	_, err := tx.Statement.ConnPool.ExecContext(ctx, "SELECT set_config('cypra.tenant_id', $1, $2)", value, local)
+	return err
 }

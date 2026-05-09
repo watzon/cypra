@@ -46,7 +46,14 @@ func (s *Service) IsFirstBoot(ctx context.Context) (bool, error) {
 	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM instance_admins`).Scan(&admins); err != nil {
 		return false, fmt.Errorf("count instance admins: %w", err)
 	}
-	return admins == 0, nil
+	if admins > 0 {
+		return false, nil
+	}
+	var liveTokens int
+	if err := s.db.QueryRowContext(ctx, `SELECT count(*) FROM bootstrap_tokens WHERE consumed_at IS NULL AND revoked_at IS NULL AND expires_at > $1`, s.now()).Scan(&liveTokens); err != nil {
+		return false, fmt.Errorf("count bootstrap tokens: %w", err)
+	}
+	return liveTokens == 0, nil
 }
 
 func (s *Service) MintSetupToken(ctx context.Context) (string, error) {
@@ -72,7 +79,7 @@ func (s *Service) MintSetupToken(ctx context.Context) (string, error) {
 	if err := tx.Commit(); err != nil {
 		return "", fmt.Errorf("commit setup token: %w", err)
 	}
-	s.logger.Info("bootstrap setup token minted", slog.String("setup_token", plaintext), slog.Bool("redacted-on-export", true))
+	s.logger.Info("bootstrap setup token minted", slog.String("request_id", ""), slog.String("tenant_id", ""), slog.String("actor_id", "system"), slog.String("setup_token", plaintext), slog.Bool("redacted-on-export", true))
 	return plaintext, nil
 }
 
@@ -88,21 +95,56 @@ func (s *Service) RedeemSetupToken(ctx context.Context, plaintext string) (uuid.
 	return id, nil
 }
 
+func (s *Service) ValidateSetupToken(ctx context.Context, plaintext string) error {
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `SELECT EXISTS (SELECT 1 FROM bootstrap_tokens WHERE token_hash = $1 AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > $2)`, hashSetupToken(plaintext), s.now()).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("validate setup token: %w", err)
+	}
+	if !exists {
+		return ErrInvalidSetupToken
+	}
+	return nil
+}
+
 func (s *Service) CreateFirstInstanceAdmin(ctx context.Context, setupTokenID uuid.UUID, email, displayName string) (uuid.UUID, error) {
+	return s.createFirstInstanceAdmin(ctx, uuid.New(), setupTokenID, email, displayName)
+}
+
+func (s *Service) CreateFirstInstanceAdminWithID(ctx context.Context, adminID, setupTokenID uuid.UUID, email, displayName string) (uuid.UUID, error) {
+	if adminID == uuid.Nil {
+		return uuid.Nil, ErrInvalidSetupToken
+	}
+	return s.createFirstInstanceAdmin(ctx, adminID, setupTokenID, email, displayName)
+}
+
+func (s *Service) createFirstInstanceAdmin(ctx context.Context, adminID, setupTokenID uuid.UUID, email, displayName string) (uuid.UUID, error) {
 	if setupTokenID == uuid.Nil {
 		return uuid.Nil, ErrInvalidSetupToken
 	}
-	firstBoot, err := s.IsFirstBoot(ctx)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return uuid.Nil, err
+		return uuid.Nil, fmt.Errorf("begin first admin creation: %w", err)
 	}
-	if !firstBoot {
+	defer func() { _ = tx.Rollback() }()
+	var admins int
+	if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM instance_admins`).Scan(&admins); err != nil {
+		return uuid.Nil, fmt.Errorf("count instance admins: %w", err)
+	}
+	if admins > 0 {
 		return uuid.Nil, ErrBootstrapUnavailable
 	}
-	adminID := uuid.New()
-	_, err = s.db.ExecContext(ctx, `INSERT INTO instance_admins (id, email, display_name, metadata) VALUES ($1, $2, $3, '{}'::jsonb)`, adminID, email, displayName)
-	if err != nil {
+	var tokenID uuid.UUID
+	if err := tx.QueryRowContext(ctx, `UPDATE bootstrap_tokens SET revoked_at = $1 WHERE id = $2 AND consumed_at IS NOT NULL AND revoked_at IS NULL AND expires_at > $1 RETURNING id`, s.now(), setupTokenID).Scan(&tokenID); errors.Is(err, sql.ErrNoRows) {
+		return uuid.Nil, ErrInvalidSetupToken
+	} else if err != nil {
+		return uuid.Nil, fmt.Errorf("claim setup token: %w", err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO instance_admins (id, email, display_name, metadata) VALUES ($1, $2, $3, '{}'::jsonb)`, adminID, email, displayName); err != nil {
 		return uuid.Nil, fmt.Errorf("create first instance admin: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return uuid.Nil, fmt.Errorf("commit first admin creation: %w", err)
 	}
 	return adminID, nil
 }

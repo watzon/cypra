@@ -48,7 +48,7 @@ type SigningKey struct {
 }
 
 func MintAccessToken(tenantSlug, installDomain string, tenantID, userID uuid.UUID, audience string, scope []string, key SigningKey, kek []byte, now time.Time) (string, AccessTokenClaims, error) {
-	issuer := fmt.Sprintf("https://%s.%s", tenantSlug, installDomain)
+	issuer := IssuerURL(tenantSlug, installDomain)
 	claims := AccessTokenClaims{
 		Issuer:    issuer,
 		Subject:   tenantID.String() + ":" + userID.String(),
@@ -60,6 +60,15 @@ func MintAccessToken(tenantSlug, installDomain string, tenantID, userID uuid.UUI
 	}
 	token, err := signJWT(jwtHeader{Algorithm: key.Algorithm, Type: "JWT", KID: key.KID}, claims, key.PrivateKeyEncrypted, kek)
 	return token, claims, err
+}
+
+// IssuerURL builds the tenant issuer URL. installDomain is normally the bare
+// install host, but local e2e/proxy paths may pass a full request origin.
+func IssuerURL(tenantSlug, installDomain string) string {
+	if strings.HasPrefix(installDomain, "http://") || strings.HasPrefix(installDomain, "https://") {
+		return strings.TrimRight(installDomain, "/")
+	}
+	return fmt.Sprintf("https://%s.%s", tenantSlug, installDomain)
 }
 
 func VerifyAccessToken(token string, keys []SigningKey, expectedIssuer, expectedAudience string, now time.Time) (AccessTokenClaims, error) {

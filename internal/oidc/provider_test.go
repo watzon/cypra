@@ -14,6 +14,7 @@ import (
 	"github.com/lib/pq"
 	"github.com/watzon/cypra/internal/dbtest"
 	"github.com/watzon/cypra/internal/oidc"
+	"github.com/watzon/cypra/internal/storage/localdisk"
 )
 
 func TestRedirectURIMatchingIsStrict(t *testing.T) {
@@ -39,6 +40,13 @@ func TestAuthorizationCodeTokenRefreshAndReuse(t *testing.T) {
 	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
 	projectID := seedProject(t, harness, tenantID)
 	userID := seedOIDCUser(t, harness, tenantID)
+	pictureID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO storage_objects (id, tenant_id, backend, key, content_type, byte_size) VALUES ($1, $2, 'local-disk', 'profiles/user.png', 'image/png', 42)`, pictureID, tenantID); err != nil {
+		t.Fatalf("seed picture object: %v", err)
+	}
+	if _, err := harness.SQL.Exec(`UPDATE users SET metadata = '{"name":"Test User"}'::jsonb, profile_picture_object_id = $1 WHERE id = $2`, pictureID, userID); err != nil {
+		t.Fatalf("update user profile: %v", err)
+	}
 	kek := dbtest.TestMasterKey()
 	clientSecret, err := oidc.EncryptClientSecret("secret", kek)
 	if err != nil {
@@ -48,20 +56,20 @@ func TestAuthorizationCodeTokenRefreshAndReuse(t *testing.T) {
 	if _, err := harness.SQL.Exec(`INSERT INTO oidc_clients (id, tenant_id, project_id, client_id, client_secret_encrypted, redirect_uris, allowed_scopes, token_endpoint_auth_method) VALUES ($1, $2, $3, 'client', $4, $5, $6, 'client_secret_post')`, clientUUID, tenantID, projectID, clientSecret, pq.Array([]string{"https://app.example.com/callback"}), pq.Array([]string{"openid", "email", "profile"})); err != nil {
 		t.Fatalf("seed oidc client: %v", err)
 	}
-	provider := oidc.Provider{DB: harness.SQL, KEK: kek, InstallDomain: "cypra.localhost"}
+	provider := oidc.Provider{DB: harness.SQL, KEK: kek, InstallDomain: "cypra.localhost", Storage: localdisk.Store{Root: t.TempDir(), Secret: kek}}
 	verifier := "correct-horse-battery-staple"
 	code, err := provider.Authorize(context.Background(), oidc.AuthorizeRequest{TenantID: tenantID, UserID: userID, ClientID: "client", RedirectURI: "https://app.example.com/callback", Scope: []string{"openid", "email"}, CodeChallenge: challenge(verifier), CodeChallengeMethod: "S256", Nonce: "nonce"})
 	if err != nil {
 		t.Fatalf("authorize: %v", err)
 	}
-	tokens, err := provider.Token(context.Background(), oidc.TokenRequest{TenantSlug: "acme", ClientID: "client", ClientSecret: "secret", GrantType: "authorization_code", Code: code, RedirectURI: "https://app.example.com/callback", CodeVerifier: verifier})
+	tokens, err := provider.Token(context.Background(), oidc.TokenRequest{TenantID: tenantID, TenantSlug: "acme", ClientID: "client", ClientSecret: "secret", GrantType: "authorization_code", Code: code, RedirectURI: "https://app.example.com/callback", CodeVerifier: verifier})
 	if err != nil {
 		t.Fatalf("token exchange: %v", err)
 	}
 	if tokens.AccessToken == "" || tokens.IDToken == "" || tokens.RefreshToken == "" {
 		t.Fatalf("tokens = %+v", tokens)
 	}
-	refreshed, err := provider.Token(context.Background(), oidc.TokenRequest{TenantSlug: "acme", ClientID: "client", ClientSecret: "secret", GrantType: "refresh_token", RefreshToken: tokens.RefreshToken})
+	refreshed, err := provider.Token(context.Background(), oidc.TokenRequest{TenantID: tenantID, TenantSlug: "acme", ClientID: "client", ClientSecret: "secret", GrantType: "refresh_token", RefreshToken: tokens.RefreshToken})
 	if err != nil {
 		t.Fatalf("refresh exchange: %v", err)
 	}
@@ -71,7 +79,7 @@ func TestAuthorizationCodeTokenRefreshAndReuse(t *testing.T) {
 	if err := provider.Revoke(context.Background(), refreshed.RefreshToken); err != nil {
 		t.Fatalf("revoke refresh token: %v", err)
 	}
-	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantSlug: "acme", ClientID: "client", ClientSecret: "secret", GrantType: "refresh_token", RefreshToken: tokens.RefreshToken}); !errors.Is(err, oidc.ErrInvalidGrant) {
+	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantID: tenantID, TenantSlug: "acme", ClientID: "client", ClientSecret: "secret", GrantType: "refresh_token", RefreshToken: tokens.RefreshToken}); !errors.Is(err, oidc.ErrInvalidGrant) {
 		t.Fatalf("reuse error = %v", err)
 	}
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_refresh_tokens WHERE family_id = (SELECT family_id FROM oidc_refresh_tokens WHERE token_hash IS NOT NULL LIMIT 1) AND revoked_at IS NOT NULL`, 2)
@@ -85,8 +93,16 @@ func TestAuthorizationCodeTokenRefreshAndReuse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("userinfo: %v", err)
 	}
-	if !strings.Contains(userinfo["sub"].(string), userID.String()) || userinfo["email"] != "user@example.com" {
+	if !strings.Contains(userinfo["sub"].(string), userID.String()) || userinfo["email"] != "user@example.com" || userinfo["name"] != "Test User" {
 		t.Fatalf("userinfo = %+v", userinfo)
+	}
+	picture, _ := userinfo["picture"].(string)
+	if !strings.Contains(picture, "https://acme.cypra.localhost/storage/") {
+		t.Fatalf("userinfo picture = %q", picture)
+	}
+	bravoID := dbtest.SeedSecondTenant(t, harness.SQL, "bravo")
+	if _, err := provider.UserInfo(context.Background(), "bravo", bravoID, tokens.AccessToken); err == nil {
+		t.Fatal("userinfo accepted token under another tenant")
 	}
 }
 
@@ -106,7 +122,7 @@ func TestPublicClientTokenExchangeAndInvalidGrantPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorize public client: %v", err)
 	}
-	tokens, err := provider.Token(context.Background(), oidc.TokenRequest{TenantSlug: "acme", ClientID: "public-client", GrantType: "authorization_code", Code: code, RedirectURI: "https://app.example.com/callback", CodeVerifier: verifier})
+	tokens, err := provider.Token(context.Background(), oidc.TokenRequest{TenantID: tenantID, TenantSlug: "acme", ClientID: "public-client", GrantType: "authorization_code", Code: code, RedirectURI: "https://app.example.com/callback", CodeVerifier: verifier})
 	if err != nil {
 		t.Fatalf("public token exchange: %v", err)
 	}
@@ -114,7 +130,7 @@ func TestPublicClientTokenExchangeAndInvalidGrantPaths(t *testing.T) {
 		t.Fatalf("tokens = %+v", tokens)
 	}
 
-	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantSlug: "acme", ClientID: "public-client", GrantType: "authorization_code", Code: code, RedirectURI: "https://app.example.com/callback", CodeVerifier: verifier}); !errors.Is(err, oidc.ErrInvalidGrant) {
+	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantID: tenantID, TenantSlug: "acme", ClientID: "public-client", GrantType: "authorization_code", Code: code, RedirectURI: "https://app.example.com/callback", CodeVerifier: verifier}); !errors.Is(err, oidc.ErrInvalidGrant) {
 		t.Fatalf("reused authorization code error = %v", err)
 	}
 
@@ -122,7 +138,7 @@ func TestPublicClientTokenExchangeAndInvalidGrantPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorize redirect mismatch code: %v", err)
 	}
-	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantSlug: "acme", ClientID: "public-client", GrantType: "authorization_code", Code: redirectCode, RedirectURI: "https://app.example.com/other", CodeVerifier: verifier}); !errors.Is(err, oidc.ErrInvalidGrant) {
+	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantID: tenantID, TenantSlug: "acme", ClientID: "public-client", GrantType: "authorization_code", Code: redirectCode, RedirectURI: "https://app.example.com/other", CodeVerifier: verifier}); !errors.Is(err, oidc.ErrInvalidGrant) {
 		t.Fatalf("redirect mismatch error = %v", err)
 	}
 
@@ -130,7 +146,7 @@ func TestPublicClientTokenExchangeAndInvalidGrantPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorize pkce mismatch code: %v", err)
 	}
-	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantSlug: "acme", ClientID: "public-client", GrantType: "authorization_code", Code: pkceCode, RedirectURI: "https://app.example.com/callback", CodeVerifier: "wrong"}); !errors.Is(err, oidc.ErrInvalidGrant) {
+	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantID: tenantID, TenantSlug: "acme", ClientID: "public-client", GrantType: "authorization_code", Code: pkceCode, RedirectURI: "https://app.example.com/callback", CodeVerifier: "wrong"}); !errors.Is(err, oidc.ErrInvalidGrant) {
 		t.Fatalf("pkce mismatch error = %v", err)
 	}
 }
@@ -197,11 +213,32 @@ func TestClientSecretValidationRejectsMissingAndWrongSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatalf("authorize confidential client: %v", err)
 	}
-	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantSlug: "acme", ClientID: "confidential", GrantType: "authorization_code", Code: code, RedirectURI: "https://app.example.com/callback", CodeVerifier: verifier}); !errors.Is(err, oidc.ErrInvalidClient) {
+	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantID: tenantID, TenantSlug: "acme", ClientID: "confidential", GrantType: "authorization_code", Code: code, RedirectURI: "https://app.example.com/callback", CodeVerifier: verifier}); !errors.Is(err, oidc.ErrInvalidClient) {
 		t.Fatalf("missing secret error = %v", err)
 	}
-	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantSlug: "acme", ClientID: "confidential", ClientSecret: "wrong", GrantType: "authorization_code", Code: code, RedirectURI: "https://app.example.com/callback", CodeVerifier: verifier}); !errors.Is(err, oidc.ErrInvalidClient) {
+	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantID: tenantID, TenantSlug: "acme", ClientID: "confidential", ClientSecret: "wrong", GrantType: "authorization_code", Code: code, RedirectURI: "https://app.example.com/callback", CodeVerifier: verifier}); !errors.Is(err, oidc.ErrInvalidClient) {
 		t.Fatalf("wrong secret error = %v", err)
+	}
+}
+
+func TestTokenExchangeRejectsClientFromAnotherTenant(t *testing.T) {
+	harness := dbtest.New(t)
+	acmeID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	bravoID := dbtest.SeedSecondTenant(t, harness.SQL, "bravo")
+	bravoProjectID := seedProject(t, harness, bravoID)
+	bravoUserID := seedOIDCUser(t, harness, bravoID)
+	bravoClientID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO oidc_clients (id, tenant_id, project_id, client_id, redirect_uris, allowed_scopes, token_endpoint_auth_method) VALUES ($1, $2, $3, 'bravo-client', $4, $5, 'none')`, bravoClientID, bravoID, bravoProjectID, pq.Array([]string{"https://app.example.com/callback"}), pq.Array([]string{"openid"})); err != nil {
+		t.Fatalf("seed bravo client: %v", err)
+	}
+	provider := oidc.Provider{DB: harness.SQL, KEK: dbtest.TestMasterKey(), InstallDomain: "cypra.localhost"}
+	verifier := "bravo-verifier"
+	code, err := provider.Authorize(context.Background(), oidc.AuthorizeRequest{TenantID: bravoID, UserID: bravoUserID, ClientID: "bravo-client", RedirectURI: "https://app.example.com/callback", Scope: []string{"openid"}, CodeChallenge: challenge(verifier), CodeChallengeMethod: "S256"})
+	if err != nil {
+		t.Fatalf("authorize bravo client: %v", err)
+	}
+	if _, err := provider.Token(context.Background(), oidc.TokenRequest{TenantID: acmeID, TenantSlug: "acme", ClientID: "bravo-client", GrantType: "authorization_code", Code: code, RedirectURI: "https://app.example.com/callback", CodeVerifier: verifier}); !errors.Is(err, oidc.ErrInvalidClient) {
+		t.Fatalf("cross-tenant token exchange error = %v", err)
 	}
 }
 
@@ -217,10 +254,22 @@ func TestCleanupExpiredAuthorizationCodes(t *testing.T) {
 	if _, err := harness.SQL.Exec(`INSERT INTO oidc_authorization_codes (code_hash, tenant_id, oidc_client_uuid, user_id, redirect_uri, scope, pkce_challenge, pkce_method, expires_at, consumed_at) VALUES ('hash'::bytea, $1, $2, $3, 'https://app.example.com/callback', $4, 'challenge', 'S256', $5, $6)`, tenantID, clientID, userID, pq.Array([]string{"openid"}), time.Now().Add(-8*24*time.Hour), time.Now().Add(-8*24*time.Hour)); err != nil {
 		t.Fatalf("seed auth code: %v", err)
 	}
+	if _, err := harness.SQL.Exec(`INSERT INTO oidc_refresh_tokens (family_id, token_hash, tenant_id, oidc_client_uuid, user_id, scope, expires_at, consumed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, uuid.New(), []byte("expired-refresh"), tenantID, clientID, userID, pq.Array([]string{"openid"}), time.Now().Add(-time.Hour), nil); err != nil {
+		t.Fatalf("seed expired refresh token: %v", err)
+	}
+	if _, err := harness.SQL.Exec(`INSERT INTO oidc_refresh_tokens (family_id, token_hash, tenant_id, oidc_client_uuid, user_id, scope, expires_at, consumed_at) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, uuid.New(), []byte("consumed-refresh"), tenantID, clientID, userID, pq.Array([]string{"openid"}), time.Now().Add(time.Hour), time.Now().Add(-8*24*time.Hour)); err != nil {
+		t.Fatalf("seed consumed refresh token: %v", err)
+	}
+	sessionID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO sessions (id, subject_id, subject_kind, tenant_id, expires_at) VALUES ($1, $2, 'user', $3, $4)`, sessionID, userID, tenantID, time.Now().Add(-time.Hour)); err != nil {
+		t.Fatalf("seed expired session: %v", err)
+	}
 	if err := oidc.CleanupExpired(context.Background(), harness.SQL, time.Now()); err != nil {
 		t.Fatalf("cleanup: %v", err)
 	}
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_authorization_codes`, 0)
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_refresh_tokens`, 0)
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM sessions WHERE id = $1 AND revoked_at IS NOT NULL`, 1, sessionID)
 }
 
 func TestRunCleanupTickerReturnsContextError(t *testing.T) {
@@ -252,6 +301,33 @@ func TestSigningKeysIncludeSunsettingWindow(t *testing.T) {
 	keys, err = provider.SigningKeys(context.Background(), tenantID)
 	if err != nil || len(keys) != 0 {
 		t.Fatalf("pruned keys len=%d err=%v", len(keys), err)
+	}
+}
+
+func TestConsentCoversScopes(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	projectID := seedProject(t, harness, tenantID)
+	userID := seedOIDCUser(t, harness, tenantID)
+	clientID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO oidc_clients (id, tenant_id, project_id, client_id, redirect_uris, allowed_scopes, token_endpoint_auth_method) VALUES ($1, $2, $3, 'client', $4, $5, 'none')`, clientID, tenantID, projectID, pq.Array([]string{"https://app.example.com/callback"}), pq.Array([]string{"openid", "email", "profile"})); err != nil {
+		t.Fatalf("seed client: %v", err)
+	}
+	provider := oidc.Provider{DB: harness.SQL, KEK: dbtest.TestMasterKey()}
+	covered, prompted, err := provider.ConsentCovers(context.Background(), tenantID, userID, clientID, []string{"openid"})
+	if err != nil || covered || prompted {
+		t.Fatalf("pre-consent covered=%v prompted=%v err=%v", covered, prompted, err)
+	}
+	if err := provider.RecordConsent(context.Background(), tenantID, userID, clientID, []string{"openid", "email"}); err != nil {
+		t.Fatalf("record consent: %v", err)
+	}
+	covered, prompted, err = provider.ConsentCovers(context.Background(), tenantID, userID, clientID, []string{"email", "openid"})
+	if err != nil || !covered {
+		t.Fatalf("covered=%v prompted=%v err=%v", covered, prompted, err)
+	}
+	covered, prompted, err = provider.ConsentCovers(context.Background(), tenantID, userID, clientID, []string{"openid", "profile"})
+	if err != nil || covered {
+		t.Fatalf("scope upgrade covered=%v prompted=%v err=%v", covered, prompted, err)
 	}
 }
 

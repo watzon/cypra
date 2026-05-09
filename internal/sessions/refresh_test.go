@@ -18,6 +18,7 @@ func TestRefreshTokenReuseRevokesFamilyAndAudits(t *testing.T) {
 	service := sessions.NewRefreshService(harness.SQL)
 	metricCount := 0
 	service.OnReuseDetected(func() { metricCount++ })
+	metricBefore := sessions.RefreshReuseDetectedTotal()
 	root, err := service.Mint(context.Background(), tenantID, clientID, userID, []string{"openid"}, nil, time.Now().Add(time.Hour))
 	if err != nil {
 		t.Fatalf("mint root refresh: %v", err)
@@ -32,6 +33,9 @@ func TestRefreshTokenReuseRevokesFamilyAndAudits(t *testing.T) {
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM audit_entries WHERE action = 'cypra_oidc_refresh_reuse_detected'`, 1)
 	if metricCount != 1 {
 		t.Fatalf("metric count = %d, want 1", metricCount)
+	}
+	if got := sessions.RefreshReuseDetectedTotal() - metricBefore; got != 1 {
+		t.Fatalf("refresh reuse metric delta = %d, want 1", got)
 	}
 }
 

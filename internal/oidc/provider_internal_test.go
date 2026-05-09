@@ -45,9 +45,6 @@ func TestProviderPropagatesClosedDatabaseErrors(t *testing.T) {
 	if _, err := provider.LoadClient(ctx, tenantID, "client"); err == nil {
 		t.Fatal("LoadClient unexpectedly succeeded on closed db")
 	}
-	if _, err := provider.LoadClientByClientID(ctx, "client"); err == nil {
-		t.Fatal("LoadClientByClientID unexpectedly succeeded on closed db")
-	}
 	if _, err := provider.SigningKeys(ctx, tenantID); err == nil {
 		t.Fatal("SigningKeys unexpectedly succeeded on closed db")
 	}
@@ -64,6 +61,9 @@ func TestProviderPropagatesClosedDatabaseErrors(t *testing.T) {
 	}
 	if err := rotation.RotateDue(ctx); err == nil {
 		t.Fatal("RotateDue unexpectedly succeeded on closed db")
+	}
+	if err := rotation.Run(ctx, 0); err == nil {
+		t.Fatal("Run unexpectedly succeeded on closed db")
 	}
 	if err := rotation.SunsetKeys(ctx, tenantID); err == nil {
 		t.Fatal("SunsetKeys unexpectedly succeeded on closed db")

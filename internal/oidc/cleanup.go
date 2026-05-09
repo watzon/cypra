@@ -12,6 +12,7 @@ import (
 func CleanupExpired(ctx context.Context, db *sql.DB, now time.Time) error {
 	queries := []string{
 		`DELETE FROM oidc_authorization_codes WHERE expires_at + interval '7 days' < $1`,
+		`DELETE FROM oidc_refresh_tokens WHERE expires_at < $1 OR (consumed_at IS NOT NULL AND consumed_at + interval '7 days' < $1)`,
 		`DELETE FROM magic_link_tokens WHERE (consumed_at IS NOT NULL OR expires_at < $1) AND created_at + interval '7 days' < $1`,
 		`DELETE FROM password_reset_tokens WHERE (consumed_at IS NOT NULL OR expires_at < $1) AND created_at + interval '7 days' < $1`,
 		`DELETE FROM email_verification_tokens WHERE (consumed_at IS NOT NULL OR expires_at < $1) AND created_at + interval '7 days' < $1`,

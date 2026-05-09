@@ -47,6 +47,9 @@ func (s *RotationService) ForceRotate(ctx context.Context, tenantID uuid.UUID) e
 	}
 	defer func() { _ = tx.Rollback() }()
 
+	if _, err := tx.ExecContext(ctx, `UPDATE oidc_signing_keys SET state = 'retired' WHERE tenant_id = $1 AND state = 'overlap'`, tenantID); err != nil {
+		return fmt.Errorf("retire prior overlap signing key: %w", err)
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE oidc_signing_keys SET state = 'overlap', retires_at = $1 WHERE tenant_id = $2 AND state = 'active'`, now.Add(OverlapWindow), tenantID); err != nil {
 		return fmt.Errorf("move active signing key to overlap: %w", err)
 	}
@@ -62,6 +65,27 @@ func (s *RotationService) ForceRotate(ctx context.Context, tenantID uuid.UUID) e
 		return fmt.Errorf("insert new active signing key: %w", err)
 	}
 	return tx.Commit()
+}
+
+func (s *RotationService) Run(ctx context.Context, interval time.Duration) error {
+	if interval <= 0 {
+		interval = time.Hour
+	}
+	if err := s.RotateDue(ctx); err != nil {
+		return err
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			if err := s.RotateDue(ctx); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func (s *RotationService) RotateDue(ctx context.Context) error {

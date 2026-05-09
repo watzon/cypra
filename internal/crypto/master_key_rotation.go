@@ -18,7 +18,14 @@ type EncryptedColumn struct {
 	Table     string
 	IDColumn  string
 	DEKColumn string
+	Format    string
 }
+
+const (
+	EncryptedColumnFormatDEK          = "dek"
+	EncryptedColumnFormatPrefix       = "prefix"
+	EncryptedColumnFormatJSONEnvelope = "json_envelope"
+)
 
 type RotationOptions struct {
 	BatchSize int
@@ -83,14 +90,11 @@ func (s *RotationService) Resume(ctx context.Context, rotationID uuid.UUID, oldK
 			if opts.MaxRows > 0 && processedThisRun >= opts.MaxRows {
 				return ErrRotationIncomplete
 			}
-			if err := s.rewrapRow(ctx, target, row, oldKEK, newKEK); err != nil {
+			if err := s.rewrapRow(ctx, target, row, oldKEK, newKEK, rotationID, seen+1); err != nil {
 				return err
 			}
 			seen++
 			processedThisRun++
-			if _, err := s.db.ExecContext(ctx, `UPDATE master_key_rotations SET rows_done = $1 WHERE id = $2`, seen, rotationID); err != nil {
-				return fmt.Errorf("update rotation progress: %w", err)
-			}
 		}
 	}
 	if seen < rowsTotal {
@@ -112,8 +116,8 @@ func (s *RotationService) ConfirmCutover(ctx context.Context, rotationID uuid.UU
 }
 
 type encryptedRow struct {
-	id           uuid.UUID
-	encryptedDEK []byte
+	id    uuid.UUID
+	value []byte
 }
 
 func (s *RotationService) countRows(ctx context.Context) (int64, error) {
@@ -150,7 +154,7 @@ func (s *RotationService) targetRows(ctx context.Context, target EncryptedColumn
 	var result []encryptedRow
 	for rows.Next() {
 		var row encryptedRow
-		if err := rows.Scan(&row.id, &row.encryptedDEK); err != nil {
+		if err := rows.Scan(&row.id, &row.value); err != nil {
 			return nil, fmt.Errorf("scan encrypted row: %w", err)
 		}
 		result = append(result, row)
@@ -161,16 +165,56 @@ func (s *RotationService) targetRows(ctx context.Context, target EncryptedColumn
 	return result, nil
 }
 
-func (s *RotationService) rewrapRow(ctx context.Context, target EncryptedColumn, row encryptedRow, oldKEK, newKEK []byte) error {
-	rewrapped, err := RewrapDEK(row.encryptedDEK, oldKEK, newKEK)
+func (s *RotationService) rewrapRow(ctx context.Context, target EncryptedColumn, row encryptedRow, oldKEK, newKEK []byte, rotationID uuid.UUID, rowsDone int64) error {
+	rewrapped, err := rewrapValue(row.value, target.Format, oldKEK, newKEK)
 	if err != nil {
 		return err
 	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin row rewrap: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
 	query := fmt.Sprintf("UPDATE %s SET %s = $1 WHERE %s = $2", target.Table, target.DEKColumn, target.IDColumn) // #nosec G201 -- identifiers are validated by validateTarget.
-	if _, err := s.db.ExecContext(ctx, query, rewrapped, row.id); err != nil {
+	if _, err := tx.ExecContext(ctx, query, rewrapped, row.id); err != nil {
 		return fmt.Errorf("update encrypted dek in %s: %w", target.Table, err)
 	}
+	if _, err := tx.ExecContext(ctx, `UPDATE master_key_rotations SET rows_done = $1 WHERE id = $2`, rowsDone, rotationID); err != nil {
+		return fmt.Errorf("update rotation progress: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit row rewrap: %w", err)
+	}
 	return nil
+}
+
+func rewrapValue(value []byte, format string, oldKEK, newKEK []byte) ([]byte, error) {
+	switch format {
+	case "", EncryptedColumnFormatDEK:
+		return RewrapDEK(value, oldKEK, newKEK)
+	case EncryptedColumnFormatPrefix:
+		if len(value) < encryptedDEKBytes {
+			return nil, ErrDecryptFailed
+		}
+		rewrapped, err := RewrapDEK(value[:encryptedDEKBytes], oldKEK, newKEK)
+		if err != nil {
+			return nil, err
+		}
+		out := append([]byte{}, rewrapped...)
+		return append(out, value[encryptedDEKBytes:]...), nil
+	case EncryptedColumnFormatJSONEnvelope:
+		ciphertext, encryptedDEK, err := unmarshalEnvelope(value)
+		if err != nil {
+			return nil, err
+		}
+		rewrapped, err := RewrapDEK(encryptedDEK, oldKEK, newKEK)
+		if err != nil {
+			return nil, err
+		}
+		return marshalEnvelope(ciphertext, rewrapped)
+	default:
+		return nil, fmt.Errorf("unsupported encrypted-column format %q", format)
+	}
 }
 
 var safeIdentifier = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
@@ -178,6 +222,11 @@ var safeIdentifier = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
 func validateTarget(target EncryptedColumn) error {
 	if !safeIdentifier.MatchString(target.Table) || !safeIdentifier.MatchString(target.IDColumn) || !safeIdentifier.MatchString(target.DEKColumn) {
 		return fmt.Errorf("unsafe encrypted-column target: %+v", target)
+	}
+	switch target.Format {
+	case "", EncryptedColumnFormatDEK, EncryptedColumnFormatPrefix, EncryptedColumnFormatJSONEnvelope:
+	default:
+		return fmt.Errorf("unsupported encrypted-column format %q", target.Format)
 	}
 	return nil
 }
