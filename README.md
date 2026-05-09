@@ -5,7 +5,7 @@
 
 Cypra is an open-source, self-hosted, multi-tenant authentication platform: a Go server with an embedded React dashboard, Postgres storage, hosted login, and a per-tenant OIDC issuer designed to be bootable by a small team in an afternoon.
 
-The product and implementation source of truth lives in [`PLAN.md`](./PLAN.md), [`DESIGN.md`](./DESIGN.md), and [`BRAINSTORM.md`](./BRAINSTORM.md). Execution is tracked in [`TASKS.md`](./TASKS.md).
+The current implementation source of truth lives in [`PLAN.md`](./PLAN.md), [`DESIGN.md`](./DESIGN.md), and [`BRAINSTORM.md`](./BRAINSTORM.md). The original v1 product plan is archived at [`docs/archive/PLAN-2026-05-09-v1-product-plan.md`](./docs/archive/PLAN-2026-05-09-v1-product-plan.md), and the historical phase task log is archived at [`docs/archive/TASKS-2026-05-09-legacy-phases.md`](./docs/archive/TASKS-2026-05-09-legacy-phases.md). Execution is tracked in [`TASKS.md`](./TASKS.md).
 
 ## Architecture
 
