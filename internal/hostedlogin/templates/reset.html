@@ -1,8 +1,30 @@
 {{ define "content" }}
-<h1>Reset password</h1>
-<form class="stack" hx-post="/reset" hx-target="#reset-result" hx-swap="innerHTML" method="post">
+{{ if .ResetToken }}
+<form
+  class="stack"
+  hx-post="/reset"
+  hx-target="#reset-result"
+  hx-swap="innerHTML"
+  method="post"
+>
+  <input name="token" type="hidden" value="{{ .ResetToken }}" />
+  <label
+    >New password
+    <input name="password" type="password" autocomplete="new-password" required />
+  </label>
+  <button type="submit">Reset password</button>
+</form>
+{{ else }}
+<form
+  class="stack"
+  hx-post="/reset"
+  hx-target="#reset-result"
+  hx-swap="innerHTML"
+  method="post"
+>
   <label>Email <input name="email" type="email" autocomplete="email" required /></label>
   <button type="submit">Send reset link</button>
 </form>
+{{ end }}
 <div id="reset-result" role="status" aria-live="polite"></div>
 {{ end }}{{ template "base" . }}

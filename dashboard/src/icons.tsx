@@ -1,27 +1,93 @@
+import Activity from "lucide-react/dist/esm/icons/activity.mjs";
 import AlertTriangle from "lucide-react/dist/esm/icons/alert-triangle.mjs";
+import Building2 from "lucide-react/dist/esm/icons/building-2.mjs";
 import CheckCircle2 from "lucide-react/dist/esm/icons/circle-check-big.mjs";
+import ChevronDown from "lucide-react/dist/esm/icons/chevron-down.mjs";
+import ChevronLeft from "lucide-react/dist/esm/icons/chevron-left.mjs";
+import ChevronRight from "lucide-react/dist/esm/icons/chevron-right.mjs";
+import ChevronsUpDown from "lucide-react/dist/esm/icons/chevrons-up-down.mjs";
 import Clock from "lucide-react/dist/esm/icons/clock.mjs";
 import Copy from "lucide-react/dist/esm/icons/copy.mjs";
 import Eye from "lucide-react/dist/esm/icons/eye.mjs";
 import EyeOff from "lucide-react/dist/esm/icons/eye-off.mjs";
+import Folder from "lucide-react/dist/esm/icons/folder.mjs";
+import HardDrive from "lucide-react/dist/esm/icons/hard-drive.mjs";
+import Hash from "lucide-react/dist/esm/icons/hash.mjs";
+import ImageIcon from "lucide-react/dist/esm/icons/image.mjs";
+import ImageUp from "lucide-react/dist/esm/icons/image-up.mjs";
+import Info from "lucide-react/dist/esm/icons/info.mjs";
+import Key from "lucide-react/dist/esm/icons/key.mjs";
+import KeyRound from "lucide-react/dist/esm/icons/key-round.mjs";
+import Laptop from "lucide-react/dist/esm/icons/laptop.mjs";
+import LayoutDashboard from "lucide-react/dist/esm/icons/layout-dashboard.mjs";
 import Lock from "lucide-react/dist/esm/icons/lock.mjs";
+import LogOut from "lucide-react/dist/esm/icons/log-out.mjs";
 import Monitor from "lucide-react/dist/esm/icons/monitor.mjs";
+import Moon from "lucide-react/dist/esm/icons/moon.mjs";
+import Plus from "lucide-react/dist/esm/icons/plus.mjs";
 import RotateCw from "lucide-react/dist/esm/icons/rotate-cw.mjs";
+import ScrollText from "lucide-react/dist/esm/icons/scroll-text.mjs";
+import Search from "lucide-react/dist/esm/icons/search.mjs";
+import SearchX from "lucide-react/dist/esm/icons/search-x.mjs";
+import Settings from "lucide-react/dist/esm/icons/settings.mjs";
+import Shield from "lucide-react/dist/esm/icons/shield.mjs";
+import ShieldCheck from "lucide-react/dist/esm/icons/shield-check.mjs";
+import Smartphone from "lucide-react/dist/esm/icons/smartphone.mjs";
+import SquareDot from "lucide-react/dist/esm/icons/square-dot.mjs";
+import Sun from "lucide-react/dist/esm/icons/sun.mjs";
+import Terminal from "lucide-react/dist/esm/icons/terminal.mjs";
 import Trash2 from "lucide-react/dist/esm/icons/trash-2.mjs";
+import TriangleAlert from "lucide-react/dist/esm/icons/triangle-alert.mjs";
+import X from "lucide-react/dist/esm/icons/x.mjs";
+import UserCog from "lucide-react/dist/esm/icons/user-cog.mjs";
+import Users from "lucide-react/dist/esm/icons/users.mjs";
 import XCircle from "lucide-react/dist/esm/icons/circle-x.mjs";
 import type { SVGProps } from "react";
 
 export const Icons = {
+  Activity,
   AlertTriangle,
+  Building2,
   CheckCircle2,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsUpDown,
   Clock,
   Copy,
   Eye,
   EyeOff,
+  Folder,
+  HardDrive,
+  Hash,
+  Image: ImageIcon,
+  ImageUp,
+  Info,
+  Key,
+  KeyRound,
+  Laptop,
+  LayoutDashboard,
   Lock,
+  LogOut,
   Monitor,
+  Moon,
+  Plus,
   RotateCw,
+  ScrollText,
+  Search,
+  SearchX,
+  Settings,
+  Shield,
+  ShieldCheck,
+  Smartphone,
+  SquareDot,
+  Sun,
+  Terminal,
   Trash2,
+  TriangleAlert,
+  UserCog,
+  X,
+  Users,
   XCircle,
 };
 

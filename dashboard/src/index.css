@@ -43,6 +43,7 @@ a {
   *::after {
     animation-duration: 0ms !important;
     scroll-behavior: auto !important;
+    transform: none !important;
     transition-duration: 0ms !important;
   }
 }

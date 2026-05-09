@@ -1,5 +1,4 @@
 {{ define "content" }}
-<h1>Sign in could not continue.</h1>
-<p>{{ if .Error }}{{ .Error }}{{ else }}Return to the application and try again.{{ end }}</p>
+<p class="error">{{ if .Error }}{{ .Error }}{{ else }}Return to the application and try again.{{ end }}</p>
 <a class="button" href="/login">Back to sign in</a>
 {{ end }}{{ template "base" . }}

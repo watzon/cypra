@@ -1,32 +1,201 @@
 {{ define "content" }}
-<h1>Sign in</h1>
-<p>Use an enabled method for this tenant.</p>
-{{ if .Error }}
-<p class="error">{{ .Error }}</p>
+{{ if .Error }}<p class="error">{{ .Error }}</p>{{ end }}
+{{ if not .AnyMethodEnabled }}
+<div class="empty-state">
+  <p>This tenant has no sign-in methods enabled yet.</p>
+  <p class="muted">Ask an administrator to enable an auth method in the Cypra dashboard.</p>
+</div>
+{{ else }}
+{{ $needEmail := or .PasskeyEnabled .PasswordEnabled .MagicLinkEnabled }}
+{{ $primarySocial := "" }}
+{{ if hasPrefix .PrimaryMethod "social:" }}{{ $primarySocial = trimPrefix .PrimaryMethod "social:" }}{{ end }}
+{{ $primaryOIDC := "" }}
+{{ if hasPrefix .PrimaryMethod "oidc:" }}{{ $primaryOIDC = trimPrefix .PrimaryMethod "oidc:" }}{{ end }}
+
+{{ if eq .PrimaryMethod "google" }}
+{{ if .GoogleURL }}<a class="button primary" href="{{ .GoogleURL }}">Sign in with Google</a>{{ end }}
+{{ if $needEmail }}
+<div class="divider"><span>or sign in with email</span></div>
+<div class="stack">
+  <label
+    >Email
+    <input
+      id="login-email"
+      name="email"
+      type="email"
+      autocomplete="email"
+      required
+      value="{{ .Email }}"
+    />
+  </label>
+</div>
 {{ end }}
+{{ else if $primarySocial }}
+{{ range .SocialButtons }}{{ if eq .Kind $primarySocial }}<a class="button primary" href="{{ .URL }}">Continue with {{ .Label }}</a>{{ end }}{{ end }}
+{{ if $needEmail }}
+<div class="divider"><span>or sign in with email</span></div>
+<div class="stack">
+  <label
+    >Email
+    <input
+      id="login-email"
+      name="email"
+      type="email"
+      autocomplete="email"
+      required
+      value="{{ .Email }}"
+    />
+  </label>
+</div>
+{{ end }}
+{{ else if $primaryOIDC }}
+{{ range .OIDCButtons }}{{ if eq .Slug $primaryOIDC }}<a class="button primary" href="{{ .URL }}">Continue with {{ .DisplayName }}</a>{{ end }}{{ end }}
+{{ if $needEmail }}
+<div class="divider"><span>or sign in with email</span></div>
+<div class="stack">
+  <label
+    >Email
+    <input
+      id="login-email"
+      name="email"
+      type="email"
+      autocomplete="email"
+      required
+      value="{{ .Email }}"
+    />
+  </label>
+</div>
+{{ end }}
+{{ else }}
+<div class="stack">
+  {{ if $needEmail }}
+  <label
+    >Email
+    <input
+      id="login-email"
+      name="email"
+      type="email"
+      autocomplete="email"
+      required
+      value="{{ .Email }}"
+    />
+  </label>
+  {{ end }}
+  {{ if eq .PrimaryMethod "password" }}
+  <form
+    class="stack"
+    hx-post="/login/password"
+    hx-target="#login-result"
+    hx-swap="innerHTML"
+    method="post"
+  >
+    <input type="hidden" name="email" data-shadow-from="login-email" value="{{ .Email }}" />
+    <label
+      >Password
+      <input name="password" type="password" autocomplete="current-password" required />
+    </label>
+    {{ if .ContinueURL }}<input name="continue" type="hidden" value="{{ .ContinueURL }}" />{{ end }}
+    <button type="submit">Sign in</button>
+  </form>
+  {{ else if eq .PrimaryMethod "magic_link" }}
+  <form
+    class="stack"
+    hx-post="/login/magic-link"
+    hx-target="#login-result"
+    hx-swap="innerHTML"
+    method="post"
+  >
+    <input type="hidden" name="email" data-shadow-from="login-email" value="{{ .Email }}" />
+    {{ if .ContinueURL }}<input name="continue" type="hidden" value="{{ .ContinueURL }}" />{{ end }}
+    <button type="submit">Send a sign-in link</button>
+  </form>
+  {{ else if eq .PrimaryMethod "passkey" }}
+  <button
+    type="button"
+    data-passkey-action="get"
+    data-rp-id="{{ .RPID }}"
+    {{ if .ContinueURL }}data-continue-url="/oidc/authorize?continue={{ .ContinueURL }}"{{ end }}
+  >
+    Continue with passkey
+  </button>
+  {{ end }}
+</div>
+{{ end }}
+
+{{ $hasSecondary := false }}
+{{ if and .PasskeyEnabled (ne .PrimaryMethod "passkey") }}{{ $hasSecondary = true }}{{ end }}
+{{ if and .PasswordEnabled (ne .PrimaryMethod "password") }}{{ $hasSecondary = true }}{{ end }}
+{{ if and .MagicLinkEnabled (ne .PrimaryMethod "magic_link") }}{{ $hasSecondary = true }}{{ end }}
+{{ if and .GoogleURL (ne .PrimaryMethod "google") }}{{ $hasSecondary = true }}{{ end }}
+{{ range .SocialButtons }}{{ if ne .Kind $primarySocial }}{{ $hasSecondary = true }}{{ end }}{{ end }}
+{{ range .OIDCButtons }}{{ if ne .Slug $primaryOIDC }}{{ $hasSecondary = true }}{{ end }}{{ end }}
+{{ if .SignupEnabled }}{{ $hasSecondary = true }}{{ end }}
+
+{{ if and $hasSecondary (ne .PrimaryMethod "google") (eq $primarySocial "") (eq $primaryOIDC "") }}
+<div class="divider"><span>or</span></div>
+{{ end }}
+
+{{ if and .PasskeyEnabled (ne .PrimaryMethod "passkey") }}
+<button
+  type="button"
+  class="secondary alt-row"
+  data-passkey-action="get"
+  data-rp-id="{{ .RPID }}"
+  {{ if .ContinueURL }}data-continue-url="/oidc/authorize?continue={{ .ContinueURL }}"{{ end }}
+>
+  Continue with passkey
+</button>
+{{ end }}
+
+{{ if and .PasswordEnabled (ne .PrimaryMethod "password") }}
+<details class="alt-row">
+  <summary>Use a password</summary>
+  <form
+    class="stack inset"
+    hx-post="/login/password"
+    hx-target="#login-result"
+    hx-swap="innerHTML"
+    method="post"
+  >
+    <input type="hidden" name="email" data-shadow-from="login-email" value="{{ .Email }}" />
+    <label
+      >Password
+      <input name="password" type="password" autocomplete="current-password" required />
+    </label>
+    {{ if .ContinueURL }}<input name="continue" type="hidden" value="{{ .ContinueURL }}" />{{ end }}
+    <button class="secondary" type="submit">Sign in with password</button>
+  </form>
+</details>
+{{ end }}
+
+{{ if and .MagicLinkEnabled (ne .PrimaryMethod "magic_link") }}
 <form
-  class="stack"
-  hx-post="/login/password"
+  class="alt-row"
+  hx-post="/login/magic-link"
   hx-target="#login-result"
   hx-swap="innerHTML"
   method="post"
 >
-  <label
-    >Email <input name="email" type="email" autocomplete="email" required value="{{ .Email }}"
-  /></label>
-  <label
-    >Password <input name="password" type="password" autocomplete="current-password" required
-  /></label>
-  <button type="submit">Continue</button>
+  <input type="hidden" name="email" data-shadow-from="login-email" value="{{ .Email }}" />
+  {{ if .ContinueURL }}<input name="continue" type="hidden" value="{{ .ContinueURL }}" />{{ end }}
+  <button class="secondary" type="submit">Send a sign-in link</button>
 </form>
-<div class="stack" style="margin-top: 12px">
-  <button class="secondary" data-passkey-action="get" data-rp-id="{{ .RPID }}">Use passkey</button>
-  <form hx-post="/login/magic-link" hx-target="#login-result" hx-swap="innerHTML" method="post">
-    <input name="email" type="email" autocomplete="email" placeholder="you@example.com" required />
-    <button class="secondary" type="submit">Send magic link</button>
-  </form>
-  <a class="button secondary" href="/signup">Create account</a>
-</div>
+{{ end }}
+
+{{ if and .GoogleURL (ne .PrimaryMethod "google") }}<a class="button secondary alt-row" href="{{ .GoogleURL }}">Sign in with Google</a>{{ end }}
+{{ range .SocialButtons }}{{ if ne .Kind $primarySocial }}<a class="button secondary alt-row" href="{{ .URL }}">Continue with {{ .Label }}</a>{{ end }}{{ end }}
+{{ range .OIDCButtons }}{{ if ne .Slug $primaryOIDC }}<a class="button secondary alt-row" href="{{ .URL }}">Continue with {{ .DisplayName }}</a>{{ end }}{{ end }}
+{{ if .SignupEnabled }}<a class="button ghost alt-row" href="/signup">Create account</a>{{ end }}
 <div id="login-result" role="status" aria-live="polite"></div>
 <div class="bot-slot" data-verifier="noop"></div>
+<script>
+  document.addEventListener("input", function (event) {
+    if (!event.target || event.target.id !== "login-email") return;
+    var value = event.target.value;
+    document.querySelectorAll('[data-shadow-from="login-email"]').forEach(function (el) {
+      el.value = value;
+    });
+  });
+</script>
+{{ end }}
 {{ end }}{{ template "base" . }}

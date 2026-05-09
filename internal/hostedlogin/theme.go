@@ -12,7 +12,7 @@ import (
 const (
 	DarkCanvas        = "#0A0A0B"
 	LightCanvas       = "#FAFAFA"
-	DarkTextOnAccent  = "#0A0A0B"
+	DarkTextOnAccent  = "#FFFFFF"
 	LightTextOnAccent = "#FFFFFF"
 	DarkFocus         = "#2DD4BF"
 	LightFocus        = "#0D9488"
@@ -46,7 +46,10 @@ func (e AccentValidationError) Error() string {
 }
 
 // ThemeFromJSON resolves tenant branding JSON into a safe template theme.
-func ThemeFromJSON(slug, tenantName string, raw []byte) (Theme, error) {
+// When uploadedLogoURL is non-empty it overrides any logo_url stored in the
+// branding JSONB — this is how an uploaded tenant logo wins over a manual
+// CDN URL set via the branding PATCH.
+func ThemeFromJSON(slug, tenantName string, raw []byte, uploadedLogoURL string) (Theme, error) {
 	branding := Branding{}
 	if len(raw) > 0 {
 		if err := json.Unmarshal(raw, &branding); err != nil {
@@ -64,14 +67,18 @@ func ThemeFromJSON(slug, tenantName string, raw []byte) (Theme, error) {
 	accent := strings.TrimSpace(branding.Accent)
 	customAccent := accent != ""
 	if accent == "" {
-		accent = "#0D9488"
+		accent = "#0F766E"
 	}
 	if customAccent {
 		if err := ValidateAccent(accent); err != nil {
 			return Theme{}, err
 		}
 	}
-	return Theme{TenantSlug: slug, LogoURL: branding.LogoURL, Accent: accent, DisplayName: displayName, PoweredBy: poweredBy}, nil
+	logoURL := branding.LogoURL
+	if uploadedLogoURL != "" {
+		logoURL = uploadedLogoURL
+	}
+	return Theme{TenantSlug: slug, LogoURL: logoURL, Accent: accent, DisplayName: displayName, PoweredBy: poweredBy}, nil
 }
 
 // ValidateAccent enforces the hosted-login tenant accent contrast gate.

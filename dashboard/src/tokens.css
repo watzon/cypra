@@ -31,7 +31,7 @@
   --border-focus: #2dd4bf;
   --text-primary: #f4f4f5;
   --text-secondary: #a1a1aa;
-  --text-tertiary: #71717a;
+  --text-tertiary: #8b8b95;
   --text-disabled: #52525b;
   --text-on-accent: #0a0a0b;
   --text-identifier: #e4e4e7;
@@ -44,8 +44,8 @@
   --status-error: #ef4444;
   --status-info: #3b82f6;
   --status-pending: #a855f7;
-  --context-instance: #c4b5fd;
-  --context-tenant: #5eead4;
+  --context-instance: #a78bfa;
+  --context-tenant: #2dd4bf;
   --key-state-active: #22c55e;
   --key-state-overlap: #f59e0b;
   --key-state-sunsetting: #71717a;
@@ -80,8 +80,8 @@
   --status-error: #dc2626;
   --status-info: #2563eb;
   --status-pending: #9333ea;
-  --context-instance: #5b21b6;
-  --context-tenant: #115e59;
+  --context-instance: #7c3aed;
+  --context-tenant: #0d9488;
   --key-state-active: #16a34a;
   --key-state-overlap: #d97706;
   --key-state-sunsetting: #71717a;
@@ -116,6 +116,35 @@
   --dur-shake: 220ms;
   --ease-ui: cubic-bezier(0.2, 0, 0, 1);
   --ease-shake: cubic-bezier(0.36, 0.07, 0.19, 0.97);
+
+  --fs-display-lg: 32px;
+  --fs-display-md: 24px;
+  --fs-display-sm: 20px;
+  --fs-body-md: 14px;
+  --fs-body-sm: 13px;
+  --fs-caption: 12px;
+  --fs-label-md: 13px;
+  --fs-label-sm: 11px;
+  --fs-identifier-md: 13px;
+  --fs-identifier-sm: 12px;
+  --fs-code-md: 13px;
+
+  --lh-display-lg: 1.25;
+  --lh-display-md: 1.333;
+  --lh-display-sm: 1.4;
+  --lh-body-md: 1.571;
+  --lh-body-sm: 1.538;
+  --lh-caption: 1.5;
+  --lh-label-md: 1.538;
+  --lh-label-sm: 1.454;
+  --lh-identifier-md: 1.538;
+  --lh-identifier-sm: 1.5;
+  --lh-code-md: 1.538;
+
+  --wt-regular: 400;
+  --wt-medium: 500;
+  --wt-semibold: 600;
+  --wt-bold: 700;
 }
 
 @theme inline {
@@ -150,4 +179,15 @@
   --color-secret-mask: var(--secret-mask);
   --font-sans: var(--font-neon);
   --font-mono: var(--font-krypton);
+}
+
+@media (pointer: coarse) {
+  button:not([data-touch-target="cursor-only"]),
+  [role="button"]:not([data-touch-target="cursor-only"]),
+  input:not([type="hidden"]),
+  select,
+  textarea {
+    min-width: var(--space-10);
+    min-height: var(--space-10);
+  }
 }

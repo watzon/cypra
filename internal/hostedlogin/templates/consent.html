@@ -1,6 +1,5 @@
 {{ define "content" }}
-<h1>Sign in to this application</h1>
-<p>Review the requested OIDC scopes.</p>
+<p>Review the requested OIDC scopes before continuing.</p>
 <form
   class="stack"
   hx-post="/oidc/consent"
@@ -13,7 +12,11 @@
     {{ if .New }}<span class="new">+ new</span>{{ end }}<strong>{{ .Name }}</strong>
     <p>{{ .Description }}</p>
   </div>
-  {{ end }}
+  {{ end }} {{ if .ContinueURL }}<input
+    name="continue"
+    type="hidden"
+    value="{{ .ContinueURL }}"
+  />{{ end }}
   <button name="decision" value="allow" type="submit">Allow</button>
   <button class="secondary" name="decision" value="deny" type="submit">Deny</button>
 </form>

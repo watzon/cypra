@@ -1,6 +1,11 @@
 {{ define "content" }}
-<h1>Two-factor authentication</h1>
-<form class="stack" hx-post="/2fa" hx-target="#factor-result" hx-swap="innerHTML" method="post">
+<form
+  class="stack"
+  hx-post="/2fa"
+  hx-target="#factor-result"
+  hx-swap="innerHTML"
+  method="post"
+>
   <label
     >Factor
     <select name="factor">
@@ -12,5 +17,13 @@
   <label>Code <input name="code" autocomplete="one-time-code" required /></label>
   <button type="submit">Verify</button>
 </form>
+<button
+  class="secondary alt-row"
+  data-passkey-action="2fa"
+  data-passkey-result="factor-result"
+  data-rp-id="{{ .RPID }}"
+>
+  Verify with WebAuthn 2FA
+</button>
 <div id="factor-result" role="status" aria-live="polite"></div>
 {{ end }}{{ template "base" . }}

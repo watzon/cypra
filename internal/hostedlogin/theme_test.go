@@ -17,7 +17,7 @@ func TestValidateAccentRejectsFailingContrast(t *testing.T) {
 }
 
 func TestThemeKeepsSystemFocusRingSeparate(t *testing.T) {
-	theme, err := ThemeFromJSON("acme", "Acme", []byte(`{"accent":"#767676","display_name":"Acme Login"}`))
+	theme, err := ThemeFromJSON("acme", "Acme", []byte(`{"accent":"#767676","display_name":"Acme Login"}`), "")
 	if err != nil {
 		t.Fatal(err)
 	}

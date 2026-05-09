@@ -22,6 +22,11 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 const storageKey = "cypra.theme";
 
+function currentActorKind(): "tenant" | "instance" {
+  if (typeof window === "undefined") return "instance";
+  return window.location.pathname.startsWith("/dashboard/tenants/") ? "tenant" : "instance";
+}
+
 function resolveMode(preference: ThemePreference): ResolvedMode {
   if (preference !== "system") {
     return preference;
@@ -33,7 +38,7 @@ function resolveMode(preference: ThemePreference): ResolvedMode {
 }
 
 export function ThemeProvider({ children }: PropsWithChildren) {
-  const [actorKind] = useState<"tenant" | "instance">("instance");
+  const [actorKind, setActorKind] = useState<"tenant" | "instance">(() => currentActorKind());
   const [preference, setPreferenceState] = useState<ThemePreference>(() => {
     const storage = globalThis.localStorage;
     const stored = typeof storage.getItem === "function" ? storage.getItem(storageKey) : null;
@@ -52,6 +57,12 @@ export function ThemeProvider({ children }: PropsWithChildren) {
   useEffect(() => {
     document.documentElement.dataset.mode = mode;
   }, [mode]);
+
+  useEffect(() => {
+    const updateActor = () => setActorKind(currentActorKind());
+    window.addEventListener("popstate", updateActor);
+    return () => window.removeEventListener("popstate", updateActor);
+  }, []);
 
   const setPreference = (next: ThemePreference) => {
     setPreferenceState(next);
