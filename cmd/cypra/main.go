@@ -13,19 +13,28 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/watzon/cypra/dashboard"
 	"github.com/watzon/cypra/internal/auth/invite"
+	_ "github.com/watzon/cypra/internal/auth/upstream/providers"
 	"github.com/watzon/cypra/internal/bootstrap"
 	cypra "github.com/watzon/cypra/internal/crypto"
 	"github.com/watzon/cypra/internal/db"
+	"github.com/watzon/cypra/internal/email"
 	"github.com/watzon/cypra/internal/httpserver"
+	"github.com/watzon/cypra/internal/logging"
 	"github.com/watzon/cypra/internal/migrate"
 	"github.com/watzon/cypra/internal/oidc"
+	"github.com/watzon/cypra/internal/storage/openstore"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -36,6 +45,7 @@ var (
 )
 
 func main() {
+	slog.SetDefault(slog.New(logging.RedactingHandler{Handler: slog.NewTextHandler(os.Stderr, nil)}))
 	if err := run(os.Args[1:]); err != nil {
 		var exitErr exitError
 		if errors.As(err, &exitErr) {
@@ -98,13 +108,140 @@ func runServe(args []string) error {
 	if err != nil {
 		return fmt.Errorf("open gorm db: %w", err)
 	}
+	if err := gormDB.Use(db.TenantPlugin{}); err != nil {
+		return fmt.Errorf("install tenant db plugin: %w", err)
+	}
 	devMode := os.Getenv("LOG_LEVEL") == "debug"
-	server, err := httpserver.New(httpserver.Options{DB: dbConn, TenantDB: db.NewTenantScopedDB(gormDB), PublicBaseURL: publicBaseURL, Version: version, Commit: commit, DevOpenAPI: devMode, KEKLoaded: masterKeyConfigured(), MasterKey: loadMasterKey(), DashboardFS: dashboard.Files, DashboardDev: envDefault("VITE_DEV_SERVER", "http://127.0.0.1:5173")})
+	// Trust X-Cypra-* elevation headers only when explicitly opted in. Defaults
+	// off so a misbehaving proxy (or a stray header from the dashboard) can
+	// never escalate the actor.
+	trustDevHeaders := os.Getenv("CYPRA_TRUST_DEV_HEADERS") == "1"
+	masterKey := loadMasterKey()
+	store, storeKind, err := openstore.New(openstore.LoadConfigFromEnv(masterKey))
+	if err != nil {
+		return err
+	}
+	server, err := httpserver.New(httpserver.Options{DB: dbConn, TenantDB: db.NewTenantScopedDB(gormDB), PublicBaseURL: publicBaseURL, Version: version, Commit: commit, DevOpenAPI: devMode, KEKLoaded: masterKeyConfigured(), MasterKey: masterKey, GoogleAuthURL: os.Getenv("CYPRA_GOOGLE_AUTH_URL"), DashboardFS: dashboard.Files, DashboardDev: envDefault("VITE_DEV_SERVER", "http://127.0.0.1:5173"), Storage: store, StorageBackend: storeKind, TrustDevHeaders: trustDevHeaders})
 	if err != nil {
 		return err
 	}
 	httpServer := &http.Server{Addr: envDefault("LISTEN_ADDR", ":8080"), Handler: server.Router(), ReadHeaderTimeout: 5 * time.Second}
-	return httpServer.ListenAndServe()
+	serveCtx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	traceShutdown, err := setupTracing(serveCtx)
+	if err != nil {
+		return err
+	}
+	workerDone := make(chan error, 1)
+	go func() {
+		workerDone <- (email.Worker{DB: dbConn, Resolver: email.Resolver{DB: dbConn, KEK: masterKey, TerminalWriter: os.Stdout}, Workers: 4, BatchSize: 10, PollInterval: time.Second}).Run(serveCtx)
+	}()
+	var rotationDone chan error
+	if len(masterKey) == cypra.MasterKeyBytes {
+		rotationDone = make(chan error, 1)
+		go func() {
+			rotationDone <- oidc.NewRotationService(dbConn, masterKey).Run(serveCtx, time.Hour)
+		}()
+	}
+	cleanupDone := make(chan error, 1)
+	go func() {
+		err := oidc.RunCleanupTicker(serveCtx, dbConn, time.Hour)
+		if errors.Is(err, context.Canceled) {
+			err = nil
+		}
+		cleanupDone <- err
+	}()
+	tenantCleanupDone := make(chan error, 1)
+	go func() {
+		err := httpserver.RunTenantDeletionCleanupTicker(serveCtx, dbConn, time.Hour)
+		if errors.Is(err, context.Canceled) {
+			err = nil
+		}
+		tenantCleanupDone <- err
+	}()
+	httpDone := make(chan error, 1)
+	go func() {
+		err := httpServer.ListenAndServe()
+		if errors.Is(err, http.ErrServerClosed) {
+			err = nil
+		}
+		httpDone <- err
+	}()
+	var runErr error
+	workerDoneRead := false
+	rotationDoneRead := false
+	cleanupDoneRead := false
+	tenantCleanupDoneRead := false
+	httpDoneRead := false
+	select {
+	case <-serveCtx.Done():
+	case runErr = <-workerDone:
+		workerDoneRead = true
+		stop()
+	case runErr = <-rotationDone:
+		rotationDoneRead = true
+		stop()
+	case runErr = <-cleanupDone:
+		cleanupDoneRead = true
+		stop()
+	case runErr = <-tenantCleanupDone:
+		tenantCleanupDoneRead = true
+		stop()
+	case runErr = <-httpDone:
+		httpDoneRead = true
+		stop()
+	}
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	if err := httpServer.Shutdown(shutdownCtx); err != nil && runErr == nil {
+		runErr = err
+	}
+	stop()
+	if !workerDoneRead {
+		if err := <-workerDone; err != nil && runErr == nil {
+			runErr = err
+		}
+	}
+	if rotationDone != nil && !rotationDoneRead {
+		if err := <-rotationDone; err != nil && runErr == nil {
+			runErr = err
+		}
+	}
+	if !cleanupDoneRead {
+		if err := <-cleanupDone; err != nil && runErr == nil {
+			runErr = err
+		}
+	}
+	if !tenantCleanupDoneRead {
+		if err := <-tenantCleanupDone; err != nil && runErr == nil {
+			runErr = err
+		}
+	}
+	if !httpDoneRead {
+		if err := <-httpDone; err != nil && runErr == nil {
+			runErr = err
+		}
+	}
+	if traceShutdown != nil {
+		if err := traceShutdown(shutdownCtx); err != nil && runErr == nil {
+			runErr = err
+		}
+	}
+	return runErr
+}
+
+func setupTracing(ctx context.Context) (func(context.Context) error, error) {
+	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	if endpoint == "" {
+		return nil, nil
+	}
+	exporter, err := otlptracehttp.New(ctx, otlptracehttp.WithEndpointURL(endpoint))
+	if err != nil {
+		return nil, fmt.Errorf("init otlp trace exporter: %w", err)
+	}
+	provider := sdktrace.NewTracerProvider(sdktrace.WithBatcher(exporter))
+	otel.SetTracerProvider(provider)
+	return provider.Shutdown, nil
 }
 
 func runAdmin(args []string) error {
@@ -172,6 +309,9 @@ func adminPromote(dbConn *sql.DB, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := auditCLIInstanceAdmin(dbConn, "tenant_admin.recovery", "admin promote"); err != nil {
+		return err
+	}
 	token, id, err := (invite.Service{DB: dbConn}).Issue(context.Background(), invite.IssueRequest{TenantID: &tenantID, Email: *email, Role: *role, CreatedByKind: "system"})
 	if err != nil {
 		return err
@@ -184,11 +324,21 @@ func adminInvite(dbConn *sql.DB, args []string) error {
 	if len(args) != 1 {
 		return exitError{code: 2, error: "admin invite requires <email>"}
 	}
+	var admins int
+	if err := dbConn.QueryRowContext(context.Background(), `SELECT count(*) FROM instance_admins`).Scan(&admins); err != nil {
+		return err
+	}
+	if admins == 0 {
+		return exitError{code: 8, error: "admin invite requires an initialized instance; use reset-bootstrap for first admin recovery"}
+	}
+	if err := auditCLIInstanceAdmin(dbConn, "instance_admin.recovery", "admin invite"); err != nil {
+		return err
+	}
 	token, id, err := (invite.Service{DB: dbConn}).Issue(context.Background(), invite.IssueRequest{Email: args[0], Role: "instance_admin", CreatedByKind: "system"})
 	if err != nil {
 		return err
 	}
-	slog.Info("instance-admin invite minted", slog.String("invite_id", id.String()), slog.String("redemption_token", token), slog.Bool("redacted-on-export", true))
+	slog.Info("instance-admin invite minted", slog.String("request_id", ""), slog.String("tenant_id", ""), slog.String("actor_id", "system"), slog.String("invite_id", id.String()), slog.String("redemption_token", token), slog.Bool("redacted-on-export", true))
 	fmt.Printf("invite_id=%s token=%s\n", id, token)
 	return nil
 }
@@ -199,6 +349,9 @@ func adminListInstanceAdmins(dbConn *sql.DB, args []string) error {
 	asJSON := fs.Bool("json", false, "emit JSON")
 	if err := fs.Parse(args); err != nil {
 		return exitError{code: 2, error: err.Error()}
+	}
+	if err := auditCLIInstanceAdmin(dbConn, "instance_admin.read", "admin list-instance-admins"); err != nil {
+		return err
 	}
 	rows, err := dbConn.Query(`SELECT id, email, display_name, created_at, last_login_at, disabled_at FROM instance_admins ORDER BY email`)
 	if err != nil {
@@ -237,6 +390,9 @@ func adminResetPasskey(dbConn *sql.DB, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := auditCLIInstanceAdmin(dbConn, "tenant_admin.recovery", "admin reset-passkey"); err != nil {
+		return err
+	}
 	_, err = dbConn.Exec(`DELETE FROM passkey_credentials WHERE tenant_id = $1 AND user_id = (SELECT id FROM users WHERE tenant_id = $1 AND email = $2)`, tenantID, *email)
 	return err
 }
@@ -252,6 +408,9 @@ func adminResetPasswords(dbConn *sql.DB, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := auditCLIInstanceAdmin(dbConn, "tenant_admin.recovery", "admin reset-passwords"); err != nil {
+		return err
+	}
 	_, err = dbConn.Exec(`UPDATE password_credentials SET must_reset = true, updated_at = now() WHERE tenant_id = $1`, tenantID)
 	return err
 }
@@ -265,6 +424,9 @@ func adminRotateKey(dbConn *sql.DB, args []string) error {
 	}
 	tenantID, err := resolveTenant(context.Background(), dbConn, *tenantArg)
 	if err != nil {
+		return err
+	}
+	if err := auditCLIInstanceAdmin(dbConn, "master_key.rotation", "admin rotate-key"); err != nil {
 		return err
 	}
 	return oidc.NewRotationService(dbConn, loadMasterKey()).ForceRotate(context.Background(), tenantID)
@@ -296,6 +458,9 @@ func adminRotateMasterKey(dbConn *sql.DB, args []string) error {
 	if len(oldKey) != cypra.MasterKeyBytes || len(newKey) != cypra.MasterKeyBytes {
 		return exitError{code: 2, error: "old and new master keys must be provided via --old-from-env and --new-from-env"}
 	}
+	if err := auditCLIInstanceAdmin(dbConn, "master_key.rotation", "admin rotate-master-key"); err != nil {
+		return err
+	}
 	if *resumeID != "" {
 		rotationID, err := uuid.Parse(*resumeID)
 		if err != nil {
@@ -322,6 +487,9 @@ func adminRevokeTenantTokens(dbConn *sql.DB, args []string) error {
 	if err != nil {
 		return err
 	}
+	if err := auditCLIInstanceAdmin(dbConn, "tenant_deletion.recovery", "admin revoke-tenant-tokens"); err != nil {
+		return err
+	}
 	if _, err := dbConn.Exec(`UPDATE sessions SET revoked_at = now() WHERE tenant_id = $1 AND revoked_at IS NULL`, tenantID); err != nil {
 		return err
 	}
@@ -330,6 +498,9 @@ func adminRevokeTenantTokens(dbConn *sql.DB, args []string) error {
 }
 
 func adminResetBootstrap(dbConn *sql.DB) error {
+	if err := auditCLIInstanceAdmin(dbConn, "bootstrap.recovery", "admin reset-bootstrap"); err != nil {
+		return err
+	}
 	token, err := bootstrap.NewService(dbConn, slog.Default()).RevokeSetupToken(context.Background())
 	if err != nil {
 		return err
@@ -344,6 +515,9 @@ func adminListTenants(dbConn *sql.DB, args []string) error {
 	asJSON := fs.Bool("json", false, "emit JSON")
 	if err := fs.Parse(args); err != nil {
 		return exitError{code: 2, error: err.Error()}
+	}
+	if err := auditCLIInstanceAdmin(dbConn, "instance_admin.read", "admin list-tenants"); err != nil {
+		return err
 	}
 	rows, err := dbConn.Query(`SELECT t.id, t.slug, t.name, (SELECT count(*) FROM users u WHERE u.tenant_id = t.id), (SELECT count(*) FROM projects p WHERE p.tenant_id = t.id) FROM tenants t WHERE deleted_at IS NULL ORDER BY slug`)
 	if err != nil {
@@ -381,7 +555,8 @@ func runExport(args []string) error {
 	if *out == "" {
 		return exitError{code: 2, error: "export requires --out"}
 	}
-	if _, err := readPassphrase(*passFile, *passStdin); err != nil {
+	passphrase, err := readPassphrase(*passFile, *passStdin)
+	if err != nil {
 		return err
 	}
 	dbConn, err := openDB(envDefault("DATABASE_URL", ""))
@@ -389,16 +564,11 @@ func runExport(args []string) error {
 		return err
 	}
 	defer func() { _ = dbConn.Close() }()
-	snapshot, err := snapshotCounts(context.Background(), dbConn)
+	content, err := exportBackup(context.Background(), dbConn, passphrase)
 	if err != nil {
 		return err
 	}
-	file, err := os.Create(*out)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = file.Close() }()
-	return json.NewEncoder(file).Encode(map[string]any{"format": "cypra-export-v1", "snapshot": snapshot})
+	return os.WriteFile(*out, content, 0o600)
 }
 
 func runImport(args []string) error {
@@ -413,7 +583,8 @@ func runImport(args []string) error {
 	if fs.NArg() != 1 {
 		return exitError{code: 2, error: "import requires <path>"}
 	}
-	if _, err := readPassphrase(*passFile, *passStdin); err != nil {
+	passphrase, err := readPassphrase(*passFile, *passStdin)
+	if err != nil {
 		return err
 	}
 	dbConn, err := openDB(envDefault("DATABASE_URL", ""))
@@ -428,25 +599,11 @@ func runImport(args []string) error {
 	if tenants > 0 {
 		return exitError{code: 8, error: "import refuses to overwrite a non-empty Cypra DB"}
 	}
-	var deletions int
-	if err := dbConn.QueryRow(`SELECT count(*) FROM gdpr_deletions`).Scan(&deletions); err != nil {
-		return err
-	}
-	if deletions > 0 && !*allowResurrect {
-		return exitError{code: 9, error: "import refuses to resurrect DSR-deleted users without --allow-resurrect"}
-	}
 	content, err := os.ReadFile(fs.Arg(0)) // #nosec G304 -- operator-provided import path.
 	if err != nil {
 		return err
 	}
-	var payload map[string]any
-	if err := json.Unmarshal(content, &payload); err != nil {
-		return err
-	}
-	if payload["format"] != "cypra-export-v1" {
-		return exitError{code: 2, error: "unsupported import format"}
-	}
-	return nil
+	return importBackup(context.Background(), dbConn, content, passphrase, *allowResurrect)
 }
 
 func readPassphrase(file string, stdin bool) (string, error) {
@@ -467,18 +624,6 @@ func readPassphrase(file string, stdin bool) (string, error) {
 	return passphrase, nil
 }
 
-func snapshotCounts(ctx context.Context, dbConn *sql.DB) (map[string]int, error) {
-	snapshot := map[string]int{}
-	for _, table := range []string{"tenants", "projects", "users", "oidc_clients", "oidc_signing_keys", "storage_objects"} {
-		var count int
-		if err := dbConn.QueryRowContext(ctx, `SELECT count(*) FROM `+table).Scan(&count); err != nil {
-			return nil, err
-		}
-		snapshot[table] = count
-	}
-	return snapshot, nil
-}
-
 func resolveTenant(ctx context.Context, dbConn *sql.DB, tenant string) (uuid.UUID, error) {
 	if tenant == "" {
 		return uuid.Nil, exitError{code: 2, error: "--tenant is required"}
@@ -489,6 +634,17 @@ func resolveTenant(ctx context.Context, dbConn *sql.DB, tenant string) (uuid.UUI
 	var id uuid.UUID
 	err := dbConn.QueryRowContext(ctx, `SELECT id FROM tenants WHERE slug = $1 AND deleted_at IS NULL`, tenant).Scan(&id)
 	return id, err
+}
+
+func auditCLIInstanceAdmin(dbConn *sql.DB, action, reason string) error {
+	_, err := dbConn.ExecContext(
+		context.Background(),
+		`INSERT INTO audit_entries (tenant_id, actor_kind, actor_id, action, resource_kind, metadata)
+		 VALUES (NULL, 'instance_admin', NULL, $1::text, 'cli_admin', jsonb_build_object('cross_tenant', true, 'reason', $2::text))`,
+		action,
+		reason,
+	)
+	return err
 }
 
 func nullableTime(value sql.NullTime) any {
@@ -560,6 +716,9 @@ func normalizeMasterKey(raw string) []byte {
 	if raw == "" {
 		return nil
 	}
+	if key, err := cypra.LoadMasterKey(raw, ""); err == nil {
+		return key
+	}
 	if len(raw) == 32 {
 		return []byte(raw)
 	}
@@ -569,12 +728,16 @@ func normalizeMasterKey(raw string) []byte {
 
 func encryptedColumnTargets() []cypra.EncryptedColumn {
 	return []cypra.EncryptedColumn{
-		{Table: "oidc_signing_keys", IDColumn: "id", DEKColumn: "private_key_encrypted"},
-		{Table: "oidc_clients", IDColumn: "id", DEKColumn: "client_secret_encrypted"},
-		{Table: "upstream_providers", IDColumn: "id", DEKColumn: "client_id_encrypted"},
-		{Table: "upstream_providers", IDColumn: "id", DEKColumn: "client_secret_encrypted"},
-		{Table: "email_provider_configs", IDColumn: "id", DEKColumn: "config_encrypted"},
-		{Table: "totp_credentials", IDColumn: "id", DEKColumn: "secret_encrypted"},
+		{Table: "oidc_signing_keys", IDColumn: "id", DEKColumn: "private_key_encrypted", Format: cypra.EncryptedColumnFormatJSONEnvelope},
+		{Table: "oidc_clients", IDColumn: "id", DEKColumn: "client_secret_encrypted", Format: cypra.EncryptedColumnFormatPrefix},
+		{Table: "upstream_providers", IDColumn: "id", DEKColumn: "client_id_encrypted", Format: cypra.EncryptedColumnFormatPrefix},
+		{Table: "upstream_providers", IDColumn: "id", DEKColumn: "client_secret_encrypted", Format: cypra.EncryptedColumnFormatPrefix},
+		{Table: "social_connections", IDColumn: "id", DEKColumn: "client_id_encrypted", Format: cypra.EncryptedColumnFormatPrefix},
+		{Table: "social_connections", IDColumn: "id", DEKColumn: "client_secret_encrypted", Format: cypra.EncryptedColumnFormatPrefix},
+		{Table: "oidc_connections", IDColumn: "id", DEKColumn: "client_id_encrypted", Format: cypra.EncryptedColumnFormatPrefix},
+		{Table: "oidc_connections", IDColumn: "id", DEKColumn: "client_secret_encrypted", Format: cypra.EncryptedColumnFormatPrefix},
+		{Table: "email_provider_configs", IDColumn: "id", DEKColumn: "config_encrypted", Format: cypra.EncryptedColumnFormatPrefix},
+		{Table: "totp_credentials", IDColumn: "id", DEKColumn: "secret_encrypted", Format: cypra.EncryptedColumnFormatPrefix},
 	}
 }
 

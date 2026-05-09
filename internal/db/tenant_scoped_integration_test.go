@@ -26,11 +26,30 @@ func TestTenantScopedDBOperations(t *testing.T) {
 	tenantDB := harness.TenantDB
 	ctx := context.Background()
 
-	if tenantDB.DB() == nil {
-		t.Fatal("DB returned nil")
+	if _, err := tenantDB.AsInstanceAdmin(ctx, "test"); !errors.Is(err, db.ErrInstanceAdminContextRequired) {
+		t.Fatalf("AsInstanceAdmin without context error = %v", err)
 	}
-	if tenantDB.AsInstanceAdmin(ctx) == nil {
-		t.Fatal("AsInstanceAdmin returned nil")
+	adminDB, err := tenantDB.AsInstanceAdmin(db.ContextAsInstanceAdmin(ctx), "integration smoke")
+	if err != nil {
+		t.Fatalf("AsInstanceAdmin error = %v", err)
+	}
+	if adminDB == nil {
+		t.Fatal("AsInstanceAdmin returned nil access layer")
+	}
+	adminCtx := db.ContextAsInstanceAdmin(ctx)
+	if err := adminDB.Exec(adminCtx, "cli.admin", `UPDATE tenants SET name = name WHERE id = ?`, tenantID); err != nil {
+		t.Fatalf("instance admin exec: %v", err)
+	}
+	var tenantCount int
+	if err := adminDB.RawScan(adminCtx, "instance_admin.read", `SELECT count(*) FROM tenants`, &tenantCount); err != nil {
+		t.Fatalf("instance admin raw scan: %v", err)
+	}
+	if tenantCount == 0 {
+		t.Fatal("instance admin raw scan saw no tenants")
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM audit_entries WHERE tenant_id IS NULL AND metadata->>'cross_tenant' = 'true'`, 2)
+	if err := adminDB.Exec(adminCtx, "cli.admin", `UPDATE missing_table SET id = id`); err == nil {
+		t.Fatal("instance admin exec unexpectedly succeeded for invalid statement")
 	}
 
 	plugin := db.TenantPlugin{}
@@ -61,6 +80,13 @@ func TestTenantScopedDBOperations(t *testing.T) {
 	}
 	if name != "Console App" {
 		t.Fatalf("name = %q", name)
+	}
+	var pluginCount int64
+	if err := harness.Gorm.WithContext(db.ContextWithTenant(ctx, tenantID)).Raw("SELECT count(*) FROM projects WHERE slug = ?", "console").Scan(&pluginCount).Error; err != nil {
+		t.Fatalf("plugin raw count: %v", err)
+	}
+	if pluginCount != 1 {
+		t.Fatalf("plugin raw count = %d", pluginCount)
 	}
 
 	if err := tenantDB.Transaction(ctx, tenantID, func(tx *gorm.DB) error {
