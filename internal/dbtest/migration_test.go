@@ -2,6 +2,7 @@ package dbtest_test
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -17,9 +18,10 @@ func TestMigrationsCreatePlanEntities(t *testing.T) {
 		"instance_admin_backup_codes", "magic_link_tokens", "password_reset_tokens",
 		"email_verification_tokens", "pending_invitations", "sessions", "instance_admin_sessions",
 		"oidc_clients", "oidc_authorization_codes", "oidc_refresh_tokens", "oidc_consents",
-		"oidc_signing_keys", "upstream_providers", "email_provider_configs", "email_outbox",
+		"oidc_signing_keys", "upstream_providers", "social_connections", "oidc_connections", "email_provider_configs", "email_outbox",
 		"storage_objects", "tenant_auth_methods", "audit_entries", "bootstrap_tokens",
-		"master_key_rotations", "rate_limit_buckets", "gdpr_deletions",
+		"master_key_rotations", "rate_limit_buckets", "gdpr_deletions", "webauthn_challenges", "invite_continuations",
+		"instance_admin_passkey_credentials", "instance_admin_webauthn_challenges",
 	}
 	for _, table := range wantTables {
 		dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_name = $1`, 1, table)
@@ -45,9 +47,52 @@ func TestRLSRuntimeRoleSeesNoRowsWithoutTenantSetting(t *testing.T) {
 	if _, err := harness.SQL.Exec(`INSERT INTO projects (tenant_id, slug, name) VALUES ($1, 'app', 'App')`, tenantID); err != nil {
 		t.Fatalf("seed project: %v", err)
 	}
+	if _, err := harness.SQL.Exec(`INSERT INTO users (tenant_id, email, metadata) VALUES ($1, 'user@example.com', '{}'::jsonb)`, tenantID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
 
 	runtimeSQL := openRuntime(t, harness.SQL, harness.DSN)
-	dbtest.RequireCount(t, runtimeSQL, `SELECT count(*) FROM projects`, 0)
+	for _, table := range strictTenantRLSTables() {
+		t.Run(table, func(t *testing.T) {
+			dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = 'public' AND c.relname = $1 AND c.relrowsecurity`, 1, table)
+			dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM pg_policies WHERE schemaname = 'public' AND tablename = $1 AND policyname = 'tenant_isolation'`, 1, table)
+			dbtest.RequireCount(t, runtimeSQL, fmt.Sprintf(`SELECT count(*) FROM %s`, quoteIdent(table)), 0)
+		})
+	}
+}
+
+func strictTenantRLSTables() []string {
+	return []string{
+		"projects",
+		"tenant_memberships",
+		"users",
+		"password_credentials",
+		"passkey_credentials",
+		"webauthn_challenges",
+		"totp_credentials",
+		"user_backup_codes",
+		"magic_link_tokens",
+		"password_reset_tokens",
+		"email_verification_tokens",
+		"sessions",
+		"oidc_clients",
+		"oidc_authorization_codes",
+		"oidc_refresh_tokens",
+		"oidc_consents",
+		"oidc_signing_keys",
+		"upstream_providers",
+		"social_connections",
+		"oidc_connections",
+		"email_provider_configs",
+		"storage_objects",
+		"tenant_auth_methods",
+		"gdpr_deletions",
+		"personal_access_tokens",
+	}
+}
+
+func quoteIdent(identifier string) string {
+	return `"` + strings.ReplaceAll(identifier, `"`, `""`) + `"`
 }
 
 func TestAuditLogRuntimeRoleCannotMutateImmutableFieldsOrDelete(t *testing.T) {

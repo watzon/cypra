@@ -69,6 +69,9 @@ func New(t *testing.T) *Harness {
 	if err != nil {
 		t.Fatalf("open gorm: %v", err)
 	}
+	if err := gormDB.Use(db.TenantPlugin{}); err != nil {
+		t.Fatalf("install tenant plugin: %v", err)
+	}
 
 	return &Harness{
 		DSN:      dsn,

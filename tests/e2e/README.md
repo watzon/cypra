@@ -2,15 +2,37 @@
 
 Playwright harness introduced in Phase 11 and extended by the Phase 12 canonical demo.
 
-The harness expects a local Cypra stack plus Postgres, MailHog or another SMTP stub, and a stub Google upstream. Phase 12 wires the full Docker Compose runner; this phase provides reusable helpers for:
+The harness can run against an existing local Cypra stack or can start a managed local Cypra + Postgres stack for the current test process. The managed path includes a deterministic SMTP stub, Google upstream stub, and downstream Next.js app orchestration.
+
+Reusable helpers cover:
 
 - Redeeming the bootstrap token.
-- Creating a tenant.
-- Configuring email and upstream providers.
-- Starting passkey and Google-upstream sign-in flows.
+- Enrolling the first instance-admin passkey with a virtual authenticator.
+- Creating a tenant and project.
+- Configuring email against the SMTP stub and upstream providers against the Google stub.
+- Starting the passkey sign-in flow, enrolling/verifying WebAuthn second factor, and completing Google-upstream callback/session creation through the local stub.
+- Exporting a managed-stack backup, importing it into a fresh managed stack, and reusing the same virtual authenticator to assert a restored tenant passkey.
 
-Run manually once a local stack is running:
+Run against an existing local stack:
 
 ```sh
+CYPRA_E2E_LIVE=1 \
+CYPRA_BASE_URL=https://cypra.localhost \
+CYPRA_TENANT_URL=https://acme.cypra.localhost \
+CYPRA_SETUP_TOKEN=<token> \
 bunx playwright test tests/e2e/examples-smoke.spec.ts
 ```
+
+Run with a managed local stack:
+
+```sh
+CYPRA_E2E_MANAGED=1 bunx playwright test tests/e2e/canonical-demo/canonical-demo.spec.ts
+```
+
+Run backup/import browser proof:
+
+```sh
+CYPRA_E2E_MANAGED=1 bunx playwright test tests/e2e/backup-import.spec.ts
+```
+
+The managed path starts a fresh Compose-scoped Postgres service, runs migrations, mints a setup token, launches `cypra serve`, runs the browser flow, then tears the stack down with volumes removed.
