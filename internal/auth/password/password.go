@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/watzon/cypra/internal/authpolicy"
 	"github.com/watzon/cypra/internal/crypto"
 )
 
@@ -22,7 +23,14 @@ var ErrInvalidResetToken = errors.New("invalid password reset token")
 type Service struct{ DB *sql.DB }
 
 func (s Service) SetPassword(ctx context.Context, tenantID, userID uuid.UUID, plaintext string) error {
-	hash, err := crypto.HashPassword(plaintext, crypto.RejectCommonPasswords)
+	policy, err := authpolicy.LoadPassword(ctx, s.DB, tenantID)
+	if err != nil {
+		return fmt.Errorf("load password policy: %w", err)
+	}
+	if err := policy.Validate(plaintext); err != nil {
+		return err
+	}
+	hash, err := crypto.HashPassword(plaintext, denylist(policy))
 	if err != nil {
 		return err
 	}
@@ -31,6 +39,13 @@ func (s Service) SetPassword(ctx context.Context, tenantID, userID uuid.UUID, pl
 		return fmt.Errorf("set password credential: %w", err)
 	}
 	return s.RevokeLiveResetTokens(ctx, userID)
+}
+
+func denylist(policy authpolicy.PasswordPolicy) crypto.PasswordDenylist {
+	if policy.AllowCommonPasswords {
+		return nil
+	}
+	return crypto.RejectCommonPasswords
 }
 
 func (s Service) Verify(ctx context.Context, userID uuid.UUID, plaintext string) error {
@@ -68,7 +83,14 @@ func (s Service) ResetPassword(ctx context.Context, token, plaintext string) (uu
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("consume password reset token: %w", err)
 	}
-	hash, err := crypto.HashPassword(plaintext, crypto.RejectCommonPasswords)
+	policy, err := authpolicy.LoadPassword(ctx, s.DB, tenantID)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("load password policy: %w", err)
+	}
+	if err := policy.Validate(plaintext); err != nil {
+		return uuid.Nil, err
+	}
+	hash, err := crypto.HashPassword(plaintext, denylist(policy))
 	if err != nil {
 		return uuid.Nil, err
 	}

@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/watzon/cypra/internal/auth/magiclink"
+	"github.com/watzon/cypra/internal/authpolicy"
 	"github.com/watzon/cypra/internal/dbtest"
 )
 
@@ -19,7 +19,7 @@ func TestMagicLinkIssueDispatchAndConsume(t *testing.T) {
 		t.Fatalf("seed user: %v", err)
 	}
 	service := magiclink.Service{DB: harness.SQL}
-	token, err := service.Issue(context.Background(), tenantID, &userID, "user@example.com", "https://app.example", time.Hour)
+	token, err := service.Issue(context.Background(), tenantID, &userID, "user@example.com", "https://app.example", authpolicy.MagicLinkPolicy{TTLMinutes: 60})
 	if err != nil {
 		t.Fatalf("issue magic link: %v", err)
 	}

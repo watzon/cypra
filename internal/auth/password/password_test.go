@@ -48,6 +48,10 @@ func TestPasswordRejectsCommonPassword(t *testing.T) {
 	harness := dbtest.New(t)
 	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
 	userID := seedUser(t, harness, tenantID)
+	// Disable the structural length requirement so the common-password denylist is exercised.
+	if _, err := harness.SQL.Exec(`INSERT INTO tenant_auth_methods (tenant_id, method, enabled, config) VALUES ($1, 'password', true, '{"min_length": 1}'::jsonb)`, tenantID); err != nil {
+		t.Fatalf("seed password policy: %v", err)
+	}
 	service := password.Service{DB: harness.SQL}
 	if err := service.SetPassword(context.Background(), tenantID, userID, "password"); !errors.Is(err, crypto.ErrPasswordRejected) {
 		t.Fatalf("set common password error = %v", err)

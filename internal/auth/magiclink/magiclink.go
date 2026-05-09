@@ -13,15 +13,22 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/watzon/cypra/internal/authpolicy"
 )
 
 //revive:disable:exported
 
-var ErrInvalidToken = errors.New("invalid magic link token")
+var (
+	ErrInvalidToken    = errors.New("invalid magic link token")
+	ErrTooManyActive   = errors.New("magic_link.too_many_active")
+)
 
 type Service struct{ DB *sql.DB }
 
-func (s Service) Issue(ctx context.Context, tenantID uuid.UUID, userID *uuid.UUID, email, redirectURL string, ttl time.Duration) (string, error) {
+// Issue creates a new magic-link token under the given policy. The policy
+// determines TTL and the per-user active-token cap.
+func (s Service) Issue(ctx context.Context, tenantID uuid.UUID, userID *uuid.UUID, email, redirectURL string, policy authpolicy.MagicLinkPolicy) (string, error) {
+	policy = policy.WithDefaults()
 	token, err := randomToken()
 	if err != nil {
 		return "", err
@@ -31,7 +38,16 @@ func (s Service) Issue(ctx context.Context, tenantID uuid.UUID, userID *uuid.UUI
 		return "", err
 	}
 	defer func() { _ = tx.Rollback() }()
-	if _, err := tx.ExecContext(ctx, `INSERT INTO magic_link_tokens (tenant_id, user_id, email, token_hash, expires_at) VALUES ($1, $2, $3, $4, $5)`, tenantID, userID, email, hashToken(token), time.Now().UTC().Add(ttl)); err != nil {
+	if userID != nil && policy.MaxActivePerUser > 0 {
+		var active int
+		if err := tx.QueryRowContext(ctx, `SELECT count(*) FROM magic_link_tokens WHERE tenant_id = $1 AND user_id = $2 AND consumed_at IS NULL AND revoked_at IS NULL AND expires_at > now()`, tenantID, *userID).Scan(&active); err != nil {
+			return "", fmt.Errorf("count active magic link tokens: %w", err)
+		}
+		if active >= policy.MaxActivePerUser {
+			return "", ErrTooManyActive
+		}
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO magic_link_tokens (tenant_id, user_id, email, token_hash, expires_at) VALUES ($1, $2, $3, $4, $5)`, tenantID, userID, email, hashToken(token), time.Now().UTC().Add(policy.TTL())); err != nil {
 		return "", fmt.Errorf("insert magic link token: %w", err)
 	}
 	payload, _ := json.Marshal(map[string]string{"token": token, "redirect_url": redirectURL})

@@ -37,6 +37,13 @@ type State struct {
 	ExpiresAt int64     `json:"exp"`
 }
 
+type IDTokenClaims struct {
+	Subject string `json:"sub"`
+	Email   string `json:"email"`
+	Name    string `json:"name"`
+	Nonce   string `json:"nonce"`
+}
+
 func (c Client) AuthCodeURL(tenantID uuid.UUID, returnURL string, ttl time.Duration) (string, State, error) {
 	nonce, err := randomNonce()
 	if err != nil {
@@ -87,21 +94,27 @@ func (c Client) ValidateState(raw string, now time.Time) (State, error) {
 }
 
 func ValidateIDTokenNonce(idToken, want string) error {
-	parts := strings.Split(idToken, ".")
-	if len(parts) < 2 {
-		return ErrNonceMismatch
-	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return ErrNonceMismatch
-	}
-	var claims struct {
-		Nonce string `json:"nonce"`
-	}
-	if err := json.Unmarshal(payload, &claims); err != nil || claims.Nonce == "" || !hmac.Equal([]byte(claims.Nonce), []byte(want)) {
+	claims, err := ParseIDTokenClaims(idToken)
+	if err != nil || claims.Nonce == "" || !hmac.Equal([]byte(claims.Nonce), []byte(want)) {
 		return ErrNonceMismatch
 	}
 	return nil
+}
+
+func ParseIDTokenClaims(idToken string) (IDTokenClaims, error) {
+	parts := strings.Split(idToken, ".")
+	if len(parts) < 2 {
+		return IDTokenClaims{}, ErrNonceMismatch
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return IDTokenClaims{}, ErrNonceMismatch
+	}
+	var claims IDTokenClaims
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return IDTokenClaims{}, ErrNonceMismatch
+	}
+	return claims, nil
 }
 
 func (c Client) sign(encodedPayload string) string {

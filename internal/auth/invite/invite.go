@@ -41,6 +41,14 @@ type Redeemed struct {
 	Role     string
 }
 
+type Continuation struct {
+	ID       uuid.UUID
+	InviteID uuid.UUID
+	TenantID *uuid.UUID
+	Email    string
+	Role     string
+}
+
 func (s Service) Issue(ctx context.Context, req IssueRequest) (string, uuid.UUID, error) {
 	token, err := randomToken()
 	if err != nil {
@@ -72,13 +80,47 @@ func (s Service) Issue(ctx context.Context, req IssueRequest) (string, uuid.UUID
 }
 
 func (s Service) Redeem(ctx context.Context, token, displayName string) (Redeemed, error) {
+	return s.redeemHash(ctx, hashToken(token), displayName)
+}
+
+func (s Service) StartContinuation(ctx context.Context, token string, ttl time.Duration) (Continuation, error) {
+	var continuation Continuation
+	if ttl <= 0 {
+		ttl = 15 * time.Minute
+	}
+	err := s.DB.QueryRowContext(ctx, `INSERT INTO invite_continuations (tenant_id, invite_id, token_hash, email, role, expires_at)
+		SELECT tenant_id, id, token_hash, email, role, $2 FROM pending_invitations
+		WHERE token_hash = $1 AND redeemed_at IS NULL AND expires_at > now()
+		RETURNING id, invite_id, tenant_id, email, role`, hashToken(token), time.Now().UTC().Add(ttl)).Scan(&continuation.ID, &continuation.InviteID, &continuation.TenantID, &continuation.Email, &continuation.Role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Continuation{}, ErrInvalidToken
+	}
+	if err != nil {
+		return Continuation{}, fmt.Errorf("start invite continuation: %w", err)
+	}
+	return continuation, nil
+}
+
+func (s Service) RedeemContinuation(ctx context.Context, continuationID uuid.UUID, displayName string) (Redeemed, error) {
+	var tokenHash []byte
+	err := s.DB.QueryRowContext(ctx, `UPDATE invite_continuations SET consumed_at = now() WHERE id = $1 AND consumed_at IS NULL AND expires_at > now() RETURNING token_hash`, continuationID).Scan(&tokenHash)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Redeemed{}, ErrInvalidToken
+	}
+	if err != nil {
+		return Redeemed{}, fmt.Errorf("consume invite continuation: %w", err)
+	}
+	return s.redeemHash(ctx, tokenHash, displayName)
+}
+
+func (s Service) redeemHash(ctx context.Context, tokenHash []byte, displayName string) (Redeemed, error) {
 	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
 		return Redeemed{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
 	var redeemed Redeemed
-	err = tx.QueryRowContext(ctx, `UPDATE pending_invitations SET redeemed_at = now() WHERE token_hash = $1 AND redeemed_at IS NULL AND expires_at > now() RETURNING id, tenant_id, email, role`, hashToken(token)).Scan(&redeemed.InviteID, &redeemed.TenantID, &redeemed.Email, &redeemed.Role)
+	err = tx.QueryRowContext(ctx, `UPDATE pending_invitations SET redeemed_at = now() WHERE token_hash = $1 AND redeemed_at IS NULL AND expires_at > now() RETURNING id, tenant_id, email, role`, tokenHash).Scan(&redeemed.InviteID, &redeemed.TenantID, &redeemed.Email, &redeemed.Role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Redeemed{}, ErrInvalidToken
 	}

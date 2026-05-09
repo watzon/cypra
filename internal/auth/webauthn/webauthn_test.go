@@ -10,24 +10,85 @@ import (
 	"github.com/watzon/cypra/internal/dbtest"
 )
 
-func TestPasskeyRPIDIsTenantBound(t *testing.T) {
+func TestBeginRegistrationStoresServerChallengeWithTenantRPID(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	userID := seedUser(t, harness, tenantID)
+	service := webauthn.Service{DB: harness.SQL}
+
+	creation, ceremonyID, err := service.BeginRegistration(context.Background(), webauthn.BeginRegistrationRequest{
+		TenantID: tenantID,
+		UserID:   userID,
+		RPID:     "acme.cypra.localhost",
+	})
+	if err != nil {
+		t.Fatalf("begin registration: %v", err)
+	}
+	if ceremonyID == uuid.Nil {
+		t.Fatal("ceremony id is nil")
+	}
+	if creation.Response.RelyingParty.ID != "acme.cypra.localhost" {
+		t.Fatalf("rp id = %q", creation.Response.RelyingParty.ID)
+	}
+	if len(creation.Response.Challenge) < 16 {
+		t.Fatalf("challenge length = %d, want server-generated challenge", len(creation.Response.Challenge))
+	}
+
+	var storedRPID, storedChallenge string
+	if err := harness.SQL.QueryRow(`SELECT rp_id, session_data->>'challenge' FROM webauthn_challenges WHERE id = $1 AND tenant_id = $2 AND consumed_at IS NULL`, ceremonyID, tenantID).Scan(&storedRPID, &storedChallenge); err != nil {
+		t.Fatalf("load stored ceremony: %v", err)
+	}
+	if storedRPID != "acme.cypra.localhost" || storedChallenge != creation.Response.Challenge.String() {
+		t.Fatalf("stored rp/challenge = %q/%q", storedRPID, storedChallenge)
+	}
+}
+
+func TestFinishRegistrationRejectsWrongRPIDAndConsumesChallenge(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	userID := seedUser(t, harness, tenantID)
+	service := webauthn.Service{DB: harness.SQL}
+
+	_, ceremonyID, err := service.BeginRegistration(context.Background(), webauthn.BeginRegistrationRequest{
+		TenantID: tenantID,
+		UserID:   userID,
+		RPID:     "acme.cypra.localhost",
+	})
+	if err != nil {
+		t.Fatalf("begin registration: %v", err)
+	}
+	_, err = service.FinishRegistration(context.Background(), webauthn.FinishRegistrationRequest{
+		TenantID:   tenantID,
+		UserID:     userID,
+		RPID:       "bravo.cypra.localhost",
+		CeremonyID: ceremonyID,
+	})
+	if !errors.Is(err, webauthn.ErrRPMismatch) {
+		t.Fatalf("finish error = %v, want rp mismatch", err)
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM webauthn_challenges WHERE id = $1 AND consumed_at IS NOT NULL`, 1, ceremonyID)
+}
+
+func TestAssertionCeremonyIsTenantBound(t *testing.T) {
 	harness := dbtest.New(t)
 	acme := dbtest.SeedTenant(t, harness.SQL, "acme")
 	bravo := dbtest.SeedSecondTenant(t, harness.SQL, "bravo")
-	userID := seedUser(t, harness, acme)
 	service := webauthn.Service{DB: harness.SQL}
-	credentialID := []byte("credential")
-	if err := service.Register(context.Background(), acme, userID, "acme.cypra.localhost", credentialID, []byte("public")); err != nil {
-		t.Fatalf("register passkey: %v", err)
+
+	_, ceremonyID, err := service.BeginAssertion(context.Background(), webauthn.BeginAssertionRequest{
+		TenantID: acme,
+		RPID:     "acme.cypra.localhost",
+	})
+	if err != nil {
+		t.Fatalf("begin assertion: %v", err)
 	}
-	if got, err := service.Assert(context.Background(), acme, "acme.cypra.localhost", credentialID); err != nil || got != userID {
-		t.Fatalf("assert passkey got=%s err=%v", got, err)
-	}
-	if _, err := service.Assert(context.Background(), acme, "bravo.cypra.localhost", credentialID); !errors.Is(err, webauthn.ErrRPMismatch) {
-		t.Fatalf("cross-rp error = %v", err)
-	}
-	if _, err := service.Assert(context.Background(), bravo, "bravo.cypra.localhost", credentialID); err == nil {
-		t.Fatal("cross-tenant credential unexpectedly asserted")
+	_, _, err = service.FinishAssertion(context.Background(), webauthn.FinishAssertionRequest{
+		TenantID:   bravo,
+		RPID:       "bravo.cypra.localhost",
+		CeremonyID: ceremonyID,
+	})
+	if !errors.Is(err, webauthn.ErrCeremonyInvalid) {
+		t.Fatalf("finish error = %v, want invalid ceremony", err)
 	}
 }
 
