@@ -15,7 +15,7 @@ const dockerEnvArgs = [
   "-e",
   `MIGRATE_DATABASE_URL=${databaseURL}`,
   "-e",
-  "MASTER_KEY=dev-only-change-me-dev-only-change-me-32b",
+  "MASTER_KEY=MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=",
   "-e",
   "PUBLIC_BASE_URL=http://localhost:8080",
   "-e",

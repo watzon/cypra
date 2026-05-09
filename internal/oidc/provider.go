@@ -4,6 +4,7 @@ package oidc
 
 import (
 	"context"
+	"crypto/hmac"
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
@@ -341,7 +342,12 @@ func (p Provider) validateClientSecret(client Client, provided string) error {
 		return ErrInvalidClient
 	}
 	secret, err := cypra.Decrypt(client.ClientSecretEncrypted[60:], client.ClientSecretEncrypted[:60], p.KEK)
-	if err != nil || string(secret) != provided {
+	if err != nil {
+		return ErrInvalidClient
+	}
+	storedDigest := sha256.Sum256(secret)
+	providedDigest := sha256.Sum256([]byte(provided))
+	if !hmac.Equal(storedDigest[:], providedDigest[:]) {
 		return ErrInvalidClient
 	}
 	return nil

@@ -89,8 +89,8 @@ func rateLimitExceededMetrics() map[string]uint64 {
 	return snapshot
 }
 
-func clientRateKey(r *http.Request) string {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" && (r.Header.Get("X-Cypra-Trusted-Proxy") == "true" || isLoopbackRequest(r)) {
+func (s *Server) clientRateKey(r *http.Request) string {
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" && s.TrustedProxyHeaders {
 		if first, _, ok := strings.Cut(forwarded, ","); ok {
 			return strings.TrimSpace(first)
 		}

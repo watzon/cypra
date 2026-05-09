@@ -40,6 +40,27 @@ func TestAdminRequiresCommand(t *testing.T) {
 	}
 }
 
+func TestNormalizeMasterKeyRejectsInvalidShortAndWeakRawKeys(t *testing.T) {
+	valid := base64.StdEncoding.EncodeToString(dbtest.TestMasterKey())
+	if key, err := normalizeMasterKey(valid); err != nil || len(key) != 32 {
+		t.Fatalf("valid key len=%d err=%v", len(key), err)
+	}
+	for _, raw := range []string{"not-a-valid-production-master-key", "short", strings.Repeat("a", 32)} {
+		if key, err := normalizeMasterKey(raw); err == nil || key != nil {
+			t.Fatalf("normalizeMasterKey(%q) key=%x err=%v", raw, key, err)
+		}
+	}
+}
+
+func TestTerminalEmailBlockedForNonLocalPublicBaseURL(t *testing.T) {
+	if terminalEmailBlocked("https://cypra.localhost") {
+		t.Fatal("localhost should allow terminal email")
+	}
+	if !terminalEmailBlocked("https://login.example.com") {
+		t.Fatal("production host should block terminal email")
+	}
+}
+
 func TestVersionJSON(t *testing.T) {
 	if err := run([]string{"version", "--json"}); err != nil {
 		t.Fatalf("version json: %v", err)

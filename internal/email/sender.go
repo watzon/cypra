@@ -20,7 +20,10 @@ import (
 	"github.com/watzon/cypra/internal/crypto"
 )
 
-var ErrProviderRequired = errors.New("tenant.email_provider_required")
+var (
+	ErrProviderRequired = errors.New("tenant.email_provider_required")
+	ErrTerminalDisabled = errors.New("tenant.email_terminal_disabled")
+)
 
 type Message struct {
 	To      string
@@ -106,6 +109,7 @@ type Resolver struct {
 	DB             *sql.DB
 	KEK            []byte
 	TerminalWriter io.Writer
+	BlockTerminal  bool
 }
 
 func (r Resolver) Resolve(ctx context.Context, tenantID uuid.UUID) (Sender, error) {
@@ -121,6 +125,9 @@ func (r Resolver) Resolve(ctx context.Context, tenantID uuid.UUID) (Sender, erro
 		return nil, err
 	}
 	if kind == "terminal" {
+		if r.BlockTerminal {
+			return nil, ErrTerminalDisabled
+		}
 		return TerminalSender{Writer: r.TerminalWriter}, nil
 	}
 	configJSON, err := r.decryptConfig(encrypted)

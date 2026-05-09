@@ -96,7 +96,7 @@ func (s *Server) setupComplete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	webauthnService := webauthn.Service{DB: s.DB}
-	registration, err := webauthnService.FinishInstanceAdminRegistration(r.Context(), webauthn.FinishInstanceAdminRegistrationRequest{RPID: s.installRPID(), Origins: []string{requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)})
+	registration, err := webauthnService.FinishInstanceAdminRegistration(r.Context(), webauthn.FinishInstanceAdminRegistrationRequest{RPID: s.installRPID(), Origins: []string{s.requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)})
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "setup.passkey_invalid")
 		return
@@ -168,13 +168,13 @@ func (s *Server) installRPID() string {
 	return strings.Split(s.installHost, ":")[0]
 }
 
-func requestOrigin(r *http.Request) string {
+func (s *Server) requestOrigin(r *http.Request) string {
 	scheme := "https"
 	if r.TLS == nil {
 		scheme = "http"
 	}
-	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); forwarded != "" {
+	if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); forwarded != "" && s.TrustedProxyHeaders {
 		scheme = strings.Split(forwarded, ",")[0]
 	}
-	return scheme + "://" + r.Host
+	return scheme + "://" + s.requestHost(r)
 }

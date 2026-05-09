@@ -51,7 +51,7 @@ func (s *Server) authInstanceAdminLogin(w http.ResponseWriter, r *http.Request) 
 		writeError(w, http.StatusBadRequest, "webauthn.ceremony_invalid")
 		return
 	}
-	adminID, _, err := service.FinishInstanceAdminAssertion(r.Context(), webauthn.FinishInstanceAdminAssertionRequest{RPID: s.installRPID(), Origins: []string{requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)})
+	adminID, _, err := service.FinishInstanceAdminAssertion(r.Context(), webauthn.FinishInstanceAdminAssertionRequest{RPID: s.installRPID(), Origins: []string{s.requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)})
 	if err != nil || adminID == uuid.Nil {
 		recordAuthAttempt("instance_admin_passkey", "fail")
 		writeError(w, http.StatusUnauthorized, "auth.passkey_invalid")

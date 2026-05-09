@@ -519,8 +519,7 @@ func TestAuthRevokeOtherSessionsKeepsCallerSession(t *testing.T) {
 		}
 	}
 	req := httptest.NewRequest(http.MethodPost, "https://acme.cypra.localhost/api/v1/auth/sessions/revoke-others", nil)
-	req.Header.Set("X-Cypra-User-Id", subject.String())
-	req.Header.Set("X-Cypra-Session-Id", current.String())
+	req.AddCookie(&http.Cookie{Name: "cypra_session", Value: current.String()})
 	rec := httptest.NewRecorder()
 	server.Router().ServeHTTP(rec, req)
 	if rec.Code != http.StatusNoContent {

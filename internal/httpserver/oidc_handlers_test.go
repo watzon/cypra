@@ -216,7 +216,41 @@ func TestOIDCTokenRejectsClientOutsideResolvedTenant(t *testing.T) {
 	}
 }
 
-func TestOIDCConsentJSONRecordsDecision(t *testing.T) {
+func TestOIDCDiscoveryIgnoresUntrustedForwardedOrigin(t *testing.T) {
+	harness := dbtest.New(t)
+	dbtest.SeedTenant(t, harness.SQL, "acme")
+	untrusted, err := httpserver.New(httpserver.Options{DB: harness.SQL, TenantDB: harness.TenantDB, PublicBaseURL: "https://cypra.localhost", Version: "test", Commit: "test", KEKLoaded: true, MasterKey: dbtest.TestMasterKey()})
+	if err != nil {
+		t.Fatalf("new untrusted server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/.well-known/openid-configuration", nil)
+	req.Host = "acme.cypra.localhost"
+	req.Header.Set("X-Forwarded-Host", "evil.example")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	req.Header.Set("X-Cypra-Trusted-Proxy", "true")
+	resp := httptest.NewRecorder()
+	untrusted.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK || strings.Contains(resp.Body.String(), "evil.example") || !strings.Contains(resp.Body.String(), `"issuer":"http://acme.cypra.localhost"`) {
+		t.Fatalf("untrusted discovery = %d %s", resp.Code, resp.Body.String())
+	}
+
+	trusted, err := httpserver.New(httpserver.Options{DB: harness.SQL, TenantDB: harness.TenantDB, PublicBaseURL: "https://cypra.localhost", Version: "test", Commit: "test", KEKLoaded: true, MasterKey: dbtest.TestMasterKey(), TrustedProxyHeaders: true})
+	if err != nil {
+		t.Fatalf("new trusted server: %v", err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/.well-known/openid-configuration", nil)
+	req.Host = "cypra.localhost"
+	req.Header.Set("X-Forwarded-Host", "acme.cypra.localhost")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	resp = httptest.NewRecorder()
+	trusted.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK || !strings.Contains(resp.Body.String(), `"issuer":"https://acme.cypra.localhost"`) {
+		t.Fatalf("trusted discovery = %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestOIDCConsentJSONRequiresContinuationAndSession(t *testing.T) {
 	harness := dbtest.New(t)
 	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
 	projectID := uuid.New()
@@ -231,18 +265,64 @@ func TestOIDCConsentJSONRecordsDecision(t *testing.T) {
 	if _, err := harness.SQL.Exec(`INSERT INTO oidc_clients (id, tenant_id, project_id, client_id, redirect_uris, allowed_scopes, token_endpoint_auth_method) VALUES ($1, $2, $3, 'client', $4, $5, 'none')`, clientID, tenantID, projectID, pq.Array([]string{"https://app.example.com/callback"}), pq.Array([]string{"openid", "email"})); err != nil {
 		t.Fatalf("seed client: %v", err)
 	}
+	sessionID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO sessions (id, subject_id, subject_kind, tenant_id, expires_at) VALUES ($1, $2, 'user', $3, $4)`, sessionID, userID, tenantID, time.Now().Add(time.Hour)); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
 	server, err := httpserver.New(httpserver.Options{DB: harness.SQL, TenantDB: harness.TenantDB, PublicBaseURL: "https://cypra.localhost", Version: "test", Commit: "test", KEKLoaded: true, MasterKey: dbtest.TestMasterKey(), TrustDevHeaders: true})
 	if err != nil {
 		t.Fatalf("new server: %v", err)
 	}
-	payload := `{"decision":"allow","user_id":"` + userID.String() + `","client_id":"client","scopes":["openid","email"]}`
-	req := httptest.NewRequest(http.MethodPost, "/oidc/consent", strings.NewReader(payload))
+	rawPayload := `{"decision":"allow","user_id":"` + userID.String() + `","client_id":"client","scopes":["openid","email"]}`
+	req := httptest.NewRequest(http.MethodPost, "/oidc/consent", strings.NewReader(rawPayload))
 	req.Host = "acme.cypra.localhost"
 	req.Header.Set("Content-Type", "application/json")
 	resp := httptest.NewRecorder()
 	server.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("raw json consent = %d %s", resp.Code, resp.Body.String())
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_consents WHERE tenant_id = $1 AND user_id = $2 AND oidc_client_uuid = $3`, 0, tenantID, userID, clientID)
+
+	values := url.Values{}
+	values.Set("client_id", "client")
+	values.Set("redirect_uri", "https://app.example.com/callback")
+	values.Set("scope", "openid email")
+	values.Set("code_challenge", oidcChallenge("json-consent-verifier"))
+	values.Set("code_challenge_method", "S256")
+	req = httptest.NewRequest(http.MethodGet, "/oidc/authorize?"+values.Encode(), nil)
+	req.Host = "acme.cypra.localhost"
+	req.AddCookie(&http.Cookie{Name: "cypra_session", Value: sessionID.String()})
+	resp = httptest.NewRecorder()
+	server.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusFound {
+		t.Fatalf("authorize for consent = %d %s", resp.Code, resp.Body.String())
+	}
+	location, err := url.Parse(resp.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("parse consent redirect: %v", err)
+	}
+	continuation := location.Query().Get("continue")
+	if location.Path != "/oidc/consent" || continuation == "" {
+		t.Fatalf("consent redirect = %s", location.String())
+	}
+	payload := `{"decision":"allow","continue":"` + continuation + `"}`
+	req = httptest.NewRequest(http.MethodPost, "/oidc/consent", strings.NewReader(payload))
+	req.Host = "acme.cypra.localhost"
+	req.Header.Set("Content-Type", "application/json")
+	resp = httptest.NewRecorder()
+	server.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusUnauthorized {
+		t.Fatalf("json consent without session = %d %s", resp.Code, resp.Body.String())
+	}
+	req = httptest.NewRequest(http.MethodPost, "/oidc/consent", strings.NewReader(payload))
+	req.Host = "acme.cypra.localhost"
+	req.Header.Set("Content-Type", "application/json")
+	req.AddCookie(&http.Cookie{Name: "cypra_session", Value: sessionID.String()})
+	resp = httptest.NewRecorder()
+	server.Router().ServeHTTP(resp, req)
 	if resp.Code != http.StatusOK {
-		t.Fatalf("json consent = %d %s", resp.Code, resp.Body.String())
+		t.Fatalf("json consent with continuation = %d %s", resp.Code, resp.Body.String())
 	}
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM oidc_consents WHERE tenant_id = $1 AND user_id = $2 AND oidc_client_uuid = $3`, 1, tenantID, userID, clientID)
 }

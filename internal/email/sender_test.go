@@ -97,3 +97,15 @@ func TestResolverDecryptsTerminalProvider(t *testing.T) {
 		t.Fatalf("terminal output = %q", out.String())
 	}
 }
+
+func TestResolverBlocksTerminalProviderWhenConfigured(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	if _, err := harness.SQL.Exec(`INSERT INTO email_provider_configs (tenant_id, kind, config_encrypted, from_address, from_name) VALUES ($1, 'terminal', '{}'::bytea, 'noreply@example.com', 'Cypra')`, tenantID); err != nil {
+		t.Fatalf("seed provider: %v", err)
+	}
+	resolver := email.Resolver{DB: harness.SQL, BlockTerminal: true}
+	if _, err := resolver.Resolve(context.Background(), tenantID); !errors.Is(err, email.ErrTerminalDisabled) {
+		t.Fatalf("resolve error = %v", err)
+	}
+}

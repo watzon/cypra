@@ -70,8 +70,12 @@ func (s *Server) emailProviderStatus(ctx context.Context, tenantID uuid.UUID) (m
 		status["message"] = "Email provider is configured but disabled."
 		return status, nil
 	}
-	if _, err := (email.Resolver{DB: s.DB, KEK: s.MasterKey}).Resolve(ctx, tenantID); err != nil {
+	if _, err := (email.Resolver{DB: s.DB, KEK: s.MasterKey, BlockTerminal: s.BlockTerminalEmail}).Resolve(ctx, tenantID); err != nil {
 		status["healthy"] = false
+		if errors.Is(err, email.ErrTerminalDisabled) {
+			status["message"] = "Terminal email is disabled for production public URLs. Configure SMTP or Resend before inviting users."
+			return status, nil
+		}
 		status["message"] = "Email provider config could not be decrypted or parsed."
 		return status, nil
 	}

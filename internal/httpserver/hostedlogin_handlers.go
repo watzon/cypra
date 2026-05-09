@@ -29,12 +29,7 @@ const uniformAuthError = "Sign in didn't work. Check your details and try again.
 
 func (s *Server) hostedPage(name string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		hostHeader := r.Host
-		if forwarded := r.Header.Get("X-Forwarded-Host"); forwarded != "" {
-			if r.Header.Get("X-Cypra-Trusted-Proxy") == "true" || isLoopbackRequest(r) {
-				hostHeader = forwarded
-			}
-		}
+		hostHeader := s.requestHost(r)
 		host := strings.Split(hostHeader, ":")[0]
 		installHost := strings.Split(s.installHost, ":")[0]
 		if host == installHost {
@@ -114,7 +109,7 @@ func (s *Server) hostedInvite(w http.ResponseWriter, r *http.Request) {
 			data.Error = "Invite link is invalid or expired."
 		} else {
 			data.InviteID = continuation.ID.String()
-			setSessionCookie(w, r, "cypra_invite_continuation", continuation.ID.String(), 15*time.Minute)
+			s.setSessionCookie(w, r, "cypra_invite_continuation", continuation.ID.String(), 15*time.Minute)
 		}
 	}
 	if err := s.hostedRenderer().Render(w, "invite", data); err != nil {
@@ -137,7 +132,7 @@ func (s *Server) hostedPasswordSignIn(w http.ResponseWriter, r *http.Request) {
 		writeHTMXError(w, http.StatusBadRequest, uniformAuthError)
 		return
 	}
-	if !s.allowHostedRate(w, r, &tenant.ID, "login:ip", clientRateKey(r), 10, time.Minute) || !s.allowHostedRate(w, r, &tenant.ID, "login:account", r.FormValue("email"), 5, time.Minute) {
+	if !s.allowHostedRate(w, r, &tenant.ID, "login:ip", s.clientRateKey(r), 10, time.Minute) || !s.allowHostedRate(w, r, &tenant.ID, "login:account", r.FormValue("email"), 5, time.Minute) {
 		return
 	}
 	var rows []struct {
@@ -273,7 +268,7 @@ func (s *Server) hostedSignup(w http.ResponseWriter, r *http.Request) {
 		writeHTMXError(w, http.StatusBadRequest, uniformAuthError)
 		return
 	}
-	if !s.allowHostedRate(w, r, &tenant.ID, "signup:ip", clientRateKey(r), 5, time.Minute) {
+	if !s.allowHostedRate(w, r, &tenant.ID, "signup:ip", s.clientRateKey(r), 5, time.Minute) {
 		return
 	}
 	email := strings.TrimSpace(r.FormValue("email"))
@@ -361,7 +356,7 @@ func (s *Server) hostedSignupPasskey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "tenant.suspended")
 		return
 	}
-	if !s.allowRate(w, r, &tenant.ID, "signup:ip", clientRateKey(r), 5, time.Minute) {
+	if !s.allowRate(w, r, &tenant.ID, "signup:ip", s.clientRateKey(r), 5, time.Minute) {
 		return
 	}
 	var payload struct {
@@ -406,7 +401,7 @@ func (s *Server) hostedSignupPasskey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "user.id_invalid")
 		return
 	}
-	if _, err := service.FinishRegistration(r.Context(), webauthn.FinishRegistrationRequest{TenantID: tenant.ID, UserID: userID, RPID: s.rpID(tenant), Origins: []string{requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)}); err != nil {
+	if _, err := service.FinishRegistration(r.Context(), webauthn.FinishRegistrationRequest{TenantID: tenant.ID, UserID: userID, RPID: s.rpID(tenant), Origins: []string{s.requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)}); err != nil {
 		writeError(w, http.StatusInternalServerError, "auth.passkey_register_failed")
 		return
 	}
@@ -493,7 +488,7 @@ func (s *Server) hostedConsentDecision(w http.ResponseWriter, r *http.Request) {
 		writeHTMXError(w, http.StatusBadRequest, "Couldn't reach the sign-in service. Try again.")
 		return
 	}
-	userID, client, scopes, redirectTo, ok := s.resolveConsentPayload(w, r, tenant, "", "", nil, token)
+	userID, client, scopes, redirectTo, ok := s.resolveConsentPayload(w, r, tenant, token)
 	if !ok {
 		return
 	}

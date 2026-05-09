@@ -14,19 +14,19 @@ const hostedSessionTTL = 24 * time.Hour
 
 func (s *Server) establishUserSession(w http.ResponseWriter, r *http.Request, tenantID, userID uuid.UUID) (uuid.UUID, error) {
 	sessionID := uuid.New()
-	if _, err := s.DB.ExecContext(r.Context(), `INSERT INTO sessions (id, subject_id, subject_kind, tenant_id, expires_at, ip, user_agent) VALUES ($1, $2, 'user', $3, $4, $5, $6)`, sessionID, userID, tenantID, time.Now().UTC().Add(hostedSessionTTL), clientIP(r), r.UserAgent()); err != nil {
+	if _, err := s.DB.ExecContext(r.Context(), `INSERT INTO sessions (id, subject_id, subject_kind, tenant_id, expires_at, ip, user_agent) VALUES ($1, $2, 'user', $3, $4, $5, $6)`, sessionID, userID, tenantID, time.Now().UTC().Add(hostedSessionTTL), s.clientIP(r), r.UserAgent()); err != nil {
 		return uuid.Nil, fmt.Errorf("create hosted session: %w", err)
 	}
-	setSessionCookie(w, r, "cypra_session", sessionID.String(), hostedSessionTTL)
+	s.setSessionCookie(w, r, "cypra_session", sessionID.String(), hostedSessionTTL)
 	return sessionID, nil
 }
 
 func (s *Server) establishInstanceAdminSession(w http.ResponseWriter, r *http.Request, adminID uuid.UUID) (uuid.UUID, error) {
 	sessionID := uuid.New()
-	if _, err := s.DB.ExecContext(r.Context(), `INSERT INTO instance_admin_sessions (id, instance_admin_id, expires_at, ip, user_agent) VALUES ($1, $2, $3, $4, $5)`, sessionID, adminID, time.Now().UTC().Add(hostedSessionTTL), clientIP(r), r.UserAgent()); err != nil {
+	if _, err := s.DB.ExecContext(r.Context(), `INSERT INTO instance_admin_sessions (id, instance_admin_id, expires_at, ip, user_agent) VALUES ($1, $2, $3, $4, $5)`, sessionID, adminID, time.Now().UTC().Add(hostedSessionTTL), s.clientIP(r), r.UserAgent()); err != nil {
 		return uuid.Nil, fmt.Errorf("create instance admin session: %w", err)
 	}
-	setSessionCookie(w, r, "cypra_session", sessionID.String(), hostedSessionTTL)
+	s.setSessionCookie(w, r, "cypra_session", sessionID.String(), hostedSessionTTL)
 	return sessionID, nil
 }
 
@@ -55,7 +55,7 @@ func (s *Server) currentUserSession(r *http.Request, tenantID uuid.UUID) (uuid.U
 	return userID, true
 }
 
-func setSessionCookie(w http.ResponseWriter, r *http.Request, name, value string, ttl time.Duration) {
+func (s *Server) setSessionCookie(w http.ResponseWriter, r *http.Request, name, value string, ttl time.Duration) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     name,
 		Value:    value,
@@ -64,12 +64,12 @@ func setSessionCookie(w http.ResponseWriter, r *http.Request, name, value string
 		MaxAge:   int(ttl.Seconds()),
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
-		Secure:   r.TLS != nil,
+		Secure:   s.requestIsHTTPS(r),
 	})
 }
 
-func clientIP(r *http.Request) any {
-	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" {
+func (s *Server) clientIP(r *http.Request) any {
+	if forwarded := r.Header.Get("X-Forwarded-For"); forwarded != "" && s.TrustedProxyHeaders {
 		if parsed := net.ParseIP(stringsBeforeComma(forwarded)); parsed != nil {
 			return parsed.String()
 		}

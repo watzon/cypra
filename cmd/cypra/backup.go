@@ -87,7 +87,11 @@ func exportBackup(ctx context.Context, dbConn *sql.DB, passphrase string) ([]byt
 		}
 		payload.Tables[table] = rows
 	}
-	if err := rewrapBackupTables(payload.Tables, loadMasterKey(), backupKey(passphrase)); err != nil {
+	masterKey, err := loadMasterKey()
+	if err != nil {
+		return nil, err
+	}
+	if err := rewrapBackupTables(payload.Tables, masterKey, backupKey(passphrase)); err != nil {
 		return nil, err
 	}
 	storage, err := dumpLocalStorage(ctx, dbConn)
@@ -114,7 +118,11 @@ func importBackup(ctx context.Context, dbConn *sql.DB, content []byte, passphras
 	if payload.Format != backupFormatVersion {
 		return exitError{code: 2, error: "unsupported import format"}
 	}
-	if err := rewrapBackupTables(payload.Tables, backupKey(passphrase), loadMasterKey()); err != nil {
+	masterKey, err := loadMasterKey()
+	if err != nil {
+		return err
+	}
+	if err := rewrapBackupTables(payload.Tables, backupKey(passphrase), masterKey); err != nil {
 		return err
 	}
 	if len(payload.Tables["gdpr_deletions"]) > 0 && !allowResurrect {

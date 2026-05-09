@@ -148,9 +148,6 @@ func (s *Server) patSubject(w http.ResponseWriter, r *http.Request) (Tenant, uui
 	if userID, ok := s.currentUserSession(r, tenant.ID); ok {
 		return tenant, userID, true
 	}
-	if userID, err := uuid.Parse(r.Header.Get("X-Cypra-User-Id")); err == nil {
-		return tenant, userID, true
-	}
 	writeError(w, http.StatusUnauthorized, "auth.unauthorized")
 	return Tenant{}, uuid.Nil, false
 }

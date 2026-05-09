@@ -37,7 +37,7 @@ func (s *Server) oidcDiscovery(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "tenant.not_found")
 		return
 	}
-	issuer := requestOrigin(r)
+	issuer := s.requestOrigin(r)
 	w.Header().Set("Cache-Control", "public, max-age=600, must-revalidate")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"issuer":                                issuer,
@@ -234,11 +234,8 @@ func (s *Server) oidcConsent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var payload struct {
-		UserID       string   `json:"user_id"`
-		ClientID     string   `json:"client_id"`
-		Scopes       []string `json:"scopes"`
-		Decision     string   `json:"decision"`
-		Continuation string   `json:"continue"`
+		Decision     string `json:"decision"`
+		Continuation string `json:"continue"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		writeOIDCError(w, http.StatusBadRequest, "invalid_request")
@@ -248,7 +245,7 @@ func (s *Server) oidcConsent(w http.ResponseWriter, r *http.Request) {
 		writeOIDCError(w, http.StatusForbidden, "access_denied")
 		return
 	}
-	userID, client, scopes, redirectTo, ok := s.resolveConsentPayload(w, r, tenant, payload.UserID, payload.ClientID, payload.Scopes, payload.Continuation)
+	userID, client, scopes, redirectTo, ok := s.resolveConsentPayload(w, r, tenant, payload.Continuation)
 	if !ok {
 		return
 	}
@@ -263,36 +260,23 @@ func (s *Server) oidcConsent(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, response)
 }
 
-func (s *Server) resolveConsentPayload(w http.ResponseWriter, r *http.Request, tenant Tenant, rawUserID, rawClientID string, scopes []string, token string) (uuid.UUID, oidc.Client, []string, string, bool) {
-	if token != "" {
-		continuation, err := s.parseOIDCAuthorizeContinuation(token)
-		if err != nil || continuation.TenantID != tenant.ID.String() {
-			writeOIDCError(w, http.StatusBadRequest, "invalid_request")
-			return uuid.Nil, oidc.Client{}, nil, "", false
-		}
-		userID, ok := s.currentUserSession(r, tenant.ID)
-		if !ok {
-			writeOIDCError(w, http.StatusUnauthorized, "login_required")
-			return uuid.Nil, oidc.Client{}, nil, "", false
-		}
-		client, err := s.oidcProvider().LoadClient(r.Context(), tenant.ID, continuation.ClientID)
-		if err != nil {
-			writeOIDCError(w, http.StatusBadRequest, oidcErrorCode(err))
-			return uuid.Nil, oidc.Client{}, nil, "", false
-		}
-		return userID, client, continuation.Scope, "/oidc/authorize?continue=" + url.QueryEscape(token), true
-	}
-	userID, err := uuid.Parse(rawUserID)
-	if err != nil {
+func (s *Server) resolveConsentPayload(w http.ResponseWriter, r *http.Request, tenant Tenant, token string) (uuid.UUID, oidc.Client, []string, string, bool) {
+	continuation, err := s.parseOIDCAuthorizeContinuation(token)
+	if err != nil || continuation.TenantID != tenant.ID.String() {
 		writeOIDCError(w, http.StatusBadRequest, "invalid_request")
 		return uuid.Nil, oidc.Client{}, nil, "", false
 	}
-	client, err := s.oidcProvider().LoadClient(r.Context(), tenant.ID, rawClientID)
+	userID, ok := s.currentUserSession(r, tenant.ID)
+	if !ok {
+		writeOIDCError(w, http.StatusUnauthorized, "login_required")
+		return uuid.Nil, oidc.Client{}, nil, "", false
+	}
+	client, err := s.oidcProvider().LoadClient(r.Context(), tenant.ID, continuation.ClientID)
 	if err != nil {
 		writeOIDCError(w, http.StatusBadRequest, oidcErrorCode(err))
 		return uuid.Nil, oidc.Client{}, nil, "", false
 	}
-	return userID, client, scopes, "", true
+	return userID, client, continuation.Scope, "/oidc/authorize?continue=" + url.QueryEscape(token), true
 }
 
 func (c oidcAuthorizeContinuation) authorizeRequest(tenantID uuid.UUID) oidc.AuthorizeRequest {
@@ -366,7 +350,7 @@ func (s *Server) oidcProvider() oidc.Provider {
 }
 
 func (s *Server) oidcProviderForRequest(r *http.Request) oidc.Provider {
-	return oidc.Provider{DB: s.DB, KEK: s.MasterKey, InstallDomain: requestOrigin(r), Storage: s.Storage}
+	return oidc.Provider{DB: s.DB, KEK: s.MasterKey, InstallDomain: s.requestOrigin(r), Storage: s.Storage}
 }
 
 func clientAuth(r *http.Request) (string, string) {

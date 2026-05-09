@@ -89,40 +89,42 @@ Pending.
 
 ## Phase R1: Security Hardening Gate
 
-**Status:** not started  
+**Status:** complete  
 **Dependencies:** Phase R0 baseline review  
 **Deliverable:** No known P0/P1 auth, OIDC, proxy, cookie, PAT, or key-handling security issue remains open before public VPS exposure.
 
 ### Tasks
 
-- [ ] Require authenticated session ownership or explicit audited admin permission for passkey registration.
-- [ ] Require authenticated session ownership or explicit audited admin permission for TOTP enrollment.
-- [ ] Require authenticated session ownership or explicit audited admin permission for WebAuthn 2FA enrollment.
-- [ ] Require authenticated session ownership or explicit audited admin permission for backup-code regeneration.
-- [ ] Audit and secure session listing, session revocation, passkey deletion, and MFA factor listing so caller-supplied `user_id` cannot target another user.
-- [ ] Restrict OIDC consent recording to a signed authorization continuation plus the current logged-in user session.
-- [ ] Remove or lock down any OIDC consent JSON path that accepts raw `user_id`, `client_id`, and scopes without continuation binding.
-- [ ] Replace client-controlled trusted-proxy signaling with server-side proxy trust configuration only.
-- [ ] Ensure `X-Forwarded-Host`, `X-Forwarded-Proto`, and `X-Forwarded-For` are honored only when trusted proxy mode is explicitly enabled.
-- [ ] Ensure WebAuthn origins and OIDC issuer/origin calculations cannot be spoofed by untrusted forwarded headers.
-- [ ] Issue `Secure` session cookies correctly behind TLS-terminating proxies.
-- [ ] Remove PAT subject fallbacks that trust `X-Cypra-User-Id` outside dev-only mode, or convert them into explicit audited impersonation paths.
-- [ ] Use constant-time comparison for OIDC client secrets.
-- [ ] Make master-key parsing strict enough to reject weak, invalid, or mistyped production keys rather than silently hashing arbitrary strings.
-- [ ] Decide and implement whether terminal email is blocked in production or allowed with a persistent warning.
-- [ ] Add security regression tests for every item above.
+- [x] Require authenticated session ownership or explicit audited admin permission for passkey registration.
+- [x] Require authenticated session ownership or explicit audited admin permission for TOTP enrollment.
+- [x] Require authenticated session ownership or explicit audited admin permission for WebAuthn 2FA enrollment.
+- [x] Require authenticated session ownership or explicit audited admin permission for backup-code regeneration.
+- [x] Audit and secure session listing, session revocation, passkey deletion, and MFA factor listing so caller-supplied `user_id` cannot target another user.
+- [x] Restrict OIDC consent recording to a signed authorization continuation plus the current logged-in user session.
+- [x] Remove or lock down any OIDC consent JSON path that accepts raw `user_id`, `client_id`, and scopes without continuation binding.
+- [x] Replace client-controlled trusted-proxy signaling with server-side proxy trust configuration only.
+- [x] Ensure `X-Forwarded-Host`, `X-Forwarded-Proto`, and `X-Forwarded-For` are honored only when trusted proxy mode is explicitly enabled.
+- [x] Ensure WebAuthn origins and OIDC issuer/origin calculations cannot be spoofed by untrusted forwarded headers.
+- [x] Issue `Secure` session cookies correctly behind TLS-terminating proxies.
+- [x] Remove PAT subject fallbacks that trust `X-Cypra-User-Id` outside dev-only mode, or convert them into explicit audited impersonation paths.
+- [x] Use constant-time comparison for OIDC client secrets.
+- [x] Make master-key parsing strict enough to reject weak, invalid, or mistyped production keys rather than silently hashing arbitrary strings.
+- [x] Decide and implement whether terminal email is blocked in production or allowed with a persistent warning.
+- [x] Add security regression tests for every item above.
 
 ### Acceptance
 
-- [ ] Unauthenticated callers cannot enroll, regenerate, list, delete, or revoke resources for another user by supplying `user_id`.
-- [ ] OIDC consent cannot be recorded without valid continuation and logged-in user.
-- [ ] Spoofed forwarded/proxy headers do not affect tenant resolution, rate-limit IP, cookie security, issuer, or WebAuthn origin unless trusted proxy mode is enabled.
-- [ ] Master-key rejection tests cover invalid, short, and weak-looking production keys.
-- [ ] `./bin/agent-ci run --quiet --all` passes.
+- [x] Unauthenticated callers cannot enroll, regenerate, list, delete, or revoke resources for another user by supplying `user_id`.
+- [x] OIDC consent cannot be recorded without valid continuation and logged-in user.
+- [x] Spoofed forwarded/proxy headers do not affect tenant resolution, rate-limit IP, cookie security, issuer, or WebAuthn origin unless trusted proxy mode is enabled.
+- [x] Master-key rejection tests cover invalid, short, and weak-looking production keys.
+- [x] `./bin/agent-ci run --quiet --all` passes.
 
 ### Handoff
 
-Pending.
+Completed the pre-public-exposure security hardening pass. Ownership checks now bind passkey, TOTP, WebAuthn 2FA, backup-code, factor listing/deletion, and session listing/revocation operations to the authenticated user unless an explicit server-side admin path is used. OIDC consent recording is bound to the signed authorization continuation and the current logged-in user session. Forwarded host/proto/for headers are ignored unless server-side trusted proxy mode is enabled, and trusted request origin handling is reused for issuer, WebAuthn origin, cookies, and rate-limit IP decisions. PAT creation no longer falls back to bare caller-controlled `X-Cypra-User-Id`, OIDC client-secret comparison uses constant-time digest comparison, production CLI master-key parsing rejects invalid/short/weak-looking keys, and terminal email is blocked for non-local public URLs.
+
+Verification: added regression coverage across `cmd/cypra`, `internal/httpserver`, `internal/email`, `internal/oidc`, and `internal/crypto`; `./bin/agent-ci run --quiet --all` passed, including lint, format, typecheck, Go tests, coverage floors, dashboard tests, p99 performance, compressed image size, and cold-start (`cold-start readyz: 1190ms`).
 
 ---
 

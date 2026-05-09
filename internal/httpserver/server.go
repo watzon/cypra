@@ -55,6 +55,10 @@ type Options struct {
 	// X-Cypra-Instance-Admin / X-Cypra-Tenant-Role / X-Cypra-User-Id elevation
 	// headers. Tests and trusted proxies set this; production must not.
 	TrustDevHeaders bool
+	// TrustedProxyHeaders gates whether X-Forwarded-* headers are honored for
+	// host, scheme, and client IP. It is configured server-side only.
+	TrustedProxyHeaders bool
+	BlockTerminalEmail  bool
 }
 
 type Server struct {
@@ -486,12 +490,7 @@ func (s *Server) logRequests(next http.Handler) http.Handler {
 
 func (s *Server) tenantResolver(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		host := r.Host
-		if forwarded := r.Header.Get("X-Forwarded-Host"); forwarded != "" {
-			if r.Header.Get("X-Cypra-Trusted-Proxy") == "true" || isLoopbackRequest(r) {
-				host = forwarded
-			}
-		}
+		host := s.requestHost(r)
 		host = strings.Split(host, ":")[0]
 		installHost := strings.Split(s.installHost, ":")[0]
 		if host == installHost {
@@ -586,24 +585,22 @@ func (r *statusRecorder) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	return hijacker.Hijack()
 }
 
-// isLoopbackRequest reports whether r.RemoteAddr is a loopback address.
-// Used by tenantResolver to trust X-Forwarded-Host from local-only dev
-// proxies (e.g. portless) without requiring the production X-Cypra-Trusted-Proxy
-// header. Production deployments behind a network proxy (Caddy, ingress) keep
-// the explicit trust marker.
-func isLoopbackRequest(r *http.Request) bool {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		host = r.RemoteAddr
+func (s *Server) requestHost(r *http.Request) string {
+	if s.TrustedProxyHeaders {
+		if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-Host")); forwarded != "" {
+			return strings.TrimSpace(stringsBeforeComma(forwarded))
+		}
 	}
-	if host == "" {
-		return false
+	return r.Host
+}
+
+func (s *Server) requestIsHTTPS(r *http.Request) bool {
+	if s.TrustedProxyHeaders {
+		if forwarded := strings.TrimSpace(r.Header.Get("X-Forwarded-Proto")); forwarded != "" {
+			return strings.EqualFold(strings.TrimSpace(stringsBeforeComma(forwarded)), "https")
+		}
 	}
-	ip := net.ParseIP(host)
-	if ip == nil {
-		return false
-	}
-	return ip.IsLoopback()
+	return r.TLS != nil
 }
 
 type requestIDKey struct{}

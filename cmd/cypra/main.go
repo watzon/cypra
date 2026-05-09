@@ -3,7 +3,6 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -116,12 +115,16 @@ func runServe(args []string) error {
 	// off so a misbehaving proxy (or a stray header from the dashboard) can
 	// never escalate the actor.
 	trustDevHeaders := os.Getenv("CYPRA_TRUST_DEV_HEADERS") == "1"
-	masterKey := loadMasterKey()
+	masterKey, err := loadMasterKey()
+	if err != nil {
+		return err
+	}
 	store, storeKind, err := openstore.New(openstore.LoadConfigFromEnv(masterKey))
 	if err != nil {
 		return err
 	}
-	server, err := httpserver.New(httpserver.Options{DB: dbConn, TenantDB: db.NewTenantScopedDB(gormDB), PublicBaseURL: publicBaseURL, Version: version, Commit: commit, DevOpenAPI: devMode, KEKLoaded: masterKeyConfigured(), MasterKey: masterKey, GoogleAuthURL: os.Getenv("CYPRA_GOOGLE_AUTH_URL"), DashboardFS: dashboard.Files, DashboardDev: envDefault("VITE_DEV_SERVER", "http://127.0.0.1:5173"), Storage: store, StorageBackend: storeKind, TrustDevHeaders: trustDevHeaders})
+	blockTerminalEmail := terminalEmailBlocked(publicBaseURL)
+	server, err := httpserver.New(httpserver.Options{DB: dbConn, TenantDB: db.NewTenantScopedDB(gormDB), PublicBaseURL: publicBaseURL, Version: version, Commit: commit, DevOpenAPI: devMode, KEKLoaded: masterKeyConfigured(), MasterKey: masterKey, GoogleAuthURL: os.Getenv("CYPRA_GOOGLE_AUTH_URL"), DashboardFS: dashboard.Files, DashboardDev: envDefault("VITE_DEV_SERVER", "http://127.0.0.1:5173"), Storage: store, StorageBackend: storeKind, TrustDevHeaders: trustDevHeaders, TrustedProxyHeaders: trustedProxyHeadersEnabled(os.Getenv("TRUSTED_PROXY_HEADERS")), BlockTerminalEmail: blockTerminalEmail})
 	if err != nil {
 		return err
 	}
@@ -134,7 +137,7 @@ func runServe(args []string) error {
 	}
 	workerDone := make(chan error, 1)
 	go func() {
-		workerDone <- (email.Worker{DB: dbConn, Resolver: email.Resolver{DB: dbConn, KEK: masterKey, TerminalWriter: os.Stdout}, Workers: 4, BatchSize: 10, PollInterval: time.Second}).Run(serveCtx)
+		workerDone <- (email.Worker{DB: dbConn, Resolver: email.Resolver{DB: dbConn, KEK: masterKey, TerminalWriter: os.Stdout, BlockTerminal: blockTerminalEmail}, Workers: 4, BatchSize: 10, PollInterval: time.Second}).Run(serveCtx)
 	}()
 	var rotationDone chan error
 	if len(masterKey) == cypra.MasterKeyBytes {
@@ -429,7 +432,11 @@ func adminRotateKey(dbConn *sql.DB, args []string) error {
 	if err := auditCLIInstanceAdmin(dbConn, "master_key.rotation", "admin rotate-key"); err != nil {
 		return err
 	}
-	return oidc.NewRotationService(dbConn, loadMasterKey()).ForceRotate(context.Background(), tenantID)
+	masterKey, err := loadMasterKey()
+	if err != nil {
+		return err
+	}
+	return oidc.NewRotationService(dbConn, masterKey).ForceRotate(context.Background(), tenantID)
 }
 
 func adminRotateMasterKey(dbConn *sql.DB, args []string) error {
@@ -453,9 +460,9 @@ func adminRotateMasterKey(dbConn *sql.DB, args []string) error {
 		}
 		return service.ConfirmCutover(context.Background(), rotationID)
 	}
-	oldKey := normalizeMasterKey(os.Getenv(*oldEnv))
-	newKey := normalizeMasterKey(os.Getenv(*newEnv))
-	if len(oldKey) != cypra.MasterKeyBytes || len(newKey) != cypra.MasterKeyBytes {
+	oldKey, oldErr := normalizeMasterKey(os.Getenv(*oldEnv))
+	newKey, newErr := normalizeMasterKey(os.Getenv(*newEnv))
+	if oldErr != nil || newErr != nil || len(oldKey) != cypra.MasterKeyBytes || len(newKey) != cypra.MasterKeyBytes {
 		return exitError{code: 2, error: "old and new master keys must be provided via --old-from-env and --new-from-env"}
 	}
 	if err := auditCLIInstanceAdmin(dbConn, "master_key.rotation", "admin rotate-master-key"); err != nil {
@@ -701,29 +708,53 @@ func masterKeyConfigured() bool {
 	return strings.TrimSpace(os.Getenv("MASTER_KEY")) != "" || strings.TrimSpace(os.Getenv("MASTER_KEY_FILE")) != ""
 }
 
-func loadMasterKey() []byte {
+func trustedProxyHeadersEnabled(value string) bool {
+	value = strings.ToLower(strings.TrimSpace(value))
+	return value != "" && value != "none"
+}
+
+func terminalEmailBlocked(publicBaseURL string) bool {
+	parsed, err := url.Parse(publicBaseURL)
+	if err != nil {
+		return true
+	}
+	host := strings.ToLower(parsed.Hostname())
+	return host != "localhost" && host != "127.0.0.1" && host != "::1" && !strings.HasSuffix(host, ".localhost")
+}
+
+func loadMasterKey() ([]byte, error) {
 	raw := strings.TrimSpace(os.Getenv("MASTER_KEY"))
 	if file := strings.TrimSpace(os.Getenv("MASTER_KEY_FILE")); raw == "" && file != "" {
 		content, err := os.ReadFile(file) // #nosec G304,G703 -- operator-provided key file path.
-		if err == nil {
-			raw = strings.TrimSpace(string(content))
+		if err != nil {
+			return nil, fmt.Errorf("read MASTER_KEY_FILE: %w", err)
 		}
+		raw = strings.TrimSpace(string(content))
 	}
 	return normalizeMasterKey(raw)
 }
 
-func normalizeMasterKey(raw string) []byte {
+func normalizeMasterKey(raw string) ([]byte, error) {
 	if raw == "" {
-		return nil
+		return nil, nil
+	}
+	if len([]byte(raw)) == cypra.MasterKeyBytes && weakRawMasterKey(raw) {
+		return nil, cypra.ErrInvalidMasterKey
 	}
 	if key, err := cypra.LoadMasterKey(raw, ""); err == nil {
-		return key
+		return key, nil
 	}
-	if len(raw) == 32 {
-		return []byte(raw)
+	return nil, cypra.ErrInvalidMasterKey
+}
+
+func weakRawMasterKey(raw string) bool {
+	first := raw[0]
+	for i := 1; i < len(raw); i++ {
+		if raw[i] != first {
+			return false
+		}
 	}
-	digest := sha256.Sum256([]byte(raw))
-	return digest[:]
+	return true
 }
 
 func encryptedColumnTargets() []cypra.EncryptedColumn {

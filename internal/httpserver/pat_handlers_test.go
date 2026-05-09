@@ -84,6 +84,25 @@ func TestPATHandlersUseSessionSubjectWithoutUserHeader(t *testing.T) {
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM personal_access_tokens WHERE tenant_id = $1 AND user_id = $2`, 1, tenantID, userID)
 }
 
+func TestPATHandlersRejectBareUserHeaderFallback(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	userID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO users (id, tenant_id, email, metadata) VALUES ($1, $2, 'user@example.com', '{}'::jsonb)`, userID, tenantID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	router := newTestServer(t, harness).Router()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/pats/", bytes.NewReader([]byte(`{"name":"dev","scopes":["projects.read"]}`)))
+	req.Host = "acme.cypra.localhost"
+	req.Header.Set("X-Cypra-User-Id", userID.String())
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusForbidden && resp.Code != http.StatusUnauthorized {
+		t.Fatalf("bare user header pat create = %d %s", resp.Code, resp.Body.String())
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM personal_access_tokens WHERE tenant_id = $1 AND user_id = $2`, 0, tenantID, userID)
+}
+
 func TestPATBearerAuthAllowsAPIAndRevokedTokenIsUnauthorized(t *testing.T) {
 	harness := dbtest.New(t)
 	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")

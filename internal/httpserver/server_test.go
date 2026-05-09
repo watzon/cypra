@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	passwordauth "github.com/watzon/cypra/internal/auth/password"
 	"github.com/watzon/cypra/internal/dbtest"
 	"github.com/watzon/cypra/internal/httpserver"
 	"github.com/watzon/cypra/internal/logging"
@@ -323,6 +324,90 @@ func TestTenantResolverProjectCRUDAndAudit(t *testing.T) {
 	}
 }
 
+func TestForwardedHostRequiresServerSideTrust(t *testing.T) {
+	harness := dbtest.New(t)
+	dbtest.SeedTenant(t, harness.SQL, "acme")
+	untrusted := newTestServer(t, harness).Router()
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/projects/", nil)
+	req.Host = "cypra.localhost"
+	req.Header.Set("X-Forwarded-Host", "acme.cypra.localhost")
+	req.Header.Set("X-Cypra-Trusted-Proxy", "true")
+	req.Header.Set("X-Cypra-Tenant-Role", "admin")
+	resp := httptest.NewRecorder()
+	untrusted.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNotFound {
+		t.Fatalf("untrusted forwarded host = %d %s", resp.Code, resp.Body.String())
+	}
+
+	trustedServer, err := httpserver.New(httpserver.Options{DB: harness.SQL, TenantDB: harness.TenantDB, PublicBaseURL: "https://cypra.localhost", Version: "test", Commit: "test", DevOpenAPI: true, KEKLoaded: true, MasterKey: bytes.Repeat([]byte{7}, 32), TrustDevHeaders: true, TrustedProxyHeaders: true})
+	if err != nil {
+		t.Fatalf("new trusted server: %v", err)
+	}
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/projects/", nil)
+	req.Host = "cypra.localhost"
+	req.Header.Set("X-Forwarded-Host", "acme.cypra.localhost")
+	req.Header.Set("X-Cypra-Tenant-Role", "admin")
+	resp = httptest.NewRecorder()
+	trustedServer.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("trusted forwarded host = %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestForwardedProtoAndForRequireServerSideTrust(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	userID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO users (id, tenant_id, email, metadata) VALUES ($1, $2, 'user@example.com', '{}'::jsonb)`, userID, tenantID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	if err := (passwordauth.Service{DB: harness.SQL}).SetPassword(context.Background(), tenantID, userID, "correct horse battery staple"); err != nil {
+		t.Fatalf("set password: %v", err)
+	}
+
+	untrusted := newTestServer(t, harness).Router()
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/password/signin", strings.NewReader(`{"email":"user@example.com","password":"correct horse battery staple"}`))
+	req.Host = "acme.cypra.localhost"
+	req.Header.Set("X-Forwarded-For", "203.0.113.8")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	resp := httptest.NewRecorder()
+	untrusted.ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("untrusted signin = %d %s", resp.Code, resp.Body.String())
+	}
+	for _, cookie := range resp.Result().Cookies() {
+		if cookie.Name == "cypra_session" && cookie.Secure {
+			t.Fatalf("untrusted forwarded proto set secure cookie: %+v", cookie)
+		}
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM sessions WHERE subject_id = $1 AND ip = '203.0.113.8'`, 0, userID)
+
+	trusted, err := httpserver.New(httpserver.Options{DB: harness.SQL, TenantDB: harness.TenantDB, PublicBaseURL: "https://cypra.localhost", Version: "test", Commit: "test", DevOpenAPI: true, KEKLoaded: true, MasterKey: bytes.Repeat([]byte{7}, 32), TrustDevHeaders: true, TrustedProxyHeaders: true})
+	if err != nil {
+		t.Fatalf("new trusted server: %v", err)
+	}
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/auth/password/signin", strings.NewReader(`{"email":"user@example.com","password":"correct horse battery staple"}`))
+	req.Host = "acme.cypra.localhost"
+	req.Header.Set("X-Forwarded-For", "203.0.113.9")
+	req.Header.Set("X-Forwarded-Proto", "https")
+	resp = httptest.NewRecorder()
+	trusted.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("trusted signin = %d %s", resp.Code, resp.Body.String())
+	}
+	foundSecure := false
+	for _, cookie := range resp.Result().Cookies() {
+		if cookie.Name == "cypra_session" && cookie.Secure {
+			foundSecure = true
+		}
+	}
+	if !foundSecure {
+		t.Fatalf("trusted forwarded proto did not set secure session cookie: %v", resp.Result().Cookies())
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM sessions WHERE subject_id = $1 AND ip = '203.0.113.9'`, 1, userID)
+}
+
 func TestAuditExportRequiresTenantAdminAndStaysTenantScoped(t *testing.T) {
 	harness := dbtest.New(t)
 	acmeID := dbtest.SeedTenant(t, harness.SQL, "acme")
@@ -524,6 +609,109 @@ func TestUserDetailActionsUseRealAPIs(t *testing.T) {
 	}
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM totp_credentials WHERE tenant_id = $1 AND user_id = $2`, 0, tenantID, userID)
 	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM passkey_credentials WHERE tenant_id = $1 AND user_id = $2 AND purpose = 'second_factor'`, 0, tenantID, userID)
+}
+
+func TestPasskeyRegistrationRequiresOwnedSession(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	userID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO users (id, tenant_id, email, metadata) VALUES ($1, $2, 'user@example.com', '{}'::jsonb)`, userID, tenantID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	router := newTestServer(t, harness).Router()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/passkey/register", strings.NewReader(`{"user_id":"`+userID.String()+`"}`))
+	req.Host = "acme.cypra.localhost"
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("unauthenticated passkey register = %d %s", resp.Code, resp.Body.String())
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM webauthn_challenges WHERE tenant_id = $1 AND user_id = $2`, 0, tenantID, userID)
+}
+
+func TestTOTPEnrollmentRequiresOwnedSession(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	userID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO users (id, tenant_id, email, metadata) VALUES ($1, $2, 'user@example.com', '{}'::jsonb)`, userID, tenantID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	router := newTestServer(t, harness).Router()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/totp/enroll", strings.NewReader(`{"user_id":"`+userID.String()+`"}`))
+	req.Host = "acme.cypra.localhost"
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("unauthenticated totp enroll = %d %s", resp.Code, resp.Body.String())
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM totp_credentials WHERE tenant_id = $1 AND user_id = $2`, 0, tenantID, userID)
+}
+
+func TestWebAuthn2FAEnrollmentRequiresOwnedSession(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	userID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO users (id, tenant_id, email, metadata) VALUES ($1, $2, 'user@example.com', '{}'::jsonb)`, userID, tenantID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	router := newTestServer(t, harness).Router()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/webauthn2fa/enroll", strings.NewReader(`{"user_id":"`+userID.String()+`"}`))
+	req.Host = "acme.cypra.localhost"
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("unauthenticated webauthn2fa enroll = %d %s", resp.Code, resp.Body.String())
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM webauthn_challenges WHERE tenant_id = $1 AND user_id = $2`, 0, tenantID, userID)
+}
+
+func TestBackupCodeRegenerationRequiresOwnedSession(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	userID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO users (id, tenant_id, email, metadata) VALUES ($1, $2, 'user@example.com', '{}'::jsonb)`, userID, tenantID); err != nil {
+		t.Fatalf("seed user: %v", err)
+	}
+	router := newTestServer(t, harness).Router()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/backup-codes/regenerate", strings.NewReader(`{"user_id":"`+userID.String()+`"}`))
+	req.Host = "acme.cypra.localhost"
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusForbidden {
+		t.Fatalf("unauthenticated backup regenerate = %d %s", resp.Code, resp.Body.String())
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM user_backup_codes WHERE tenant_id = $1 AND user_id = $2`, 0, tenantID, userID)
+}
+
+func TestRevokeOtherSessionsIgnoresCallerSuppliedUserID(t *testing.T) {
+	harness := dbtest.New(t)
+	tenantID := dbtest.SeedTenant(t, harness.SQL, "acme")
+	actorID := uuid.New()
+	victimID := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO users (id, tenant_id, email, metadata) VALUES ($1, $2, 'actor@example.com', '{}'::jsonb), ($3, $2, 'victim@example.com', '{}'::jsonb)`, actorID, tenantID, victimID); err != nil {
+		t.Fatalf("seed users: %v", err)
+	}
+	actorSession := uuid.New()
+	victimSession := uuid.New()
+	if _, err := harness.SQL.Exec(`INSERT INTO sessions (id, subject_id, subject_kind, tenant_id, expires_at) VALUES ($1, $2, 'user', $3, now() + interval '1 hour'), ($4, $5, 'user', $3, now() + interval '1 hour')`, actorSession, actorID, tenantID, victimSession, victimID); err != nil {
+		t.Fatalf("seed sessions: %v", err)
+	}
+	router := newTestServer(t, harness).Router()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/sessions/revoke-others", nil)
+	req.Host = "acme.cypra.localhost"
+	req.AddCookie(&http.Cookie{Name: "cypra_session", Value: actorSession.String()})
+	req.Header.Set("X-Cypra-User-Id", victimID.String())
+	resp := httptest.NewRecorder()
+	router.ServeHTTP(resp, req)
+	if resp.Code != http.StatusNoContent {
+		t.Fatalf("revoke others = %d %s", resp.Code, resp.Body.String())
+	}
+	dbtest.RequireCount(t, harness.SQL, `SELECT count(*) FROM sessions WHERE id = $1 AND revoked_at IS NULL`, 1, victimSession)
 }
 
 func newTestServer(t *testing.T, harness *dbtest.Harness) *httpserver.Server {

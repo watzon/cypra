@@ -88,7 +88,7 @@ func (s *Server) authPasswordSignup(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeWithBot(w, r, &payload) {
 		return
 	}
-	if !s.allowRate(w, r, &tenant.ID, "signup:ip", clientRateKey(r), 5, time.Minute) {
+	if !s.allowRate(w, r, &tenant.ID, "signup:ip", s.clientRateKey(r), 5, time.Minute) {
 		return
 	}
 	if err := authpolicy.CheckSignup(r.Context(), s.DB, tenant.ID, authpolicy.SignupContext{Method: authpolicy.MethodPassword, Email: strings.TrimSpace(payload.Email)}); err != nil {
@@ -127,7 +127,7 @@ func (s *Server) authPasswordSignin(w http.ResponseWriter, r *http.Request) {
 	if !s.decodeWithBot(w, r, &payload) {
 		return
 	}
-	if !s.allowRate(w, r, &tenant.ID, "login:ip", clientRateKey(r), 10, time.Minute) || !s.allowRate(w, r, &tenant.ID, "login:account", payload.Email, 5, time.Minute) {
+	if !s.allowRate(w, r, &tenant.ID, "login:ip", s.clientRateKey(r), 10, time.Minute) || !s.allowRate(w, r, &tenant.ID, "login:account", payload.Email, 5, time.Minute) {
 		return
 	}
 	var rows []struct {
@@ -526,9 +526,8 @@ func (s *Server) authPasskeyRegister(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	userID, err := uuid.Parse(payload.UserID)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "user.id_invalid")
+	userID, ok := s.requireUserFactorOwner(w, r, tenant, payload.UserID, "passkey.register")
+	if !ok {
 		return
 	}
 	service := webauthn.Service{DB: s.DB}
@@ -550,7 +549,7 @@ func (s *Server) authPasskeyRegister(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "webauthn.ceremony_invalid")
 		return
 	}
-	if _, err := service.FinishRegistration(r.Context(), webauthn.FinishRegistrationRequest{TenantID: tenant.ID, UserID: userID, RPID: s.rpID(tenant), Origins: []string{requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)}); err != nil {
+	if _, err := service.FinishRegistration(r.Context(), webauthn.FinishRegistrationRequest{TenantID: tenant.ID, UserID: userID, RPID: s.rpID(tenant), Origins: []string{s.requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)}); err != nil {
 		if s.DevOpenAPI {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "auth.passkey_register_failed", "detail": err.Error()})
 			return
@@ -559,6 +558,34 @@ func (s *Server) authPasskeyRegister(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "ok"})
+}
+
+func (s *Server) requireUserFactorOwner(w http.ResponseWriter, r *http.Request, tenant Tenant, rawUserID, action string) (uuid.UUID, bool) {
+	userID, err := uuid.Parse(rawUserID)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "user.id_invalid")
+		return uuid.Nil, false
+	}
+	actor := auth.ActorFromContext(r.Context())
+	if actor.UserID == userID && (actor.TenantID == uuid.Nil || actor.TenantID == tenant.ID) && actor.Kind != "pat" {
+		return userID, true
+	}
+	if actor.InstanceAdmin && actor.InstanceAdminID != uuid.Nil && s.userBelongsToTenant(r.Context(), tenant.ID, userID) {
+		tenantID := tenant.ID
+		actorID := actor.InstanceAdminID
+		targetID := userID
+		s.recordMutationAudit(r.Context(), audit.Entry{
+			TenantID:     &tenantID,
+			ActorKind:    "instance_admin",
+			ActorID:      &actorID,
+			Action:       action + ".admin_override",
+			ResourceKind: "user_auth_factor",
+			ResourceID:   &targetID,
+		})
+		return userID, true
+	}
+	writeError(w, http.StatusForbidden, "auth.forbidden")
+	return uuid.Nil, false
 }
 
 func (s *Server) authPasskeyAssert(w http.ResponseWriter, r *http.Request) {
@@ -585,7 +612,7 @@ func (s *Server) authPasskeyAssert(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "webauthn.ceremony_invalid")
 		return
 	}
-	userID, _, err := service.FinishAssertion(r.Context(), webauthn.FinishAssertionRequest{TenantID: tenant.ID, RPID: s.rpID(tenant), Origins: []string{requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)})
+	userID, _, err := service.FinishAssertion(r.Context(), webauthn.FinishAssertionRequest{TenantID: tenant.ID, RPID: s.rpID(tenant), Origins: []string{s.requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)})
 	if err != nil {
 		recordAuthAttempt("passkey", "fail")
 		writeError(w, http.StatusUnauthorized, "auth.passkey_invalid")
@@ -611,9 +638,8 @@ func (s *Server) authTOTPEnroll(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "request.invalid")
 		return
 	}
-	userID, err := uuid.Parse(payload.UserID)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "user.id_invalid")
+	userID, ok := s.requireUserFactorOwner(w, r, tenant, payload.UserID, "totp.enroll")
+	if !ok {
 		return
 	}
 	secret, uri, err := (totp.Service{DB: s.DB, KEK: s.MasterKey}).Enroll(r.Context(), tenant.ID, userID, "Cypra", payload.UserID)
@@ -650,9 +676,8 @@ func (s *Server) authWebAuthn2FAEnroll(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	userID, err := uuid.Parse(payload.UserID)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "user.id_invalid")
+	userID, ok := s.requireUserFactorOwner(w, r, tenant, payload.UserID, "webauthn2fa.enroll")
+	if !ok {
 		return
 	}
 	service := webauthn2fa.Service{Primary: webauthn.Service{DB: s.DB}}
@@ -674,7 +699,7 @@ func (s *Server) authWebAuthn2FAEnroll(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "webauthn.ceremony_invalid")
 		return
 	}
-	if _, err := service.FinishEnroll(r.Context(), webauthn2fa.FinishEnrollRequest{TenantID: tenant.ID, UserID: userID, RPID: s.rpID(tenant), Origins: []string{requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)}); err != nil {
+	if _, err := service.FinishEnroll(r.Context(), webauthn2fa.FinishEnrollRequest{TenantID: tenant.ID, UserID: userID, RPID: s.rpID(tenant), Origins: []string{s.requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)}); err != nil {
 		writeError(w, http.StatusInternalServerError, "auth.webauthn2fa_enroll_failed")
 		return
 	}
@@ -716,7 +741,7 @@ func (s *Server) authWebAuthn2FAVerify(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "webauthn.ceremony_invalid")
 		return
 	}
-	userID, _, err := service.FinishVerify(r.Context(), webauthn2fa.FinishVerifyRequest{TenantID: tenant.ID, RPID: s.rpID(tenant), Origins: []string{requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)})
+	userID, _, err := service.FinishVerify(r.Context(), webauthn2fa.FinishVerifyRequest{TenantID: tenant.ID, RPID: s.rpID(tenant), Origins: []string{s.requestOrigin(r)}, CeremonyID: ceremonyID, Response: webauthnResponseRequest(r, payload.Response)})
 	if err != nil {
 		recordAuthAttempt("webauthn2fa", "fail")
 		writeError(w, http.StatusUnauthorized, "auth.webauthn2fa_invalid")
@@ -737,9 +762,8 @@ func (s *Server) authBackupCodesRegenerate(w http.ResponseWriter, r *http.Reques
 		writeError(w, http.StatusBadRequest, "request.invalid")
 		return
 	}
-	userID, err := uuid.Parse(payload.UserID)
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "user.id_invalid")
+	userID, ok := s.requireUserFactorOwner(w, r, tenant, payload.UserID, "backup_codes.regenerate")
+	if !ok {
 		return
 	}
 	codes, err := (backupcodes.Service{DB: s.DB}).RegenerateForUser(r.Context(), tenant.ID, userID)
@@ -965,8 +989,8 @@ type ioNopCloser struct{ *bytes.Reader }
 func (c ioNopCloser) Close() error { return nil }
 
 func (s *Server) requireEmailProvider(w http.ResponseWriter, r *http.Request, tenantID uuid.UUID) bool {
-	_, err := (email.Resolver{DB: s.DB, KEK: s.MasterKey}).Resolve(r.Context(), tenantID)
-	if errors.Is(err, email.ErrProviderRequired) {
+	_, err := (email.Resolver{DB: s.DB, KEK: s.MasterKey, BlockTerminal: s.BlockTerminalEmail}).Resolve(r.Context(), tenantID)
+	if errors.Is(err, email.ErrProviderRequired) || errors.Is(err, email.ErrTerminalDisabled) {
 		writeError(w, http.StatusPreconditionRequired, email.ErrProviderRequired.Error())
 		return false
 	}
@@ -995,7 +1019,7 @@ func (s *Server) authLogout(w http.ResponseWriter, r *http.Request) {
 			MaxAge:   -1,
 			HttpOnly: true,
 			SameSite: http.SameSiteLaxMode,
-			Secure:   r.TLS != nil,
+			Secure:   s.requestIsHTTPS(r),
 		})
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -1031,19 +1055,14 @@ func (s *Server) authRevokeOtherSessions(w http.ResponseWriter, r *http.Request)
 		writeError(w, http.StatusNotFound, "tenant.not_found")
 		return
 	}
-	userIDStr := r.Header.Get("X-Cypra-User-Id")
-	userID, err := uuid.Parse(userIDStr)
-	if err != nil {
-		userID = actor.UserID
-	}
-	if userID == uuid.Nil {
+	if actor.UserID == uuid.Nil || actor.TenantID != tenant.ID {
 		writeError(w, http.StatusUnauthorized, "auth.unauthorized")
 		return
 	}
 	if err := s.TenantDB.Transaction(r.Context(), tenant.ID, func(tx *gorm.DB) error {
 		return tx.Exec(
 			`UPDATE sessions SET revoked_at = now() WHERE tenant_id = ? AND subject_id = ? AND revoked_at IS NULL AND id::text <> ?`,
-			tenant.ID, userID, currentSession,
+			tenant.ID, actor.UserID, currentSession,
 		).Error
 	}); err != nil {
 		writeError(w, http.StatusInternalServerError, "auth.session_revoke_failed")
