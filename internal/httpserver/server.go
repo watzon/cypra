@@ -5,6 +5,7 @@ package httpserver
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -328,8 +329,12 @@ func (s *Server) dashboardSPA(w http.ResponseWriter, r *http.Request) {
 		http.FileServer(http.FS(dist)).ServeHTTP(w, r)
 		return
 	}
-	r.URL.Path = "/index.html"
-	http.FileServer(http.FS(dist)).ServeHTTP(w, r)
+	index, err := fs.ReadFile(dist, "index.html")
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "dashboard.unavailable")
+		return
+	}
+	http.ServeContent(w, r, "index.html", time.Time{}, bytes.NewReader(index))
 }
 
 // shouldGateRoute reports whether dashboardSPA should run the onboarding/auth

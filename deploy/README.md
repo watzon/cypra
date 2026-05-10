@@ -9,7 +9,7 @@ For local development, prefer the repository root `make dev` target. It layers `
 Runs Cypra and Postgres on the internal compose network. It does not publish Cypra or Postgres to the host:
 
 ```sh
-CYPRA_IMAGE=ghcr.io/watzon/cypra:v0.1.0-rc.1 \
+CYPRA_IMAGE=ghcr.io/watzon/cypra:0.1.0-rc.2 \
   docker compose --env-file .env.production -f deploy/docker-compose.yml up -d postgres cypra
 ```
 

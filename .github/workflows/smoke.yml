@@ -6,12 +6,12 @@ on:
       image:
         description: "Published Cypra image to smoke"
         required: true
-        default: "ghcr.io/watzon/cypra:0.1.0-rc.1"
+        default: "ghcr.io/watzon/cypra:0.1.0-rc.2"
         type: string
       sdk_version:
         description: "Go SDK module version, matching sdk/go/vX.Y.Z tag"
         required: true
-        default: "v0.1.0-rc.1"
+        default: "v0.1.0-rc.2"
         type: string
   schedule:
     - cron: "43 4 * * *"
@@ -24,7 +24,7 @@ jobs:
   disposable-release-smoke:
     runs-on: ubuntu-latest
     env:
-      CYPRA_SMOKE_IMAGE: ${{ inputs.image || 'ghcr.io/watzon/cypra:0.1.0-rc.1' }}
+      CYPRA_SMOKE_IMAGE: ${{ inputs.image || 'ghcr.io/watzon/cypra:0.1.0-rc.2' }}
       CYPRA_SMOKE_ARTIFACT_DIR: smoke-artifacts/release
     steps:
       - uses: actions/checkout@v4
@@ -50,7 +50,7 @@ jobs:
     runs-on: ubuntu-latest
     container: golang:1.26-alpine
     env:
-      SDK_VERSION: ${{ inputs.sdk_version || 'v0.1.0-rc.1' }}
+      SDK_VERSION: ${{ inputs.sdk_version || 'v0.1.0-rc.2' }}
     steps:
       - name: Install git
         run: apk add --no-cache git
@@ -93,8 +93,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          IMAGE: ${{ inputs.image || 'ghcr.io/watzon/cypra:0.1.0-rc.1' }}
-          SDK_VERSION: ${{ inputs.sdk_version || 'v0.1.0-rc.1' }}
+          IMAGE: ${{ inputs.image || 'ghcr.io/watzon/cypra:0.1.0-rc.2' }}
+          SDK_VERSION: ${{ inputs.sdk_version || 'v0.1.0-rc.2' }}
         run: |
           gh api "repos/${REPOSITORY}/issues" \
             --field title="Cypra deployed smoke failed" \

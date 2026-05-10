@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-image="${CYPRA_SMOKE_IMAGE:-ghcr.io/watzon/cypra:0.1.0-rc.1}"
+image="${CYPRA_SMOKE_IMAGE:-ghcr.io/watzon/cypra:0.1.0-rc.2}"
 artifact_dir="${CYPRA_SMOKE_ARTIFACT_DIR:-smoke-artifacts/release}"
 source_port="${CYPRA_SMOKE_SOURCE_PORT:-18080}"
 restore_port="${CYPRA_SMOKE_RESTORE_PORT:-18081}"

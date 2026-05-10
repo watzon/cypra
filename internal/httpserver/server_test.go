@@ -11,9 +11,11 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/google/uuid"
 	passwordauth "github.com/watzon/cypra/internal/auth/password"
+	"github.com/watzon/cypra/internal/bootstrap"
 	"github.com/watzon/cypra/internal/dbtest"
 	"github.com/watzon/cypra/internal/httpserver"
 	"github.com/watzon/cypra/internal/logging"
@@ -85,6 +87,41 @@ func TestHealthReadyAndTenantCRUD(t *testing.T) {
 	router.ServeHTTP(resp, req)
 	if resp.Code != http.StatusOK || !bytes.Contains(resp.Body.Bytes(), []byte("/api/v1/tenants")) {
 		t.Fatalf("openapi response = %d %s", resp.Code, resp.Body.String())
+	}
+}
+
+func TestEmbeddedDashboardServesSetupRouteWithoutIndexRedirect(t *testing.T) {
+	harness := dbtest.New(t)
+	token, err := bootstrap.NewService(harness.SQL, slog.Default()).MintSetupToken(context.Background())
+	if err != nil {
+		t.Fatalf("mint setup token: %v", err)
+	}
+	server, err := httpserver.New(httpserver.Options{
+		DB:            harness.SQL,
+		TenantDB:      harness.TenantDB,
+		PublicBaseURL: "https://cypra.localhost",
+		Version:       "test",
+		Commit:        "test",
+		DashboardFS: fstest.MapFS{
+			"dist/index.html": {Data: []byte("<!doctype html><title>Cypra</title><main>embedded dashboard</main>")},
+		},
+		KEKLoaded: true,
+		MasterKey: bytes.Repeat([]byte{7}, 32),
+	})
+	if err != nil {
+		t.Fatalf("new server: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/setup/"+token, nil)
+	req.Host = "cypra.localhost"
+	req.Header.Set("Accept", "text/html")
+	resp := httptest.NewRecorder()
+	server.Router().ServeHTTP(resp, req)
+	if resp.Code != http.StatusOK {
+		t.Fatalf("setup route status = %d location=%q body=%s", resp.Code, resp.Header().Get("Location"), resp.Body.String())
+	}
+	if !strings.Contains(resp.Body.String(), "embedded dashboard") {
+		t.Fatalf("setup route did not serve embedded dashboard: %s", resp.Body.String())
 	}
 }
 
