@@ -70,6 +70,9 @@ jobs:
       - name: Run CI pipeline
         run: make ci-pipeline
 
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
+
       - name: Run example e2e harness smoke
         env:
           CYPRA_E2E_MANAGED: "1"
