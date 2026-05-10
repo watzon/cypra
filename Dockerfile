@@ -24,6 +24,6 @@ COPY --from=go-build /src/db/migrations /db/migrations
 COPY --from=go-build /out/cypra /usr/local/bin/cypra
 USER nonroot:nonroot
 EXPOSE 8080
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 CMD ["/usr/local/bin/cypra", "version"]
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 CMD ["/usr/local/bin/cypra", "healthcheck"]
 ENTRYPOINT ["/usr/local/bin/cypra"]
 CMD ["serve"]

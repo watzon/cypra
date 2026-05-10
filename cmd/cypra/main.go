@@ -73,6 +73,8 @@ func run(args []string) error {
 		return runImport(args[1:])
 	case "version":
 		return runVersion(args[1:])
+	case "healthcheck":
+		return runHealthcheck(args[1:])
 	default:
 		return exitError{code: 2, error: "cypra: unknown command " + args[0]}
 	}
@@ -293,6 +295,25 @@ func runVersion(args []string) error {
 		return json.NewEncoder(os.Stdout).Encode(map[string]string{"version": version, "commit": commit})
 	}
 	fmt.Printf("cypra %s (%s)\n", version, commit)
+	return nil
+}
+
+func runHealthcheck(args []string) error {
+	fs := flag.NewFlagSet("healthcheck", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	url := fs.String("url", envDefault("CYPRA_HEALTHCHECK_URL", "http://127.0.0.1:8080/readyz"), "ready endpoint to check")
+	if err := fs.Parse(args); err != nil {
+		return exitError{code: 2, error: err.Error()}
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	res, err := client.Get(*url)
+	if err != nil {
+		return exitError{code: 1, error: err.Error()}
+	}
+	defer func() { _ = res.Body.Close() }()
+	if res.StatusCode < http.StatusOK || res.StatusCode >= http.StatusMultipleChoices {
+		return exitError{code: 1, error: fmt.Sprintf("ready check failed: %s", res.Status)}
+	}
 	return nil
 }
 

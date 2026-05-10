@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -64,6 +66,31 @@ func TestTerminalEmailBlockedForNonLocalPublicBaseURL(t *testing.T) {
 func TestVersionJSON(t *testing.T) {
 	if err := run([]string{"version", "--json"}); err != nil {
 		t.Fatalf("version json: %v", err)
+	}
+}
+
+func TestHealthcheckUsesReadyEndpoint(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/readyz" {
+			t.Fatalf("path = %s", r.URL.Path)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+	if err := run([]string{"healthcheck", "--url", server.URL + "/readyz"}); err != nil {
+		t.Fatalf("healthcheck: %v", err)
+	}
+}
+
+func TestHealthcheckFailsOnNonReadyStatus(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(server.Close)
+	err := run([]string{"healthcheck", "--url", server.URL + "/readyz"})
+	var exitErr exitError
+	if !errors.As(err, &exitErr) || exitErr.code != 1 {
+		t.Fatalf("error = %v", err)
 	}
 }
 

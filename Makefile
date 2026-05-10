@@ -5,7 +5,7 @@ BUN ?= bun
 DOCKER_COMPOSE ?= docker compose
 PORTLESS ?= portless
 AIR ?= air
-COMPOSE_FILE ?= deploy/docker-compose.yml
+COMPOSE_FILES ?= -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml
 DEV_COMPOSE_SERVICES ?= postgres
 DEV_DASHBOARD_PORT ?= 5173
 IMAGE_SIZE_TAG ?= cypra:image-size
@@ -18,10 +18,10 @@ IMAGE_SIZE_MAX_BYTES ?= 83886080
 	@printf 'Created .env from .env.example. Review it before production use.\n'
 
 dev-up: .env
-	$(DOCKER_COMPOSE) --env-file .env -f $(COMPOSE_FILE) up -d --wait $(DEV_COMPOSE_SERVICES)
+	$(DOCKER_COMPOSE) --env-file .env $(COMPOSE_FILES) up -d --wait $(DEV_COMPOSE_SERVICES)
 
 dev-down: .env
-	$(DOCKER_COMPOSE) --env-file .env -f $(COMPOSE_FILE) stop $(DEV_COMPOSE_SERVICES)
+	$(DOCKER_COMPOSE) --env-file .env $(COMPOSE_FILES) stop $(DEV_COMPOSE_SERVICES)
 
 # Mint a fresh setup token for the first instance admin. Requires the local
 # postgres to be reachable (run `make dev-up` first if it isn't).
@@ -34,7 +34,7 @@ setup-token: .env
 # from scratch. Local dev only — never run against a real install.
 dev-reset: .env
 	@printf 'This will permanently delete the local Cypra postgres volume.\n'
-	@$(DOCKER_COMPOSE) --env-file .env -f $(COMPOSE_FILE) down -v $(DEV_COMPOSE_SERVICES)
+	@$(DOCKER_COMPOSE) --env-file .env $(COMPOSE_FILES) down -v $(DEV_COMPOSE_SERVICES)
 	@printf 'Done. Run `make dev` to start fresh.\n'
 
 dev: .env
@@ -45,14 +45,14 @@ dev: .env
 	listen_addr="$${LISTEN_ADDR:-:8080}"; \
 	cypra_port="$${listen_addr##*:}"; \
 	if ! [[ "$$cypra_port" =~ ^[0-9]+$$ ]]; then printf 'LISTEN_ADDR must end with a numeric port for make dev, got %s\n' "$$listen_addr" >&2; exit 1; fi; \
-	$(DOCKER_COMPOSE) --env-file .env -f $(COMPOSE_FILE) up -d --wait $(DEV_COMPOSE_SERVICES); \
+	$(DOCKER_COMPOSE) --env-file .env $(COMPOSE_FILES) up -d --wait $(DEV_COMPOSE_SERVICES); \
 	$(PORTLESS) proxy start --wildcard; \
 	$(PORTLESS) alias cypra "$$cypra_port" --force; \
 	cleanup() { \
 		status=$$?; \
 		if [ -n "$${vite_pid:-}" ]; then kill $$vite_pid 2>/dev/null || true; wait $$vite_pid 2>/dev/null || true; fi; \
 		$(PORTLESS) alias --remove cypra >/dev/null 2>&1 || true; \
-		$(DOCKER_COMPOSE) --env-file .env -f $(COMPOSE_FILE) stop $(DEV_COMPOSE_SERVICES) >/dev/null; \
+		$(DOCKER_COMPOSE) --env-file .env $(COMPOSE_FILES) stop $(DEV_COMPOSE_SERVICES) >/dev/null; \
 		exit $$status; \
 	}; \
 	trap cleanup EXIT; \

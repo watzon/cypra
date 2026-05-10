@@ -7,7 +7,11 @@ const postgresPort = await freePort();
 const cypraPort = await freePort();
 const project = `cypra-cold-start-${process.pid}-${Date.now()}`;
 const databaseURL = `postgres://cypra:cypra@host.docker.internal:${postgresPort}/cypra?sslmode=disable`;
-const composeEnv = { ...process.env, POSTGRES_HOST_PORT: String(postgresPort) };
+const composeEnv = {
+  ...process.env,
+  POSTGRES_HOST_PORT: String(postgresPort),
+  POSTGRES_PASSWORD: "cypra",
+};
 const dockerEnvArgs = [
   "--add-host=host.docker.internal:host-gateway",
   "-e",
@@ -29,10 +33,11 @@ const dockerEnvArgs = [
   "-e",
   "STORAGE_LOCAL_PATH=/tmp/cypra-storage",
 ];
+const composeFiles = ["-f", "deploy/docker-compose.yml", "-f", "deploy/docker-compose.dev.yml"];
 
 runChecked(
   "docker",
-  ["compose", "-p", project, "-f", "deploy/docker-compose.yml", "up", "-d", "--wait", "postgres"],
+  ["compose", "-p", project, ...composeFiles, "up", "-d", "--wait", "postgres"],
   composeEnv,
 );
 
@@ -65,11 +70,7 @@ try {
   }
 } finally {
   if (container?.exitCode === null) container.kill("SIGTERM");
-  runChecked(
-    "docker",
-    ["compose", "-p", project, "-f", "deploy/docker-compose.yml", "down", "-v"],
-    composeEnv,
-  );
+  runChecked("docker", ["compose", "-p", project, ...composeFiles, "down", "-v"], composeEnv);
 }
 
 function runChecked(command, args, env) {

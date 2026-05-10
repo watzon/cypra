@@ -109,6 +109,7 @@ async function startManagedStack(backup?: ManagedBackup): Promise<ManagedStack> 
   const env = {
     ...process.env,
     POSTGRES_HOST_PORT: String(postgresPort),
+    POSTGRES_PASSWORD: "cypra",
     DATABASE_URL: databaseURL,
     MIGRATE_DATABASE_URL: databaseURL,
     MASTER_KEY: "dev-only-change-me-dev-only-change-me-32b",
@@ -122,20 +123,11 @@ async function startManagedStack(backup?: ManagedBackup): Promise<ManagedStack> 
     CYPRA_GOOGLE_AUTH_URL: googleStub.authURL,
     VITE_DEV_SERVER: process.env.VITE_DEV_SERVER ?? "http://localhost:4173",
   };
+  const composeFiles = ["-f", "deploy/docker-compose.yml", "-f", "deploy/docker-compose.dev.yml"];
 
   runChecked(
     "docker",
-    [
-      "compose",
-      "-p",
-      projectName,
-      "-f",
-      "deploy/docker-compose.yml",
-      "up",
-      "-d",
-      "--wait",
-      "postgres",
-    ],
+    ["compose", "-p", projectName, ...composeFiles, "up", "-d", "--wait", "postgres"],
     env,
   );
   try {
@@ -171,22 +163,14 @@ async function startManagedStack(backup?: ManagedBackup): Promise<ManagedStack> 
       waitForEmail: smtpStub.waitForMessage,
       close: async () => {
         await stopProcess(server);
-        runChecked(
-          "docker",
-          ["compose", "-p", projectName, "-f", "deploy/docker-compose.yml", "down", "-v"],
-          env,
-        );
+        runChecked("docker", ["compose", "-p", projectName, ...composeFiles, "down", "-v"], env);
         await rm(storageDir, { recursive: true, force: true });
         await googleStub.close();
         await smtpStub.close();
       },
     };
   } catch (error) {
-    runChecked(
-      "docker",
-      ["compose", "-p", projectName, "-f", "deploy/docker-compose.yml", "down", "-v"],
-      env,
-    );
+    runChecked("docker", ["compose", "-p", projectName, ...composeFiles, "down", "-v"], env);
     await rm(storageDir, { recursive: true, force: true });
     await googleStub.close();
     await smtpStub.close();

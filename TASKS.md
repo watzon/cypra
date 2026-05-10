@@ -136,37 +136,41 @@ Verification: added regression coverage across `cmd/cypra`, `internal/httpserver
 
 ## Phase R2: Deployment Packaging And Network Safety
 
-**Status:** not started  
+**Status:** complete  
 **Dependencies:** Phase R1  
 **Deliverable:** The reference VPS deployment is safe to copy, versioned, and aligned with the docs.
 
 ### Tasks
 
-- [ ] Replace production-facing `ghcr.io/watzon/cypra:dev` references with a versioned tag or clearly documented local-build override.
-- [ ] Decide whether to split development and production compose files or keep one file with profiles/overrides.
-- [ ] Stop publishing Postgres to the host in the production deployment recipe.
-- [ ] Stop publishing Cypra directly to the host in the TLS production profile.
-- [ ] Make Caddy the only public entrypoint in the production TLS profile.
-- [ ] Expose both ports `80` and `443` for Caddy in production TLS docs/config.
-- [ ] Replace local-only `tls internal` Caddy example with a production-ready template for real install and wildcard tenant domains.
-- [ ] Preserve a local Caddy/portless-friendly path for development without confusing it with production.
-- [ ] Align `TRUSTED_PROXY_HEADERS` defaults and docs with the Caddy deployment path.
-- [ ] Add a container healthcheck that checks `/readyz`, not only `cypra version`.
-- [ ] Add a production env template that refuses or clearly marks dev defaults.
-- [ ] Document which services and ports must never be exposed publicly.
+- [x] Replace production-facing `ghcr.io/watzon/cypra:dev` references with a versioned tag or clearly documented local-build override.
+- [x] Decide whether to split development and production compose files or keep one file with profiles/overrides.
+- [x] Stop publishing Postgres to the host in the production deployment recipe.
+- [x] Stop publishing Cypra directly to the host in the TLS production profile.
+- [x] Make Caddy the only public entrypoint in the production TLS profile.
+- [x] Expose both ports `80` and `443` for Caddy in production TLS docs/config.
+- [x] Replace local-only `tls internal` Caddy example with a production-ready template for real install and wildcard tenant domains.
+- [x] Preserve a local Caddy/portless-friendly path for development without confusing it with production.
+- [x] Align `TRUSTED_PROXY_HEADERS` defaults and docs with the Caddy deployment path.
+- [x] Add a container healthcheck that checks `/readyz`, not only `cypra version`.
+- [x] Add a production env template that refuses or clearly marks dev defaults.
+- [x] Document which services and ports must never be exposed publicly.
 
 ### Acceptance
 
-- [ ] A fresh VPS compose deployment exposes only Caddy publicly.
-- [ ] Postgres is reachable only inside the compose network unless an explicit development override is used.
-- [ ] Caddy is configured for real public TLS with documented DNS requirements.
-- [ ] Container health reflects DB, migration, storage, and master-key readiness.
-- [ ] Docs clearly distinguish local development from production deployment.
-- [ ] `./bin/agent-ci run --quiet --all` passes.
+- [x] A fresh VPS compose deployment exposes only Caddy publicly.
+- [x] Postgres is reachable only inside the compose network unless an explicit development override is used.
+- [x] Caddy is configured for real public TLS with documented DNS requirements.
+- [x] Container health reflects DB, migration, storage, and master-key readiness.
+- [x] Docs clearly distinguish local development from production deployment.
+- [x] `./bin/agent-ci run --quiet --all` passes.
 
 ### Handoff
 
-Pending.
+Phase R2 hardened the reference deployment shape. Production compose now defaults to a versioned release image, keeps Cypra and Postgres private on the compose network, publishes only Caddy on ports 80 and 443 in the TLS profile, and defaults trusted proxy handling to `x-forwarded` for that Caddy path. Development-only host port mappings and the local `:dev` image now live in `deploy/docker-compose.dev.yml`, with `deploy/Caddyfile.local` preserving the `.localhost` / `tls internal` path separately from production.
+
+Added `cypra healthcheck`, wired Docker and compose healthchecks to `/readyz`, and covered success/failure behavior with `cmd/cypra` tests. Added `.env.production.example` with explicit `CHANGE_ME` production placeholders and allowed it through `.gitignore`; `.env.example` remains the local-development template. Updated deployment docs and README to distinguish production TLS deployment from local development, document the required DNS records, note wildcard-certificate DNS-01 requirements, and state that `postgres:5432` and `cypra:8080` must never be exposed publicly.
+
+Verification: `docker compose --env-file .env.production.example -f deploy/docker-compose.yml --profile with-tls config` showed only Caddy publishes `80` and `443`; Cypra and Postgres have no production host ports. `docker compose --env-file .env.example -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml config` showed local-only host ports remain in the dev override. `go test ./cmd/cypra`, `bun run lint`, `bun run typecheck`, and `bun run format` passed. Final `./bin/agent-ci run --quiet --all` passed after loading the `agent-ci` skill, including dashboard build, Go build, `golangci-lint`, color lint, Prettier format check, `go vet`, dashboard typecheck, `go test -p 1 ./...`, coverage floors, dashboard Vitest, p99 performance, compressed Docker image-size, and cold-start (`cold-start readyz: 147ms`).
 
 ---
 

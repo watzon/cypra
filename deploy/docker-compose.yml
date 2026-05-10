@@ -1,21 +1,32 @@
 services:
   cypra:
-    image: ghcr.io/watzon/cypra:dev
+    image: ${CYPRA_IMAGE:-ghcr.io/watzon/cypra:v0.1.0-rc.1}
     depends_on:
       postgres:
         condition: service_healthy
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgres://cypra:cypra@postgres:5432/cypra?sslmode=disable}
-      MIGRATE_DATABASE_URL: ${MIGRATE_DATABASE_URL:-postgres://cypra:cypra@postgres:5432/cypra?sslmode=disable}
-      MASTER_KEY: ${MASTER_KEY:-dev-only-change-me-dev-only-change-me-32b}
+      DATABASE_URL: ${DATABASE_URL}
+      MIGRATE_DATABASE_URL: ${MIGRATE_DATABASE_URL}
+      MASTER_KEY: ${MASTER_KEY}
+      MASTER_KEY_FILE: ${MASTER_KEY_FILE:-}
       LISTEN_ADDR: ${LISTEN_ADDR:-:8080}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-https://cypra.localhost}
-      TRUSTED_PROXY_HEADERS: ${TRUSTED_PROXY_HEADERS:-none}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      TRUSTED_PROXY_HEADERS: ${TRUSTED_PROXY_HEADERS:-x-forwarded}
       STORAGE_BACKEND: ${STORAGE_BACKEND:-local-disk}
       STORAGE_LOCAL_PATH: ${STORAGE_LOCAL_PATH:-/var/lib/cypra/storage}
+      STORAGE_S3_BUCKET: ${STORAGE_S3_BUCKET:-}
+      STORAGE_S3_ENDPOINT: ${STORAGE_S3_ENDPOINT:-}
+      STORAGE_S3_REGION: ${STORAGE_S3_REGION:-}
+      STORAGE_S3_ACCESS_KEY_ID: ${STORAGE_S3_ACCESS_KEY_ID:-}
+      STORAGE_S3_SECRET_ACCESS_KEY: ${STORAGE_S3_SECRET_ACCESS_KEY:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-    ports:
-      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/cypra", "healthcheck"]
+      interval: 30s
+      timeout: 3s
+      start_period: 10s
+      retries: 3
     volumes:
       - cypra-storage:/var/lib/cypra/storage
 
@@ -23,10 +34,8 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: cypra
-      POSTGRES_PASSWORD: cypra
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: cypra
-    ports:
-      - "${POSTGRES_HOST_PORT:-54320}:5432"
     volumes:
       - cypra-postgres:/var/lib/postgresql/data
     healthcheck:
@@ -36,11 +45,12 @@ services:
       retries: 12
 
   caddy:
-    image: caddy:2-alpine
+    image: ${CADDY_IMAGE:-caddy:2-alpine}
     profiles: ["with-tls"]
     depends_on:
       - cypra
     ports:
+      - "80:80"
       - "443:443"
     volumes:
       - ./Caddyfile.example:/etc/caddy/Caddyfile:ro

@@ -1,12 +1,18 @@
 {
 	admin off
+	email {$CADDY_ACME_EMAIL}
 }
 
-cypra.localhost, *.cypra.localhost {
-	tls internal
+# Set CYPRA_INSTALL_DOMAIN to the public install host, for example
+# auth.example.com. Create DNS A/AAAA records for that host and wildcard DNS
+# for *.auth.example.com before starting Caddy.
+{$CYPRA_INSTALL_DOMAIN}, *.{$CYPRA_INSTALL_DOMAIN} {
+	encode zstd gzip
+
 	reverse_proxy cypra:8080 {
+		header_up Host {host}
 		header_up X-Forwarded-Host {host}
 		header_up X-Forwarded-Proto {scheme}
-		header_up X-Cypra-Trusted-Proxy true
+		header_up X-Forwarded-For {remote_host}
 	}
 }
