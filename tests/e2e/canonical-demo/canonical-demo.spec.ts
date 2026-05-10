@@ -52,9 +52,9 @@ test("canonical demo completes inside the unattended timing budget", async () =>
       await harness.page.goto(nextjs.url);
       await harness.page.getByRole("link", { name: "Sign in with Cypra" }).click();
       await harness.page.getByRole("button", { name: "Cypra" }).click();
-      await expect(
-        harness.page.getByRole("heading", { name: "Sign in to this application" }),
-      ).toBeVisible({ timeout: 15_000 });
+      await expect(harness.page.getByText("Review requested access")).toBeVisible({
+        timeout: 15_000,
+      });
       await harness.page.getByRole("button", { name: "Allow" }).click();
       await expect(harness.page).toHaveURL(new RegExp(`^${nextjs.url.replaceAll(".", "\\.")}`));
       const session = await harness.page.evaluate(async () => {

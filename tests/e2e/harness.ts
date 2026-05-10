@@ -636,9 +636,7 @@ export async function startOIDCAuthorize(harness: CypraHarness, client: ExampleC
 }
 
 export async function expectOIDCConsent(harness: CypraHarness) {
-  await expect(
-    harness.page.getByRole("heading", { name: "Sign in to this application" }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(harness.page.getByText("Review requested access")).toBeVisible({ timeout: 15_000 });
 }
 
 export async function reachOIDCConsentViaPassword(
