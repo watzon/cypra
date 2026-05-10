@@ -63,6 +63,16 @@ func New(t *testing.T) *Harness {
 		t.Fatalf("open postgres: %v", err)
 	}
 	t.Cleanup(func() { _ = sqlDB.Close() })
+	readyCtx, cancel := context.WithTimeout(ctx, 60*time.Second)
+	defer cancel()
+	for {
+		if err := sqlDB.PingContext(readyCtx); err == nil {
+			break
+		} else if readyCtx.Err() != nil {
+			t.Fatalf("wait for postgres readiness: %v", err)
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
 
 	ApplyUp(t, sqlDB)
 	gormDB, err := gorm.Open(postgresdriver.Open(dsn), &gorm.Config{})

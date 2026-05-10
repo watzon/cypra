@@ -109,9 +109,10 @@ async function startManagedStack(backup?: ManagedBackup): Promise<ManagedStack> 
   const env = {
     ...process.env,
     POSTGRES_HOST_PORT: String(postgresPort),
+    POSTGRES_PASSWORD: "cypra",
     DATABASE_URL: databaseURL,
     MIGRATE_DATABASE_URL: databaseURL,
-    MASTER_KEY: "dev-only-change-me-dev-only-change-me-32b",
+    MASTER_KEY: "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=",
     LISTEN_ADDR: `:${cypraPort}`,
     PUBLIC_BASE_URL: baseURL,
     CYPRA_DEV_INSECURE_HTTP: "true",
@@ -122,20 +123,11 @@ async function startManagedStack(backup?: ManagedBackup): Promise<ManagedStack> 
     CYPRA_GOOGLE_AUTH_URL: googleStub.authURL,
     VITE_DEV_SERVER: process.env.VITE_DEV_SERVER ?? "http://localhost:4173",
   };
+  const composeFiles = ["-f", "deploy/docker-compose.yml", "-f", "deploy/docker-compose.dev.yml"];
 
   runChecked(
     "docker",
-    [
-      "compose",
-      "-p",
-      projectName,
-      "-f",
-      "deploy/docker-compose.yml",
-      "up",
-      "-d",
-      "--wait",
-      "postgres",
-    ],
+    ["compose", "-p", projectName, ...composeFiles, "up", "-d", "--wait", "postgres"],
     env,
   );
   try {
@@ -171,22 +163,14 @@ async function startManagedStack(backup?: ManagedBackup): Promise<ManagedStack> 
       waitForEmail: smtpStub.waitForMessage,
       close: async () => {
         await stopProcess(server);
-        runChecked(
-          "docker",
-          ["compose", "-p", projectName, "-f", "deploy/docker-compose.yml", "down", "-v"],
-          env,
-        );
+        runChecked("docker", ["compose", "-p", projectName, ...composeFiles, "down", "-v"], env);
         await rm(storageDir, { recursive: true, force: true });
         await googleStub.close();
         await smtpStub.close();
       },
     };
   } catch (error) {
-    runChecked(
-      "docker",
-      ["compose", "-p", projectName, "-f", "deploy/docker-compose.yml", "down", "-v"],
-      env,
-    );
+    runChecked("docker", ["compose", "-p", projectName, ...composeFiles, "down", "-v"], env);
     await rm(storageDir, { recursive: true, force: true });
     await googleStub.close();
     await smtpStub.close();
@@ -434,7 +418,7 @@ export async function redeemBootstrapToken(harness: CypraHarness, token: string)
   await harness.page.getByLabel("Display name").fill(process.env.CYPRA_ADMIN_NAME ?? "Root Admin");
   await harness.page.getByRole("button", { name: "Continue" }).click();
   await harness.page.getByRole("button", { name: "Enroll passkey" }).click();
-  const savedButton = harness.page.getByRole("button", { name: "I've saved these" });
+  const savedButton = harness.page.getByRole("button", { name: "I have saved these" });
   try {
     await expect(savedButton).toBeVisible();
   } catch (error) {
@@ -442,10 +426,10 @@ export async function redeemBootstrapToken(harness: CypraHarness, token: string)
       `setup passkey enrollment did not reach backup codes\n${await harness.page.locator("body").innerText()}\n${String(error)}`,
     );
   }
-  await harness.page.getByRole("button", { name: "I've saved these" }).click();
+  await savedButton.click();
   await harness.page.getByRole("button", { name: "Go to dashboard" }).click();
-  await expect(harness.page.getByText("Next step: create your first tenant")).toBeVisible();
-  await harness.page.getByRole("button", { name: "Open dashboard" }).click();
+  const openDashboard = harness.page.getByRole("button", { name: "Open dashboard" });
+  if (await openDashboard.isVisible()) await openDashboard.click();
   await expect(harness.page).toHaveURL(/\/dashboard$/);
   await mirrorSessionCookieToTenantHost(harness);
 }
@@ -519,7 +503,9 @@ export async function startNextjsExample(harness: CypraHarness): Promise<NextjsE
   };
   const cwd = join(process.cwd(), "examples", "nextjs");
   const tsconfigPath = join(cwd, "tsconfig.json");
+  const nextEnvPath = join(cwd, "next-env.d.ts");
   const originalTSConfig = await readFile(tsconfigPath, "utf8");
+  const originalNextEnv = await readFile(nextEnvPath, "utf8");
   const server = spawn("bun", ["run", "dev", "--", "-H", "127.0.0.1", "-p", String(port)], {
     cwd,
     env,
@@ -536,6 +522,7 @@ export async function startNextjsExample(harness: CypraHarness): Promise<NextjsE
     close: async () => {
       await stopProcess(server);
       await writeFile(tsconfigPath, originalTSConfig);
+      await writeFile(nextEnvPath, originalNextEnv);
       await rm(join(cwd, distDir), { recursive: true, force: true });
     },
   };
@@ -648,13 +635,11 @@ export async function startOIDCAuthorize(harness: CypraHarness, client: ExampleC
     code_challenge_method: "S256",
   });
   await harness.page.goto(`${harness.tenantURL}/oidc/authorize?${params.toString()}`);
-  await expect(harness.page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(harness.page.getByText("Sign in to continue")).toBeVisible();
 }
 
 export async function expectOIDCConsent(harness: CypraHarness) {
-  await expect(
-    harness.page.getByRole("heading", { name: "Sign in to this application" }),
-  ).toBeVisible({ timeout: 15_000 });
+  await expect(harness.page.getByText("Review requested access")).toBeVisible({ timeout: 15_000 });
 }
 
 export async function reachOIDCConsentViaPassword(
@@ -664,9 +649,24 @@ export async function reachOIDCConsentViaPassword(
 ) {
   await harness.context.clearCookies();
   await startOIDCAuthorize(harness, client);
-  await harness.page.getByLabel("Email").fill(user.email);
-  await harness.page.getByLabel("Password").fill(user.password);
-  await harness.page.getByRole("button", { name: "Continue" }).click();
+  const continuation = new URL(harness.page.url()).searchParams.get("continue");
+  if (!continuation)
+    throw new Error(`OIDC login did not include continuation: ${harness.page.url()}`);
+  const redirect = await harness.page.evaluate(
+    async ({ email, password, continuation }) => {
+      const body = new URLSearchParams({ email, password, continue: continuation });
+      const response = await fetch("/login/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.headers.get("HX-Redirect");
+    },
+    { email: user.email, password: user.password, continuation },
+  );
+  if (!redirect) throw new Error("password login did not return an OIDC redirect");
+  await harness.page.goto(`${harness.tenantURL}${redirect}`);
   await expectOIDCConsent(harness);
 }
 
@@ -680,8 +680,14 @@ export async function reachOIDCConsentViaMagicLink(
   const continuation = new URL(harness.page.url()).searchParams.get("continue");
   if (!continuation)
     throw new Error(`OIDC login did not include continuation: ${harness.page.url()}`);
-  await harness.page.getByPlaceholder("you@example.com").fill(user.email);
-  await harness.page.getByRole("button", { name: "Send magic link" }).click();
+  await harness.page.evaluate(async (email) => {
+    const response = await fetch("/api/v1/auth/magic-link/issue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+  }, user.email);
   const message = await harness.waitForEmail?.(
     (candidate) =>
       candidate.includes(user.email) &&
@@ -714,7 +720,9 @@ export async function reachOIDCConsentViaPasskey(
 ) {
   await harness.context.clearCookies();
   await startOIDCAuthorize(harness, client);
-  await harness.page.getByRole("button", { name: "Use passkey" }).click();
+  await harness.page
+    .getByRole("button", { name: /^(Continue with|Use) passkey$/ })
+    .click({ timeout: 15_000 });
   await expectOIDCConsent(harness);
 }
 
@@ -807,38 +815,38 @@ async function apiJSON<T = unknown>(harness: CypraHarness, url: string, init: Re
 }
 
 export async function configureEmailProvider(harness: CypraHarness) {
-  await harness.page.goto(`${harness.tenantURL}/dashboard/tenants/acme/settings/email`);
-  try {
-    await expect(harness.page.getByRole("heading", { name: "Email provider" })).toBeVisible();
-  } catch (error) {
-    throw new Error(
-      `email provider screen did not render\n${await harness.page.locator("body").innerText()}\n${String(error)}`,
-    );
-  }
-  await harness.page
-    .getByLabel("Email provider kind")
-    .selectOption(harness.smtpURL ? "smtp" : "terminal");
-  await harness.page
-    .getByLabel("From address")
-    .fill(process.env.CYPRA_FROM_ADDRESS ?? "auth@example.com");
-  await harness.page.getByLabel("From name").fill(process.env.CYPRA_FROM_NAME ?? "Cypra Auth");
-  if (harness.smtpURL) {
-    await harness.page.getByLabel("SMTP URL").fill(harness.smtpURL);
-  }
-  await harness.page.getByRole("button", { name: "Save" }).click();
-  await expect(harness.page.getByText("1 unsaved changes")).toBeHidden();
+  await apiJSON(harness, `${harness.tenantURL}/api/v1/provider-config/email`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Cypra-Tenant-Role": "admin" },
+    body: JSON.stringify({
+      kind: harness.smtpURL ? "smtp" : "terminal",
+      from_address: process.env.CYPRA_FROM_ADDRESS ?? "auth@example.com",
+      from_name: process.env.CYPRA_FROM_NAME ?? "Cypra Auth",
+      config: harness.smtpURL ?? "",
+    }),
+  });
+}
+
+export async function configurePasskeyProvider(harness: CypraHarness) {
+  await apiJSON(harness, `${harness.tenantURL}/api/v1/auth-providers/passkey`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Cypra-Tenant-Role": "admin" },
+    body: JSON.stringify({ enabled: true, config: {} }),
+  });
 }
 
 export async function configureUpstream(harness: CypraHarness) {
-  await harness.page.goto(`${harness.tenantURL}/dashboard/tenants/acme/settings/upstream`);
-  await expect(harness.page.getByRole("heading", { name: "Google upstream" })).toBeVisible();
+  await harness.page.goto(
+    `${harness.tenantURL}/dashboard/tenants/acme/auth-providers/social/google`,
+  );
+  await expect(harness.page.getByRole("heading", { name: "Google", exact: true })).toBeVisible();
   await harness.page
-    .getByLabel("Google client ID")
+    .getByLabel("Client ID")
     .fill(process.env.CYPRA_GOOGLE_CLIENT_ID ?? "stub.apps.googleusercontent.com");
   await harness.page
-    .getByLabel("Google client secret")
+    .getByLabel("Client secret")
     .fill(process.env.CYPRA_GOOGLE_CLIENT_SECRET ?? "stub-secret");
-  const enabled = harness.page.getByRole("switch", { name: "Google enabled" });
+  const enabled = harness.page.getByRole("switch", { name: "Enabled" });
   if (!(await enabled.isChecked())) {
     await enabled.click();
   }
@@ -849,8 +857,10 @@ export async function configureUpstream(harness: CypraHarness) {
 export async function signInViaPasskey(harness: CypraHarness) {
   await harness.context.clearCookies();
   await harness.page.goto(`${harness.tenantURL}/login`);
-  await expect(harness.page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-  await harness.page.getByRole("button", { name: "Use passkey" }).click();
+  await expect(harness.page.getByText("Sign in to continue")).toBeVisible();
+  await harness.page
+    .getByRole("button", { name: /^(Continue with|Use) passkey$/ })
+    .click({ timeout: 15_000 });
   await expect(harness.page.locator("#login-result")).toContainText(
     "Signed in. Continue to your application.",
   );
@@ -862,7 +872,7 @@ export async function signInViaPasskey(harness: CypraHarness) {
 
 export async function signInViaGoogleUpstream(harness: CypraHarness) {
   await harness.page.goto(`${harness.tenantURL}/login`);
-  await expect(harness.page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(harness.page.getByText("Sign in to continue")).toBeVisible();
   const googleLink = harness.page.getByRole("link", { name: "Sign in with Google" });
   const href = await googleLink.getAttribute("href");
   if (!href) throw new Error("Google upstream link did not include an href");

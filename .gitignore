@@ -1,12 +1,14 @@
 .env
 .env.*
 !.env.example
+!.env.production.example
 
 .data/
 .agent-browser/
 
 node_modules/
 dashboard/dist/
+dashboard/.vite/
 dashboard/node_modules/
 
 bin/cypra

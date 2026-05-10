@@ -33,7 +33,7 @@ jobs:
     env:
       DATABASE_URL: postgres://cypra:cypra@localhost:5432/cypra?sslmode=disable
       MIGRATE_DATABASE_URL: postgres://cypra:cypra@localhost:5432/cypra?sslmode=disable
-      MASTER_KEY: dev-only-change-me-dev-only-change-me-32b
+      MASTER_KEY: CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=
       LISTEN_ADDR: :8080
       PUBLIC_BASE_URL: https://cypra.localhost
       TRUSTED_PROXY_HEADERS: none
@@ -69,6 +69,9 @@ jobs:
 
       - name: Run CI pipeline
         run: make ci-pipeline
+
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium
 
       - name: Run example e2e harness smoke
         env:

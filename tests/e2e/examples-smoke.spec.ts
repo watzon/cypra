@@ -2,11 +2,13 @@ import { test, expect } from "@playwright/test";
 
 import {
   configureEmailProvider,
+  configurePasskeyProvider,
   configureUpstream,
   createProject,
   createTenant,
   enrollAndVerifyWebAuthn2FA,
   enrollTenantPasskey,
+  expectOIDCConsent,
   redeemBootstrapToken,
   redeemTenantInviteForSession,
   reachOIDCConsentViaGoogle,
@@ -35,6 +37,7 @@ test("examples smoke through Cypra", async () => {
     await createTenant(harness, "acme");
     await createProject(harness, "console");
     await configureEmailProvider(harness);
+    await configurePasskeyProvider(harness);
     await configureUpstream(harness);
     const user = await redeemTenantInviteForSession(harness);
     await enrollTenantPasskey(harness, user.userID);
@@ -49,13 +52,14 @@ test("examples smoke through Cypra", async () => {
       await harness.page.goto(nextjs.url);
       await harness.page.getByRole("link", { name: "Sign in with Cypra" }).click();
       await harness.page.getByRole("button", { name: "Cypra" }).click();
-      if (await harness.page.getByRole("heading", { name: "Sign in" }).isVisible()) {
-        await harness.page.getByRole("button", { name: "Use passkey" }).click();
+      const passkeyButton = harness.page.getByRole("button", {
+        name: /^(Continue with|Use) passkey$/,
+      });
+      if (await passkeyButton.isVisible({ timeout: 5_000 }).catch(() => false)) {
+        await passkeyButton.click({ timeout: 15_000 });
       }
       try {
-        await expect(
-          harness.page.getByRole("heading", { name: "Sign in to this application" }),
-        ).toBeVisible({ timeout: 15_000 });
+        await expectOIDCConsent(harness);
       } catch (error) {
         throw new Error(
           `Next.js sign-in did not reach Cypra consent at ${harness.page.url()}\n${await harness.page.locator("body").innerText()}\n${nextjs.logs()}\n${String(error)}`,

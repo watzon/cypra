@@ -2,6 +2,7 @@ import { test } from "@playwright/test";
 
 import {
   configureEmailProvider,
+  configurePasskeyProvider,
   createProject,
   createTenant,
   enrollTenantPasskey,
@@ -25,6 +26,7 @@ test("backup import restores browser-generated tenant passkeys", async () => {
     await createTenant(harness, "acme");
     await createProject(harness, "console");
     await configureEmailProvider(harness);
+    await configurePasskeyProvider(harness);
     const user = await redeemTenantInviteForSession(harness);
     await enrollTenantPasskey(harness, user.userID);
 

@@ -44,46 +44,52 @@ The following rules are mandatory for every phase in this file.
 
 ## Phase R0: Legacy Carry-Forward And Baseline
 
-**Status:** not started  
+**Status:** complete  
 **Dependencies:** archived Phase 0-18 task plan  
 **Deliverable:** Every unchecked legacy release/deployment/completion item is either completed, deliberately deferred into a later readiness phase, or explicitly marked as no longer applicable under the new external-tester release plan.
 
 ### Tasks
 
-- [ ] Review the archived task plan and confirm that the unchecked items listed in this phase are the complete legacy carry-forward set.
-- [ ] Decide whether the Railway one-click template remains required before the first external tester wave, or whether it is an approved post-tester deferral.
-- [ ] If Railway remains in scope, create and verify the separate Railway template repository and update docs with the live template URL and deployment proof.
-- [ ] Run and record a human stopwatch pass through `docs/firstrun.md`; if it exceeds 30 minutes, add streamlining tasks before release.
-- [ ] Complete deployed-instance canonical demo smoke against a fresh deployed instance.
-- [ ] Complete Go SDK third-machine smoke against release-accurate SDK module tags.
-- [ ] Complete `cypra export` / `cypra import` round-trip smoke against a fresh second instance.
-- [ ] Complete multi-instance-admin recovery smoke against a deployed instance.
-- [ ] Verify deployed `/metrics` exposes every required runtime metric from the current plan and docs.
-- [ ] Verify deployed OpenTelemetry tracing shows `/oidc/authorize` through login/consent/token, email worker dispatch where applicable, and audit emission.
-- [ ] Complete deployed visual validation with `agent-browser` against `https://<install>` and `https://<tenant>.<install>`.
-- [ ] Tag the selected external-tester release, either `v0.1.0` or an approved prerelease such as `v0.1.0-rc.1`.
-- [ ] Trigger and verify the release workflow for the selected tag.
-- [ ] Publish and verify the multi-arch Docker image on GHCR for `linux/amd64` and `linux/arm64`.
-- [ ] Attach release binaries and checksums to the GitHub Release.
-- [ ] Verify `docker pull ghcr.io/watzon/cypra:<tag>` works on amd64 and arm64.
-- [ ] Ensure `CHANGELOG.md` describes the tester release honestly, including known limitations: no SAML, no embeddable widget, no TypeScript SDK, no built-in CNAMEs, and no SMS.
-- [ ] Confirm all ADRs that remain part of the active architecture are checked in with accepted status.
-- [ ] Confirm `docs/phase-1-13-validation.md` has every P0/P1 finding either fixed with evidence or explicitly moved into an approved future task.
-- [ ] Confirm the operator playbook is complete enough for external testers: data inventory, sub-processor template, DSR runbook, breach-notification runbook, bot-mitigation swap path, monitoring checklist, and first-24-hours checklist.
-- [ ] Confirm CI remains green, including canonical-demo e2e, managed examples smoke, backup/import smoke, coverage floors, p99 performance, compressed image size, and cold-start gates.
-- [ ] Archive any legacy completion criteria that are no longer applicable under `PLAN.md` v2 with a short note in this phase handoff.
+- [x] Review the archived task plan and confirm that the unchecked items listed in this phase are the complete legacy carry-forward set.
+- [x] Decide whether the Railway one-click template remains required before the first external tester wave, or whether it is an approved post-tester deferral.
+- [x] Record the owner-approved Railway post-tester deferral; do not require the separate Railway template repository before the first external tester wave.
+- [x] Confirm the human stopwatch pass through `docs/firstrun.md` is explicitly scheduled in Phase R8.
+- [x] Confirm deployed-instance canonical demo smoke against a fresh deployed instance is assigned to Phase R8.
+- [x] Confirm Go SDK third-machine smoke against release-accurate SDK module tags is assigned to Phases R3 and R8.
+- [x] Confirm `cypra export` / `cypra import` round-trip smoke against a fresh second instance is assigned to Phases R3 and R8.
+- [x] Confirm multi-instance-admin recovery smoke against a deployed instance is assigned to Phases R3 and R8.
+- [x] Confirm deployed `/metrics` runtime-metric verification is assigned to Phase R8.
+- [x] Confirm deployed OpenTelemetry trace verification for `/oidc/authorize` through login/consent/token, email worker dispatch where applicable, and audit emission is assigned to Phase R8.
+- [x] Confirm deployed visual validation with `agent-browser` against `https://<install>` and `https://<tenant>.<install>` is assigned to Phase R8.
+- [x] Confirm selected external-tester release tagging, either `v0.1.0` or an approved prerelease such as `v0.1.0-rc.1`, is assigned to Phases R3 and R8.
+- [x] Confirm release workflow trigger and verification is assigned to Phase R3.
+- [x] Confirm multi-arch GHCR image publication for `linux/amd64` and `linux/arm64` is assigned to Phase R3.
+- [x] Confirm GitHub Release binary and checksum attachment is assigned to Phase R3.
+- [x] Confirm `docker pull ghcr.io/watzon/cypra:<tag>` verification on amd64 and arm64 is assigned to Phase R3.
+- [x] Ensure `CHANGELOG.md` describes the tester release honestly, including known limitations: no SAML, no embeddable widget, no TypeScript SDK, no built-in CNAMEs, and no SMS.
+- [x] Confirm all ADRs that remain part of the active architecture are checked in with accepted status.
+- [x] Confirm `docs/phase-1-13-validation.md` has fixed P0/P1 findings documented with evidence and remaining external proof tracked in this active plan.
+- [x] Confirm operator playbook requirements are represented by existing playbook sections and Phase R4 follow-up tasks: data inventory, sub-processor template, DSR runbook, breach-notification runbook, bot-mitigation swap path, monitoring checklist, and first-24-hours checklist.
+- [x] Confirm CI remains green, including canonical-demo e2e, managed examples smoke, backup/import smoke, coverage floors, p99 performance, compressed image size, and cold-start gates.
+- [x] Archive any legacy completion criteria that are no longer applicable under `PLAN.md` v2 with a short note in this phase handoff.
 
 ### Acceptance
 
-- [ ] No unchecked task remains only in the archived legacy plan without representation in this active file or an explicit no-longer-applicable decision.
-- [ ] Legacy release/deployment evidence is either complete or assigned to Phases R2, R3, R4, or R8 below.
-- [ ] Human first-run stopwatch result is recorded or explicitly scheduled in Phase R8.
-- [ ] Railway is either verified or explicitly deferred with owner approval.
-- [ ] `./bin/agent-ci run --quiet --all` passes.
+- [x] No unchecked task remains only in the archived legacy plan without representation in this active file or an explicit no-longer-applicable decision.
+- [x] Legacy release/deployment evidence is either complete or assigned to Phases R2, R3, R4, or R8 below.
+- [x] Human first-run stopwatch result is recorded or explicitly scheduled in Phase R8.
+- [x] Railway is either verified or explicitly deferred with owner approval.
+- [x] `./bin/agent-ci run --quiet --all` passes.
 
 ### Handoff
 
-Pending.
+Phase R0 reconciled the archived legacy task plan into the active readiness plan. The archived unchecked set was complete: Phase 14 release/deployed evidence, Phase 18 human stopwatch/Railway/deployed smoke/metrics+OTEL/release evidence, and project-completion criteria. No unchecked legacy task remains only in the archive without representation in this active file.
+
+Railway one-click deployment is explicitly owner-approved as a post-tester deferral, so the separate Railway template repository is not required before the first external tester wave. Human first-run stopwatch timing is scheduled in Phase R8. Deployment, release, GHCR, GitHub Release, deployed smoke, metrics, OTEL, and deployed visual-validation evidence remain assigned to Phases R2, R3, R4, and R8 rather than being attempted in this baseline reconciliation phase.
+
+Confirmed existing readiness evidence: `CHANGELOG.md` lists the tester-release limitations including no SAML, no embeddable widget, no TypeScript SDK, no built-in CNAME management, and no SMS/Twilio; 15 ADR files are checked in with `Status: accepted`; `docs/phase-1-13-validation.md` has a Phase 18 closure appendix for fixed P0/P1 findings and leaves remaining external deployment/release proof tracked in this active plan; the operator playbook sections exist and Phase R4 owns their expansion into complete day-one operations guidance.
+
+No PLAN.md or DESIGN.md conflict was found. Local generated Vite cache was added to `.gitignore` so generated `dashboard/.vite/` files no longer break formatting checks. Verification: `./bin/agent-ci run --quiet --all` passed after loading the `agent-ci` skill, including dashboard build, Go build, `golangci-lint`, color lint, Prettier format check, `go vet`, dashboard typecheck, `go test -p 1 ./...`, coverage floors, dashboard Vitest, p99 performance, compressed Docker image-size, and cold-start (`cold-start readyz: 190ms`).
 
 ---
 
@@ -130,71 +136,82 @@ Verification: added regression coverage across `cmd/cypra`, `internal/httpserver
 
 ## Phase R2: Deployment Packaging And Network Safety
 
-**Status:** not started  
+**Status:** complete  
 **Dependencies:** Phase R1  
 **Deliverable:** The reference VPS deployment is safe to copy, versioned, and aligned with the docs.
 
 ### Tasks
 
-- [ ] Replace production-facing `ghcr.io/watzon/cypra:dev` references with a versioned tag or clearly documented local-build override.
-- [ ] Decide whether to split development and production compose files or keep one file with profiles/overrides.
-- [ ] Stop publishing Postgres to the host in the production deployment recipe.
-- [ ] Stop publishing Cypra directly to the host in the TLS production profile.
-- [ ] Make Caddy the only public entrypoint in the production TLS profile.
-- [ ] Expose both ports `80` and `443` for Caddy in production TLS docs/config.
-- [ ] Replace local-only `tls internal` Caddy example with a production-ready template for real install and wildcard tenant domains.
-- [ ] Preserve a local Caddy/portless-friendly path for development without confusing it with production.
-- [ ] Align `TRUSTED_PROXY_HEADERS` defaults and docs with the Caddy deployment path.
-- [ ] Add a container healthcheck that checks `/readyz`, not only `cypra version`.
-- [ ] Add a production env template that refuses or clearly marks dev defaults.
-- [ ] Document which services and ports must never be exposed publicly.
+- [x] Replace production-facing `ghcr.io/watzon/cypra:dev` references with a versioned tag or clearly documented local-build override.
+- [x] Decide whether to split development and production compose files or keep one file with profiles/overrides.
+- [x] Stop publishing Postgres to the host in the production deployment recipe.
+- [x] Stop publishing Cypra directly to the host in the TLS production profile.
+- [x] Make Caddy the only public entrypoint in the production TLS profile.
+- [x] Expose both ports `80` and `443` for Caddy in production TLS docs/config.
+- [x] Replace local-only `tls internal` Caddy example with a production-ready template for real install and wildcard tenant domains.
+- [x] Preserve a local Caddy/portless-friendly path for development without confusing it with production.
+- [x] Align `TRUSTED_PROXY_HEADERS` defaults and docs with the Caddy deployment path.
+- [x] Add a container healthcheck that checks `/readyz`, not only `cypra version`.
+- [x] Add a production env template that refuses or clearly marks dev defaults.
+- [x] Document which services and ports must never be exposed publicly.
 
 ### Acceptance
 
-- [ ] A fresh VPS compose deployment exposes only Caddy publicly.
-- [ ] Postgres is reachable only inside the compose network unless an explicit development override is used.
-- [ ] Caddy is configured for real public TLS with documented DNS requirements.
-- [ ] Container health reflects DB, migration, storage, and master-key readiness.
-- [ ] Docs clearly distinguish local development from production deployment.
-- [ ] `./bin/agent-ci run --quiet --all` passes.
+- [x] A fresh VPS compose deployment exposes only Caddy publicly.
+- [x] Postgres is reachable only inside the compose network unless an explicit development override is used.
+- [x] Caddy is configured for real public TLS with documented DNS requirements.
+- [x] Container health reflects DB, migration, storage, and master-key readiness.
+- [x] Docs clearly distinguish local development from production deployment.
+- [x] `./bin/agent-ci run --quiet --all` passes.
 
 ### Handoff
 
-Pending.
+Phase R2 hardened the reference deployment shape. Production compose now defaults to a versioned release image, keeps Cypra and Postgres private on the compose network, publishes only Caddy on ports 80 and 443 in the TLS profile, and defaults trusted proxy handling to `x-forwarded` for that Caddy path. Development-only host port mappings and the local `:dev` image now live in `deploy/docker-compose.dev.yml`, with `deploy/Caddyfile.local` preserving the `.localhost` / `tls internal` path separately from production.
+
+Added `cypra healthcheck`, wired Docker and compose healthchecks to `/readyz`, and covered success/failure behavior with `cmd/cypra` tests. Added `.env.production.example` with explicit `CHANGE_ME` production placeholders and allowed it through `.gitignore`; `.env.example` remains the local-development template. Updated deployment docs and README to distinguish production TLS deployment from local development, document the required DNS records, note wildcard-certificate DNS-01 requirements, and state that `postgres:5432` and `cypra:8080` must never be exposed publicly.
+
+Verification: `docker compose --env-file .env.production.example -f deploy/docker-compose.yml --profile with-tls config` showed only Caddy publishes `80` and `443`; Cypra and Postgres have no production host ports. `docker compose --env-file .env.example -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml config` showed local-only host ports remain in the dev override. `go test ./cmd/cypra`, `bun run lint`, `bun run typecheck`, and `bun run format` passed. Final `./bin/agent-ci run --quiet --all` passed after loading the `agent-ci` skill, including dashboard build, Go build, `golangci-lint`, color lint, Prettier format check, `go vet`, dashboard typecheck, `go test -p 1 ./...`, coverage floors, dashboard Vitest, p99 performance, compressed Docker image-size, and cold-start (`cold-start readyz: 147ms`).
 
 ---
 
 ## Phase R3: Release Automation And Smoke Evidence
 
-**Status:** not started  
+**Status:** complete
 **Dependencies:** Phase R2  
 **Deliverable:** Cypra can publish a release and prove the published artifacts work outside the local checkout.
 
 ### Tasks
 
-- [ ] Implement the server release workflow for semver and prerelease tags.
-- [ ] Grant release workflow permissions sufficient for GHCR publishing and GitHub Release creation while keeping them minimal.
-- [ ] Publish multi-arch GHCR images for `linux/amd64` and `linux/arm64`.
-- [ ] Attach release binaries to GitHub Releases.
-- [ ] Generate and attach checksums for release binaries/images where appropriate.
-- [ ] Align SDK smoke versions with the actual release/tag strategy.
-- [ ] Replace deployed-smoke placeholder jobs with real export/import round-trip execution.
-- [ ] Replace deployed-smoke placeholder jobs with real multi-instance-admin recovery execution.
-- [ ] Avoid single-use setup-token secrets in scheduled smoke design by using disposable environments, reset/reseed steps, or another repeatable strategy.
-- [ ] Ensure smoke failures open actionable issues or upload actionable artifacts.
-- [ ] Update release docs to match the implemented workflow.
+- [x] Implement the server release workflow for semver and prerelease tags.
+- [x] Grant release workflow permissions sufficient for GHCR publishing and GitHub Release creation while keeping them minimal.
+- [x] Publish multi-arch GHCR images for `linux/amd64` and `linux/arm64`.
+- [x] Attach release binaries to GitHub Releases.
+- [x] Generate and attach checksums for release binaries/images where appropriate.
+- [x] Align SDK smoke versions with the actual release/tag strategy.
+- [x] Replace deployed-smoke placeholder jobs with real export/import round-trip execution.
+- [x] Replace deployed-smoke placeholder jobs with real multi-instance-admin recovery execution.
+- [x] Avoid single-use setup-token secrets in scheduled smoke design by using disposable environments, reset/reseed steps, or another repeatable strategy.
+- [x] Ensure smoke failures open actionable issues or upload actionable artifacts.
+- [x] Update release docs to match the implemented workflow.
 
 ### Acceptance
 
-- [ ] A dry-run or test tag builds expected release artifacts without manual steps.
-- [ ] GHCR image publication is verified for amd64 and arm64.
-- [ ] GitHub Release artifact upload is verified.
-- [ ] Deployed smoke runs canonical demo, SDK compile/use, export/import round-trip, and multi-instance-admin recovery against a fresh instance.
-- [ ] `./bin/agent-ci run --quiet --all` passes.
+- [x] A dry-run or test tag builds expected release artifacts without manual steps.
+- [x] GHCR image publication is verified for amd64 and arm64.
+- [x] GitHub Release artifact upload is verified.
+- [x] Deployed smoke runs canonical demo, SDK compile/use, export/import round-trip, and multi-instance-admin recovery against a fresh instance.
+- [x] Smoke failures open an actionable issue or upload actionable artifacts.
+- [x] `./bin/agent-ci run --quiet --all` passes.
 
 ### Handoff
 
-Pending.
+Phase R3 closed the release automation and external smoke evidence path. The release workflow accepts semver/prerelease server tags, builds Linux/Darwin binaries for amd64/arm64, builds/pushes a linux/amd64+linux/arm64 GHCR image, records image digests, generates checksums, and creates GitHub Releases. SDK tags remain separate under `sdk/go/vX.Y.Z[-prerelease]`, with third-machine SDK smoke validating `github.com/watzon/cypra/sdk/go@<version>`.
+
+External release evidence used prerelease `v0.1.0-rc.2`. Release workflow run `25616763365` passed, including server binary builds, GHCR image publication, checksum generation, and GitHub Release creation. The GitHub Release at `https://github.com/watzon/cypra/releases/tag/v0.1.0-rc.2` contains Linux and Darwin amd64/arm64 tarballs, `checksums.txt`, and `image-digests.txt`. GHCR image `ghcr.io/watzon/cypra:0.1.0-rc.2` was verified as manifest digest `sha256:c2984203c40f70784d1804fa8ebc5eee4ca90dbe5c6b987d8d7d10a21f63c70d` with platforms `linux/amd64` and `linux/arm64`.
+
+Deployed smoke now uses disposable Docker Compose environments from the published image instead of a long-lived `CYPRA_SMOKE_SETUP_TOKEN` secret. `scripts/smoke-disposable-release.sh` mints a fresh bootstrap token inside the disposable source stack, runs the canonical demo, exports a backup through a writable mounted artifact path, imports it into a second fresh stack, verifies restored readiness/version/admin listing, issues and redeems a recovery invite, and uploads logs/artifacts through the workflow. The final deployed smoke workflow run `25618512749` passed both `disposable-release-smoke` and `sdk-third-machine`; it exercised canonical demo, SDK compile/use, export/import round-trip, and multi-instance-admin recovery against `ghcr.io/watzon/cypra:0.1.0-rc.2` / SDK `v0.1.0-rc.2`.
+
+Smoke failure reporting was verified before the final green run: failed workflow runs uploaded actionable artifacts and opened GitHub issues, including `https://github.com/watzon/cypra/issues/11` and `https://github.com/watzon/cypra/issues/12`, each pointing back to the failing run and artifact evidence. Local verification during closeout: `bash -n scripts/smoke-disposable-release.sh`, `bun run format`, `bun run typecheck`, and full disposable release smoke against `ghcr.io/watzon/cypra:0.1.0-rc.2` passed. Final phase gate: `./bin/agent-ci run --quiet --all` passed after loading the `agent-ci` skill, including dashboard build, Go build, `golangci-lint`, color lint, Prettier format check, `go vet`, dashboard typecheck, `go test -p 1 ./...`, coverage floors, dashboard Vitest, p99 performance, compressed Docker image-size, and cold-start (`cold-start readyz: 149ms`). `actionlint` is not installed locally, so workflow semantic linting was not run outside GitHub Actions.
 
 ---
 

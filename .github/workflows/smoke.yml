@@ -2,6 +2,17 @@ name: Deployed Smoke
 
 on:
   workflow_dispatch:
+    inputs:
+      image:
+        description: "Published Cypra image to smoke"
+        required: true
+        default: "ghcr.io/watzon/cypra:0.1.0-rc.2"
+        type: string
+      sdk_version:
+        description: "Go SDK module version, matching sdk/go/vX.Y.Z tag"
+        required: true
+        default: "v0.1.0-rc.2"
+        type: string
   schedule:
     - cron: "43 4 * * *"
 
@@ -10,14 +21,11 @@ permissions:
   issues: write
 
 jobs:
-  canonical-demo:
+  disposable-release-smoke:
     runs-on: ubuntu-latest
-    if: ${{ secrets.CYPRA_SMOKE_BASE_URL != '' && secrets.CYPRA_SMOKE_TENANT_URL != '' && secrets.CYPRA_SMOKE_SETUP_TOKEN != '' }}
     env:
-      CYPRA_E2E_LIVE: "1"
-      CYPRA_BASE_URL: ${{ secrets.CYPRA_SMOKE_BASE_URL }}
-      CYPRA_TENANT_URL: ${{ secrets.CYPRA_SMOKE_TENANT_URL }}
-      CYPRA_SETUP_TOKEN: ${{ secrets.CYPRA_SMOKE_SETUP_TOKEN }}
+      CYPRA_SMOKE_IMAGE: ${{ inputs.image || 'ghcr.io/watzon/cypra:0.1.0-rc.2' }}
+      CYPRA_SMOKE_ARTIFACT_DIR: smoke-artifacts/release
     steps:
       - uses: actions/checkout@v4
       - uses: oven-sh/setup-bun@v2
@@ -25,31 +33,41 @@ jobs:
           bun-version: 1.3.11
       - name: Install dependencies
         run: bun install --frozen-lockfile
-      - name: Run canonical demo smoke
-        run: bunx playwright test tests/e2e/canonical-demo/canonical-demo.spec.ts
-      - name: Open issue on failure
-        if: failure()
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh issue create --title "Cypra deployed smoke failed" --body "The scheduled canonical demo smoke failed for ${CYPRA_BASE_URL}. See workflow run ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}."
+      - name: Install Playwright browser
+        run: bunx playwright install --with-deps chromium
+      - name: Pull published image
+        run: docker pull "$CYPRA_SMOKE_IMAGE"
+      - name: Run disposable release smoke
+        run: bash scripts/smoke-disposable-release.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: disposable-release-smoke-artifacts
+          path: smoke-artifacts/release
+          if-no-files-found: ignore
 
   sdk-third-machine:
     runs-on: ubuntu-latest
-    if: ${{ secrets.CYPRA_SMOKE_BASE_URL != '' }}
-    container: golang:1.23-alpine
+    container: golang:1.26-alpine
+    env:
+      SDK_VERSION: ${{ inputs.sdk_version || 'v0.1.0-rc.2' }}
     steps:
+      - name: Install git
+        run: apk add --no-cache git
       - name: Compile Go SDK smoke program
         run: |
+          set -euo pipefail
           mkdir /tmp/sdk-smoke
           cd /tmp/sdk-smoke
           go mod init smoke
-          go get github.com/watzon/cypra/sdk/go/oidc@v1.0.0
-          go get github.com/watzon/cypra/sdk/go/admin@v1.0.0
+          go get "github.com/watzon/cypra/sdk/go@${SDK_VERSION}"
+          go get "github.com/watzon/cypra/sdk/go/admin@${SDK_VERSION}" "github.com/watzon/cypra/sdk/go/oidc@${SDK_VERSION}"
           cat > main.go <<'EOF'
           package main
 
           import (
             "fmt"
+
             admin "github.com/watzon/cypra/sdk/go/admin"
             oidc "github.com/watzon/cypra/sdk/go/oidc"
           )
@@ -60,20 +78,24 @@ jobs:
             fmt.Println("sdk smoke compiled")
           }
           EOF
+          go mod tidy
           go build ./...
 
-  export-import-roundtrip:
+  report-failure:
     runs-on: ubuntu-latest
-    if: ${{ secrets.CYPRA_SMOKE_BASE_URL != '' }}
+    needs:
+      - disposable-release-smoke
+      - sdk-third-machine
+    if: failure()
     steps:
-      - uses: actions/checkout@v4
-      - name: Placeholder
-        run: echo "Deployment-backed export/import replay is enabled after v0.1 image publication."
-
-  instance-admin-recovery:
-    runs-on: ubuntu-latest
-    if: ${{ secrets.CYPRA_SMOKE_BASE_URL != '' }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Placeholder
-        run: echo "Deployment-backed instance-admin recovery replay is enabled after v0.1 image publication."
+      - name: Open actionable issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          IMAGE: ${{ inputs.image || 'ghcr.io/watzon/cypra:0.1.0-rc.2' }}
+          SDK_VERSION: ${{ inputs.sdk_version || 'v0.1.0-rc.2' }}
+        run: |
+          gh api "repos/${REPOSITORY}/issues" \
+            --field title="Cypra deployed smoke failed" \
+            --field body="The deployed smoke workflow failed for image ${IMAGE} and SDK ${SDK_VERSION}. Review ${RUN_URL}; the disposable-release-smoke job uploads logs, env snapshots, backup artifacts, and recovery evidence when available."

@@ -61,18 +61,22 @@ Local HTTPS routes are served through `portless`:
 - `https://cypra.localhost`
 - `https://*.cypra.localhost`
 
-## Quick Start With Docker Compose
+## Docker Compose
 
-The reference compose stack is Cypra plus Postgres:
+The production compose stack keeps Cypra and Postgres private on the compose network. For a public VPS, copy `.env.production.example`, set a versioned `CYPRA_IMAGE`, and run the TLS profile so Caddy is the only public entrypoint:
 
 ```sh
-docker compose -f deploy/docker-compose.yml up
+cp .env.production.example .env.production
+docker compose --env-file .env.production -f deploy/docker-compose.yml --profile with-tls up -d
 ```
 
-For TLS termination with Caddy, use the `with-tls` profile after configuring DNS and `deploy/Caddyfile.example`:
+For local development, use `make dev` instead. It layers `deploy/docker-compose.dev.yml` to publish local-only ports and runs HTTPS through `portless`.
+
+To test an unpublished image locally:
 
 ```sh
-docker compose -f deploy/docker-compose.yml --profile with-tls up
+docker build -t cypra:local .
+CYPRA_IMAGE=cypra:local docker compose --env-file .env -f deploy/docker-compose.yml -f deploy/docker-compose.dev.yml up -d cypra
 ```
 
 The Railway one-click recipe is documented in [`docs/deploy/railway-template.md`](./docs/deploy/railway-template.md). Publication of the separate Railway template repository is a deployment task.
