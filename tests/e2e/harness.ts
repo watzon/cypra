@@ -793,7 +793,9 @@ async function apiJSON<T = unknown>(harness: CypraHarness, url: string, init: Re
 export async function configureEmailProvider(harness: CypraHarness) {
   await harness.page.goto(`${harness.tenantURL}/dashboard/tenants/acme/settings/email`);
   try {
-    await expect(harness.page.getByRole("heading", { name: "Email provider" })).toBeVisible();
+    await expect(
+      harness.page.getByRole("heading", { name: "Email provider", exact: true }),
+    ).toBeVisible();
   } catch (error) {
     throw new Error(
       `email provider screen did not render\n${await harness.page.locator("body").innerText()}\n${String(error)}`,
