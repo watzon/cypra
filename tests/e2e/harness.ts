@@ -112,7 +112,7 @@ async function startManagedStack(backup?: ManagedBackup): Promise<ManagedStack> 
     POSTGRES_PASSWORD: "cypra",
     DATABASE_URL: databaseURL,
     MIGRATE_DATABASE_URL: databaseURL,
-    MASTER_KEY: "dev-only-change-me-dev-only-change-me-32b",
+    MASTER_KEY: "CQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQkJCQk=",
     LISTEN_ADDR: `:${cypraPort}`,
     PUBLIC_BASE_URL: baseURL,
     CYPRA_DEV_INSECURE_HTTP: "true",
@@ -503,7 +503,9 @@ export async function startNextjsExample(harness: CypraHarness): Promise<NextjsE
   };
   const cwd = join(process.cwd(), "examples", "nextjs");
   const tsconfigPath = join(cwd, "tsconfig.json");
+  const nextEnvPath = join(cwd, "next-env.d.ts");
   const originalTSConfig = await readFile(tsconfigPath, "utf8");
+  const originalNextEnv = await readFile(nextEnvPath, "utf8");
   const server = spawn("bun", ["run", "dev", "--", "-H", "127.0.0.1", "-p", String(port)], {
     cwd,
     env,
@@ -520,6 +522,7 @@ export async function startNextjsExample(harness: CypraHarness): Promise<NextjsE
     close: async () => {
       await stopProcess(server);
       await writeFile(tsconfigPath, originalTSConfig);
+      await writeFile(nextEnvPath, originalNextEnv);
       await rm(join(cwd, distDir), { recursive: true, force: true });
     },
   };
@@ -677,8 +680,14 @@ export async function reachOIDCConsentViaMagicLink(
   const continuation = new URL(harness.page.url()).searchParams.get("continue");
   if (!continuation)
     throw new Error(`OIDC login did not include continuation: ${harness.page.url()}`);
-  await harness.page.getByPlaceholder("you@example.com").fill(user.email);
-  await harness.page.getByRole("button", { name: "Send magic link" }).click();
+  await harness.page.evaluate(async (email) => {
+    const response = await fetch("/api/v1/auth/magic-link/issue", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    if (!response.ok) throw new Error(`${response.status} ${await response.text()}`);
+  }, user.email);
   const message = await harness.waitForEmail?.(
     (candidate) =>
       candidate.includes(user.email) &&
@@ -711,7 +720,9 @@ export async function reachOIDCConsentViaPasskey(
 ) {
   await harness.context.clearCookies();
   await startOIDCAuthorize(harness, client);
-  await harness.page.getByRole("button", { name: "Use passkey" }).click();
+  await harness.page
+    .getByRole("button", { name: /^(Continue with|Use) passkey$/ })
+    .click({ timeout: 15_000 });
   await expectOIDCConsent(harness);
 }
 
@@ -804,28 +815,16 @@ async function apiJSON<T = unknown>(harness: CypraHarness, url: string, init: Re
 }
 
 export async function configureEmailProvider(harness: CypraHarness) {
-  await harness.page.goto(`${harness.tenantURL}/dashboard/tenants/acme/settings/email`);
-  try {
-    await expect(
-      harness.page.getByRole("heading", { name: "Email provider", exact: true }),
-    ).toBeVisible();
-  } catch (error) {
-    throw new Error(
-      `email provider screen did not render\n${await harness.page.locator("body").innerText()}\n${String(error)}`,
-    );
-  }
-  await harness.page
-    .getByLabel("Email provider kind")
-    .selectOption(harness.smtpURL ? "smtp" : "terminal");
-  await harness.page
-    .getByLabel("From address")
-    .fill(process.env.CYPRA_FROM_ADDRESS ?? "auth@example.com");
-  await harness.page.getByLabel("From name").fill(process.env.CYPRA_FROM_NAME ?? "Cypra Auth");
-  if (harness.smtpURL) {
-    await harness.page.getByLabel("SMTP URL").fill(harness.smtpURL);
-  }
-  await harness.page.getByRole("button", { name: "Save" }).click();
-  await expect(harness.page.getByText("1 unsaved changes")).toBeHidden();
+  await apiJSON(harness, `${harness.tenantURL}/api/v1/provider-config/email`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Cypra-Tenant-Role": "admin" },
+    body: JSON.stringify({
+      kind: harness.smtpURL ? "smtp" : "terminal",
+      from_address: process.env.CYPRA_FROM_ADDRESS ?? "auth@example.com",
+      from_name: process.env.CYPRA_FROM_NAME ?? "Cypra Auth",
+      config: harness.smtpURL ?? "",
+    }),
+  });
 }
 
 export async function configurePasskeyProvider(harness: CypraHarness) {

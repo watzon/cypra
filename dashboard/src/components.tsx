@@ -79,7 +79,7 @@ export function Button({
         variant === "ghost" &&
           "border-transparent bg-transparent text-text-secondary hover:bg-bg-elevated hover:text-text-primary",
         variant === "destructive" &&
-          "border-status-error bg-status-error text-white hover:opacity-90",
+          "border-status-error-strong bg-status-error-strong text-white hover:opacity-90",
         className,
       )}
       disabled={Boolean(disabled) || loading}

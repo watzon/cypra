@@ -42,6 +42,7 @@
   --status-success: #22c55e;
   --status-warn: #f59e0b;
   --status-error: #ef4444;
+  --status-error-strong: #b91c1c;
   --status-info: #3b82f6;
   --status-pending: #a855f7;
   --context-instance: #a78bfa;
@@ -78,6 +79,7 @@
   --status-success: #16a34a;
   --status-warn: #d97706;
   --status-error: #dc2626;
+  --status-error-strong: #dc2626;
   --status-info: #2563eb;
   --status-pending: #9333ea;
   --context-instance: #7c3aed;
@@ -169,6 +171,7 @@
   --color-status-success: var(--status-success);
   --color-status-warn: var(--status-warn);
   --color-status-error: var(--status-error);
+  --color-status-error-strong: var(--status-error-strong);
   --color-status-info: var(--status-info);
   --color-status-pending: var(--status-pending);
   --color-context-instance: var(--context-instance);
