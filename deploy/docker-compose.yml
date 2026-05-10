@@ -1,6 +1,6 @@
 services:
   cypra:
-    image: ${CYPRA_IMAGE:-ghcr.io/watzon/cypra:v0.1.0-rc.1}
+    image: ${CYPRA_IMAGE:-ghcr.io/watzon/cypra:0.1.0-rc.1}
     depends_on:
       postgres:
         condition: service_healthy

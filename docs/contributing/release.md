@@ -12,10 +12,10 @@ Server tags use `vX.Y.Z` for stable releases and `vX.Y.Z-rc.N` for prereleases.
 4. Dry-run the workflow from GitHub Actions with `workflow_dispatch`, for example tag `v0.1.0-rc.1` and `dry_run=true`.
 5. Confirm the dry-run artifacts include the platform archives, `checksums.txt`, and the dry-run OCI image checksum.
 6. Push the release tag, for example `git tag v0.1.0-rc.1 && git push origin v0.1.0-rc.1`.
-7. Let `.github/workflows/release.yml` publish `ghcr.io/watzon/cypra:<version>`, plus `latest` only for stable non-prerelease tags.
+7. Let `.github/workflows/release.yml` publish `ghcr.io/watzon/cypra:<version-without-v>`, plus `latest` only for stable non-prerelease tags.
 8. Confirm the GitHub Release contains all binary archives, `checksums.txt`, and `image-digests.txt`.
 
-The release workflow builds Linux and Darwin binaries for `amd64` and `arm64`, publishes a multi-arch GHCR image for `linux/amd64` and `linux/arm64`, and records the published image digest as the image verification artifact.
+The release workflow builds Linux and Darwin binaries for `amd64` and `arm64`, publishes a multi-arch GHCR image for `linux/amd64` and `linux/arm64`, and records the published image digest as the image verification artifact. Server git tags include the leading `v`; Docker image tags drop it, so `v0.1.0-rc.1` publishes `ghcr.io/watzon/cypra:0.1.0-rc.1`.
 
 ## Go SDK Release
 
@@ -52,5 +52,5 @@ On failure, the workflow uploads the disposable stack logs and smoke artifacts, 
 You can run the disposable published-image smoke locally after installing dependencies and Docker:
 
 ```sh
-CYPRA_SMOKE_IMAGE=ghcr.io/watzon/cypra:v0.1.0-rc.1 bash scripts/smoke-disposable-release.sh
+CYPRA_SMOKE_IMAGE=ghcr.io/watzon/cypra:0.1.0-rc.1 bash scripts/smoke-disposable-release.sh
 ```

@@ -6,7 +6,7 @@ on:
       image:
         description: "Published Cypra image to smoke"
         required: true
-        default: "ghcr.io/watzon/cypra:v0.1.0-rc.1"
+        default: "ghcr.io/watzon/cypra:0.1.0-rc.1"
         type: string
       sdk_version:
         description: "Go SDK module version, matching sdk/go/vX.Y.Z tag"
@@ -24,7 +24,7 @@ jobs:
   disposable-release-smoke:
     runs-on: ubuntu-latest
     env:
-      CYPRA_SMOKE_IMAGE: ${{ inputs.image || 'ghcr.io/watzon/cypra:v0.1.0-rc.1' }}
+      CYPRA_SMOKE_IMAGE: ${{ inputs.image || 'ghcr.io/watzon/cypra:0.1.0-rc.1' }}
       CYPRA_SMOKE_ARTIFACT_DIR: smoke-artifacts/release
     steps:
       - uses: actions/checkout@v4
@@ -90,7 +90,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-          IMAGE: ${{ inputs.image || 'ghcr.io/watzon/cypra:v0.1.0-rc.1' }}
+          IMAGE: ${{ inputs.image || 'ghcr.io/watzon/cypra:0.1.0-rc.1' }}
           SDK_VERSION: ${{ inputs.sdk_version || 'v0.1.0-rc.1' }}
         run: |
           gh issue create \
