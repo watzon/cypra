@@ -61,6 +61,7 @@ jobs:
           cd /tmp/sdk-smoke
           go mod init smoke
           go get "github.com/watzon/cypra/sdk/go@${SDK_VERSION}"
+          go get "github.com/watzon/cypra/sdk/go/admin@${SDK_VERSION}" "github.com/watzon/cypra/sdk/go/oidc@${SDK_VERSION}"
           cat > main.go <<'EOF'
           package main
 
@@ -77,6 +78,7 @@ jobs:
             fmt.Println("sdk smoke compiled")
           }
           EOF
+          go mod tidy
           go build ./...
 
   report-failure:
@@ -89,10 +91,11 @@ jobs:
       - name: Open actionable issue
         env:
           GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           IMAGE: ${{ inputs.image || 'ghcr.io/watzon/cypra:0.1.0-rc.1' }}
           SDK_VERSION: ${{ inputs.sdk_version || 'v0.1.0-rc.1' }}
         run: |
-          gh issue create \
-            --title "Cypra deployed smoke failed" \
-            --body "The deployed smoke workflow failed for image ${IMAGE} and SDK ${SDK_VERSION}. Review ${RUN_URL}; the disposable-release-smoke job uploads logs, env snapshots, backup artifacts, and recovery evidence when available."
+          gh api "repos/${REPOSITORY}/issues" \
+            --field title="Cypra deployed smoke failed" \
+            --field body="The deployed smoke workflow failed for image ${IMAGE} and SDK ${SDK_VERSION}. Review ${RUN_URL}; the disposable-release-smoke job uploads logs, env snapshots, backup artifacts, and recovery evidence when available."

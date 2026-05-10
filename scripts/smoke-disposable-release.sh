@@ -39,7 +39,7 @@ DATABASE_URL=postgres://cypra:cypra-smoke-postgres@postgres:5432/cypra?sslmode=d
 MIGRATE_DATABASE_URL=postgres://cypra:cypra-smoke-postgres@postgres:5432/cypra?sslmode=disable
 CYPRA_CONTAINER_DATABASE_URL=postgres://cypra:cypra-smoke-postgres@postgres:5432/cypra?sslmode=disable
 CYPRA_CONTAINER_MIGRATE_DATABASE_URL=postgres://cypra:cypra-smoke-postgres@postgres:5432/cypra?sslmode=disable
-MASTER_KEY=dev-only-change-me-dev-only-change-me-32b
+MASTER_KEY=00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff
 MASTER_KEY_FILE=
 LISTEN_ADDR=:8080
 PUBLIC_BASE_URL=http://localhost:${http_port}
