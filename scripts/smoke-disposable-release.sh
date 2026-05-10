@@ -122,9 +122,7 @@ CYPRA_TENANT_URL="$source_tenant_url" \
 CYPRA_SETUP_TOKEN="$setup_token" \
 bunx playwright test tests/e2e/canonical-demo/canonical-demo.spec.ts --reporter=line
 
-printf '%s\n' "$passphrase" | compose_source exec -T cypra export --out /var/lib/cypra/storage/smoke-backup.json --passphrase-from-stdin
-source_container="$(compose_source ps -q cypra)"
-docker cp "${source_container}:/var/lib/cypra/storage/smoke-backup.json" "$backup_path"
+printf '%s\n' "$passphrase" | compose_source run --rm -T -v "${PWD}/${artifact_dir}:/smoke" cypra export --out /smoke/smoke-backup.json --passphrase-from-stdin
 test -s "$backup_path"
 
 start_stack restore "${artifact_dir}/restore-token.txt" "$restore_base_url"

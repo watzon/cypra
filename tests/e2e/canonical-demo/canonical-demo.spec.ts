@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 
 import {
   configureEmailProvider,
+  configurePasskeyProvider,
   configureUpstream,
   createProject,
   createTenant,
@@ -42,6 +43,7 @@ test("canonical demo completes inside the unattended timing budget", async () =>
     await timedStep("create tenant", () => createTenant(harness, "acme"));
     await timedStep("create project", () => createProject(harness, "console"));
     await timedStep("configure email provider", () => configureEmailProvider(harness));
+    await timedStep("configure passkey provider", () => configurePasskeyProvider(harness));
     await timedStep("configure Google upstream", () => configureUpstream(harness));
     await timedStep("Next.js downstream sign-in", async () => {
       const user = await redeemTenantInviteForSession(harness);

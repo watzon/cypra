@@ -828,6 +828,14 @@ export async function configureEmailProvider(harness: CypraHarness) {
   await expect(harness.page.getByText("1 unsaved changes")).toBeHidden();
 }
 
+export async function configurePasskeyProvider(harness: CypraHarness) {
+  await apiJSON(harness, `${harness.tenantURL}/api/v1/auth-providers/passkey`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", "X-Cypra-Tenant-Role": "admin" },
+    body: JSON.stringify({ enabled: true, config: {} }),
+  });
+}
+
 export async function configureUpstream(harness: CypraHarness) {
   await harness.page.goto(
     `${harness.tenantURL}/dashboard/tenants/acme/auth-providers/social/google`,
@@ -851,7 +859,9 @@ export async function signInViaPasskey(harness: CypraHarness) {
   await harness.context.clearCookies();
   await harness.page.goto(`${harness.tenantURL}/login`);
   await expect(harness.page.getByText("Sign in to continue")).toBeVisible();
-  await harness.page.getByRole("button", { name: /^(Continue with|Use) passkey$/ }).click();
+  await harness.page
+    .getByRole("button", { name: /^(Continue with|Use) passkey$/ })
+    .click({ timeout: 15_000 });
   await expect(harness.page.locator("#login-result")).toContainText(
     "Signed in. Continue to your application.",
   );
