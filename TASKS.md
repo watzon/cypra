@@ -176,7 +176,7 @@ Verification: `docker compose --env-file .env.production.example -f deploy/docke
 
 ## Phase R3: Release Automation And Smoke Evidence
 
-**Status:** in progress
+**Status:** complete
 **Dependencies:** Phase R2  
 **Deliverable:** Cypra can publish a release and prove the published artifacts work outside the local checkout.
 
@@ -196,22 +196,22 @@ Verification: `docker compose --env-file .env.production.example -f deploy/docke
 
 ### Acceptance
 
-- [ ] A dry-run or test tag builds expected release artifacts without manual steps.
-- [ ] GHCR image publication is verified for amd64 and arm64.
-- [ ] GitHub Release artifact upload is verified.
-- [ ] Deployed smoke runs canonical demo, SDK compile/use, export/import round-trip, and multi-instance-admin recovery against a fresh instance.
-- [ ] Smoke failures open an actionable issue or upload actionable artifacts.
+- [x] A dry-run or test tag builds expected release artifacts without manual steps.
+- [x] GHCR image publication is verified for amd64 and arm64.
+- [x] GitHub Release artifact upload is verified.
+- [x] Deployed smoke runs canonical demo, SDK compile/use, export/import round-trip, and multi-instance-admin recovery against a fresh instance.
+- [x] Smoke failures open an actionable issue or upload actionable artifacts.
 - [x] `./bin/agent-ci run --quiet --all` passes.
 
 ### Handoff
 
-Implemented the R3 automation pieces, but the phase is not closed because the remaining Acceptance gates require external publication/execution: a GitHub Actions dry-run or test tag, GHCR publication, GitHub Release upload, and the scheduled/manual deployed smoke run against the published image.
+Phase R3 closed the release automation and external smoke evidence path. The release workflow accepts semver/prerelease server tags, builds Linux/Darwin binaries for amd64/arm64, builds/pushes a linux/amd64+linux/arm64 GHCR image, records image digests, generates checksums, and creates GitHub Releases. SDK tags remain separate under `sdk/go/vX.Y.Z[-prerelease]`, with third-machine SDK smoke validating `github.com/watzon/cypra/sdk/go@<version>`.
 
-Release workflow now accepts semver/prerelease server tags, builds Linux/Darwin binaries for amd64/arm64, builds/pushes a linux/amd64+linux/arm64 GHCR image, uploads binary checksums, records the published image digest, and creates a GitHub Release for non-dry-run server releases. SDK tags remain separate under `sdk/go/vX.Y.Z[-prerelease]`, and the SDK job validates `github.com/watzon/cypra/sdk/go@<version>`.
+External release evidence used prerelease `v0.1.0-rc.2`. Release workflow run `25616763365` passed, including server binary builds, GHCR image publication, checksum generation, and GitHub Release creation. The GitHub Release at `https://github.com/watzon/cypra/releases/tag/v0.1.0-rc.2` contains Linux and Darwin amd64/arm64 tarballs, `checksums.txt`, and `image-digests.txt`. GHCR image `ghcr.io/watzon/cypra:0.1.0-rc.2` was verified as manifest digest `sha256:c2984203c40f70784d1804fa8ebc5eee4ca90dbe5c6b987d8d7d10a21f63c70d` with platforms `linux/amd64` and `linux/arm64`.
 
-Deployed smoke now uses disposable Docker Compose environments from the published image instead of a long-lived `CYPRA_SMOKE_SETUP_TOKEN` secret. `scripts/smoke-disposable-release.sh` mints a fresh bootstrap token inside the disposable source stack, runs the canonical demo, exports a backup, imports it into a second fresh stack, verifies restored readiness/version/admin listing, issues and redeems a recovery invite, and uploads logs/artifacts through the workflow. Smoke workflow failures open a GitHub issue pointing at the run and uploaded artifacts.
+Deployed smoke now uses disposable Docker Compose environments from the published image instead of a long-lived `CYPRA_SMOKE_SETUP_TOKEN` secret. `scripts/smoke-disposable-release.sh` mints a fresh bootstrap token inside the disposable source stack, runs the canonical demo, exports a backup through a writable mounted artifact path, imports it into a second fresh stack, verifies restored readiness/version/admin listing, issues and redeems a recovery invite, and uploads logs/artifacts through the workflow. The final deployed smoke workflow run `25618512749` passed both `disposable-release-smoke` and `sdk-third-machine`; it exercised canonical demo, SDK compile/use, export/import round-trip, and multi-instance-admin recovery against `ghcr.io/watzon/cypra:0.1.0-rc.2` / SDK `v0.1.0-rc.2`.
 
-Verification completed locally: `bash -n scripts/smoke-disposable-release.sh`, `bun run format`, `git diff --check`, `go test ./cmd/cypra`, production and development `docker compose config`, and `./bin/agent-ci run --quiet --all` passed after loading the `agent-ci` skill (`cold-start readyz: 152ms`). `actionlint` is not installed locally, so workflow semantic linting was not run. The disposable published-image smoke itself was not run because it requires a published GHCR image tag.
+Smoke failure reporting was verified before the final green run: failed workflow runs uploaded actionable artifacts and opened GitHub issues, including `https://github.com/watzon/cypra/issues/11` and `https://github.com/watzon/cypra/issues/12`, each pointing back to the failing run and artifact evidence. Local verification during closeout: `bash -n scripts/smoke-disposable-release.sh`, `bun run format`, `bun run typecheck`, and full disposable release smoke against `ghcr.io/watzon/cypra:0.1.0-rc.2` passed. Final phase gate: `./bin/agent-ci run --quiet --all` passed after loading the `agent-ci` skill, including dashboard build, Go build, `golangci-lint`, color lint, Prettier format check, `go vet`, dashboard typecheck, `go test -p 1 ./...`, coverage floors, dashboard Vitest, p99 performance, compressed Docker image-size, and cold-start (`cold-start readyz: 149ms`). `actionlint` is not installed locally, so workflow semantic linting was not run outside GitHub Actions.
 
 ---
 
