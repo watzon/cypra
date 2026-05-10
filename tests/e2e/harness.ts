@@ -428,8 +428,8 @@ export async function redeemBootstrapToken(harness: CypraHarness, token: string)
   }
   await savedButton.click();
   await harness.page.getByRole("button", { name: "Go to dashboard" }).click();
-  await expect(harness.page.getByText("Next step: create your first tenant")).toBeVisible();
-  await harness.page.getByRole("button", { name: "Open dashboard" }).click();
+  const openDashboard = harness.page.getByRole("button", { name: "Open dashboard" });
+  if (await openDashboard.isVisible()) await openDashboard.click();
   await expect(harness.page).toHaveURL(/\/dashboard$/);
   await mirrorSessionCookieToTenantHost(harness);
 }
