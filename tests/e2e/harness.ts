@@ -632,7 +632,7 @@ export async function startOIDCAuthorize(harness: CypraHarness, client: ExampleC
     code_challenge_method: "S256",
   });
   await harness.page.goto(`${harness.tenantURL}/oidc/authorize?${params.toString()}`);
-  await expect(harness.page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(harness.page.getByText("Sign in to continue")).toBeVisible();
 }
 
 export async function expectOIDCConsent(harness: CypraHarness) {
@@ -837,8 +837,8 @@ export async function configureUpstream(harness: CypraHarness) {
 export async function signInViaPasskey(harness: CypraHarness) {
   await harness.context.clearCookies();
   await harness.page.goto(`${harness.tenantURL}/login`);
-  await expect(harness.page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-  await harness.page.getByRole("button", { name: "Use passkey" }).click();
+  await expect(harness.page.getByText("Sign in to continue")).toBeVisible();
+  await harness.page.getByRole("button", { name: /^(Continue with|Use) passkey$/ }).click();
   await expect(harness.page.locator("#login-result")).toContainText(
     "Signed in. Continue to your application.",
   );
@@ -850,7 +850,7 @@ export async function signInViaPasskey(harness: CypraHarness) {
 
 export async function signInViaGoogleUpstream(harness: CypraHarness) {
   await harness.page.goto(`${harness.tenantURL}/login`);
-  await expect(harness.page.getByRole("heading", { name: "Sign in" })).toBeVisible();
+  await expect(harness.page.getByText("Sign in to continue")).toBeVisible();
   const googleLink = harness.page.getByRole("link", { name: "Sign in with Google" });
   const href = await googleLink.getAttribute("href");
   if (!href) throw new Error("Google upstream link did not include an href");
