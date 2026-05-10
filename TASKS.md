@@ -44,46 +44,52 @@ The following rules are mandatory for every phase in this file.
 
 ## Phase R0: Legacy Carry-Forward And Baseline
 
-**Status:** not started  
+**Status:** complete  
 **Dependencies:** archived Phase 0-18 task plan  
 **Deliverable:** Every unchecked legacy release/deployment/completion item is either completed, deliberately deferred into a later readiness phase, or explicitly marked as no longer applicable under the new external-tester release plan.
 
 ### Tasks
 
-- [ ] Review the archived task plan and confirm that the unchecked items listed in this phase are the complete legacy carry-forward set.
-- [ ] Decide whether the Railway one-click template remains required before the first external tester wave, or whether it is an approved post-tester deferral.
-- [ ] If Railway remains in scope, create and verify the separate Railway template repository and update docs with the live template URL and deployment proof.
-- [ ] Run and record a human stopwatch pass through `docs/firstrun.md`; if it exceeds 30 minutes, add streamlining tasks before release.
-- [ ] Complete deployed-instance canonical demo smoke against a fresh deployed instance.
-- [ ] Complete Go SDK third-machine smoke against release-accurate SDK module tags.
-- [ ] Complete `cypra export` / `cypra import` round-trip smoke against a fresh second instance.
-- [ ] Complete multi-instance-admin recovery smoke against a deployed instance.
-- [ ] Verify deployed `/metrics` exposes every required runtime metric from the current plan and docs.
-- [ ] Verify deployed OpenTelemetry tracing shows `/oidc/authorize` through login/consent/token, email worker dispatch where applicable, and audit emission.
-- [ ] Complete deployed visual validation with `agent-browser` against `https://<install>` and `https://<tenant>.<install>`.
-- [ ] Tag the selected external-tester release, either `v0.1.0` or an approved prerelease such as `v0.1.0-rc.1`.
-- [ ] Trigger and verify the release workflow for the selected tag.
-- [ ] Publish and verify the multi-arch Docker image on GHCR for `linux/amd64` and `linux/arm64`.
-- [ ] Attach release binaries and checksums to the GitHub Release.
-- [ ] Verify `docker pull ghcr.io/watzon/cypra:<tag>` works on amd64 and arm64.
-- [ ] Ensure `CHANGELOG.md` describes the tester release honestly, including known limitations: no SAML, no embeddable widget, no TypeScript SDK, no built-in CNAMEs, and no SMS.
-- [ ] Confirm all ADRs that remain part of the active architecture are checked in with accepted status.
-- [ ] Confirm `docs/phase-1-13-validation.md` has every P0/P1 finding either fixed with evidence or explicitly moved into an approved future task.
-- [ ] Confirm the operator playbook is complete enough for external testers: data inventory, sub-processor template, DSR runbook, breach-notification runbook, bot-mitigation swap path, monitoring checklist, and first-24-hours checklist.
-- [ ] Confirm CI remains green, including canonical-demo e2e, managed examples smoke, backup/import smoke, coverage floors, p99 performance, compressed image size, and cold-start gates.
-- [ ] Archive any legacy completion criteria that are no longer applicable under `PLAN.md` v2 with a short note in this phase handoff.
+- [x] Review the archived task plan and confirm that the unchecked items listed in this phase are the complete legacy carry-forward set.
+- [x] Decide whether the Railway one-click template remains required before the first external tester wave, or whether it is an approved post-tester deferral.
+- [x] Record the owner-approved Railway post-tester deferral; do not require the separate Railway template repository before the first external tester wave.
+- [x] Confirm the human stopwatch pass through `docs/firstrun.md` is explicitly scheduled in Phase R8.
+- [x] Confirm deployed-instance canonical demo smoke against a fresh deployed instance is assigned to Phase R8.
+- [x] Confirm Go SDK third-machine smoke against release-accurate SDK module tags is assigned to Phases R3 and R8.
+- [x] Confirm `cypra export` / `cypra import` round-trip smoke against a fresh second instance is assigned to Phases R3 and R8.
+- [x] Confirm multi-instance-admin recovery smoke against a deployed instance is assigned to Phases R3 and R8.
+- [x] Confirm deployed `/metrics` runtime-metric verification is assigned to Phase R8.
+- [x] Confirm deployed OpenTelemetry trace verification for `/oidc/authorize` through login/consent/token, email worker dispatch where applicable, and audit emission is assigned to Phase R8.
+- [x] Confirm deployed visual validation with `agent-browser` against `https://<install>` and `https://<tenant>.<install>` is assigned to Phase R8.
+- [x] Confirm selected external-tester release tagging, either `v0.1.0` or an approved prerelease such as `v0.1.0-rc.1`, is assigned to Phases R3 and R8.
+- [x] Confirm release workflow trigger and verification is assigned to Phase R3.
+- [x] Confirm multi-arch GHCR image publication for `linux/amd64` and `linux/arm64` is assigned to Phase R3.
+- [x] Confirm GitHub Release binary and checksum attachment is assigned to Phase R3.
+- [x] Confirm `docker pull ghcr.io/watzon/cypra:<tag>` verification on amd64 and arm64 is assigned to Phase R3.
+- [x] Ensure `CHANGELOG.md` describes the tester release honestly, including known limitations: no SAML, no embeddable widget, no TypeScript SDK, no built-in CNAMEs, and no SMS.
+- [x] Confirm all ADRs that remain part of the active architecture are checked in with accepted status.
+- [x] Confirm `docs/phase-1-13-validation.md` has fixed P0/P1 findings documented with evidence and remaining external proof tracked in this active plan.
+- [x] Confirm operator playbook requirements are represented by existing playbook sections and Phase R4 follow-up tasks: data inventory, sub-processor template, DSR runbook, breach-notification runbook, bot-mitigation swap path, monitoring checklist, and first-24-hours checklist.
+- [x] Confirm CI remains green, including canonical-demo e2e, managed examples smoke, backup/import smoke, coverage floors, p99 performance, compressed image size, and cold-start gates.
+- [x] Archive any legacy completion criteria that are no longer applicable under `PLAN.md` v2 with a short note in this phase handoff.
 
 ### Acceptance
 
-- [ ] No unchecked task remains only in the archived legacy plan without representation in this active file or an explicit no-longer-applicable decision.
-- [ ] Legacy release/deployment evidence is either complete or assigned to Phases R2, R3, R4, or R8 below.
-- [ ] Human first-run stopwatch result is recorded or explicitly scheduled in Phase R8.
-- [ ] Railway is either verified or explicitly deferred with owner approval.
-- [ ] `./bin/agent-ci run --quiet --all` passes.
+- [x] No unchecked task remains only in the archived legacy plan without representation in this active file or an explicit no-longer-applicable decision.
+- [x] Legacy release/deployment evidence is either complete or assigned to Phases R2, R3, R4, or R8 below.
+- [x] Human first-run stopwatch result is recorded or explicitly scheduled in Phase R8.
+- [x] Railway is either verified or explicitly deferred with owner approval.
+- [x] `./bin/agent-ci run --quiet --all` passes.
 
 ### Handoff
 
-Pending.
+Phase R0 reconciled the archived legacy task plan into the active readiness plan. The archived unchecked set was complete: Phase 14 release/deployed evidence, Phase 18 human stopwatch/Railway/deployed smoke/metrics+OTEL/release evidence, and project-completion criteria. No unchecked legacy task remains only in the archive without representation in this active file.
+
+Railway one-click deployment is explicitly owner-approved as a post-tester deferral, so the separate Railway template repository is not required before the first external tester wave. Human first-run stopwatch timing is scheduled in Phase R8. Deployment, release, GHCR, GitHub Release, deployed smoke, metrics, OTEL, and deployed visual-validation evidence remain assigned to Phases R2, R3, R4, and R8 rather than being attempted in this baseline reconciliation phase.
+
+Confirmed existing readiness evidence: `CHANGELOG.md` lists the tester-release limitations including no SAML, no embeddable widget, no TypeScript SDK, no built-in CNAME management, and no SMS/Twilio; 15 ADR files are checked in with `Status: accepted`; `docs/phase-1-13-validation.md` has a Phase 18 closure appendix for fixed P0/P1 findings and leaves remaining external deployment/release proof tracked in this active plan; the operator playbook sections exist and Phase R4 owns their expansion into complete day-one operations guidance.
+
+No PLAN.md or DESIGN.md conflict was found. Local generated Vite cache was added to `.gitignore` so generated `dashboard/.vite/` files no longer break formatting checks. Verification: `./bin/agent-ci run --quiet --all` passed after loading the `agent-ci` skill, including dashboard build, Go build, `golangci-lint`, color lint, Prettier format check, `go vet`, dashboard typecheck, `go test -p 1 ./...`, coverage floors, dashboard Vitest, p99 performance, compressed Docker image-size, and cold-start (`cold-start readyz: 190ms`).
 
 ---
 
