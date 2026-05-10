@@ -176,23 +176,23 @@ Verification: `docker compose --env-file .env.production.example -f deploy/docke
 
 ## Phase R3: Release Automation And Smoke Evidence
 
-**Status:** not started  
+**Status:** in progress
 **Dependencies:** Phase R2  
 **Deliverable:** Cypra can publish a release and prove the published artifacts work outside the local checkout.
 
 ### Tasks
 
-- [ ] Implement the server release workflow for semver and prerelease tags.
-- [ ] Grant release workflow permissions sufficient for GHCR publishing and GitHub Release creation while keeping them minimal.
-- [ ] Publish multi-arch GHCR images for `linux/amd64` and `linux/arm64`.
-- [ ] Attach release binaries to GitHub Releases.
-- [ ] Generate and attach checksums for release binaries/images where appropriate.
-- [ ] Align SDK smoke versions with the actual release/tag strategy.
-- [ ] Replace deployed-smoke placeholder jobs with real export/import round-trip execution.
-- [ ] Replace deployed-smoke placeholder jobs with real multi-instance-admin recovery execution.
-- [ ] Avoid single-use setup-token secrets in scheduled smoke design by using disposable environments, reset/reseed steps, or another repeatable strategy.
-- [ ] Ensure smoke failures open actionable issues or upload actionable artifacts.
-- [ ] Update release docs to match the implemented workflow.
+- [x] Implement the server release workflow for semver and prerelease tags.
+- [x] Grant release workflow permissions sufficient for GHCR publishing and GitHub Release creation while keeping them minimal.
+- [x] Publish multi-arch GHCR images for `linux/amd64` and `linux/arm64`.
+- [x] Attach release binaries to GitHub Releases.
+- [x] Generate and attach checksums for release binaries/images where appropriate.
+- [x] Align SDK smoke versions with the actual release/tag strategy.
+- [x] Replace deployed-smoke placeholder jobs with real export/import round-trip execution.
+- [x] Replace deployed-smoke placeholder jobs with real multi-instance-admin recovery execution.
+- [x] Avoid single-use setup-token secrets in scheduled smoke design by using disposable environments, reset/reseed steps, or another repeatable strategy.
+- [x] Ensure smoke failures open actionable issues or upload actionable artifacts.
+- [x] Update release docs to match the implemented workflow.
 
 ### Acceptance
 
@@ -200,11 +200,18 @@ Verification: `docker compose --env-file .env.production.example -f deploy/docke
 - [ ] GHCR image publication is verified for amd64 and arm64.
 - [ ] GitHub Release artifact upload is verified.
 - [ ] Deployed smoke runs canonical demo, SDK compile/use, export/import round-trip, and multi-instance-admin recovery against a fresh instance.
-- [ ] `./bin/agent-ci run --quiet --all` passes.
+- [ ] Smoke failures open an actionable issue or upload actionable artifacts.
+- [x] `./bin/agent-ci run --quiet --all` passes.
 
 ### Handoff
 
-Pending.
+Implemented the R3 automation pieces, but the phase is not closed because the remaining Acceptance gates require external publication/execution: a GitHub Actions dry-run or test tag, GHCR publication, GitHub Release upload, and the scheduled/manual deployed smoke run against the published image.
+
+Release workflow now accepts semver/prerelease server tags, builds Linux/Darwin binaries for amd64/arm64, builds/pushes a linux/amd64+linux/arm64 GHCR image, uploads binary checksums, records the published image digest, and creates a GitHub Release for non-dry-run server releases. SDK tags remain separate under `sdk/go/vX.Y.Z[-prerelease]`, and the SDK job validates `github.com/watzon/cypra/sdk/go@<version>`.
+
+Deployed smoke now uses disposable Docker Compose environments from the published image instead of a long-lived `CYPRA_SMOKE_SETUP_TOKEN` secret. `scripts/smoke-disposable-release.sh` mints a fresh bootstrap token inside the disposable source stack, runs the canonical demo, exports a backup, imports it into a second fresh stack, verifies restored readiness/version/admin listing, issues and redeems a recovery invite, and uploads logs/artifacts through the workflow. Smoke workflow failures open a GitHub issue pointing at the run and uploaded artifacts.
+
+Verification completed locally: `bash -n scripts/smoke-disposable-release.sh`, `bun run format`, `git diff --check`, `go test ./cmd/cypra`, production and development `docker compose config`, and `./bin/agent-ci run --quiet --all` passed after loading the `agent-ci` skill (`cold-start readyz: 152ms`). `actionlint` is not installed locally, so workflow semantic linting was not run. The disposable published-image smoke itself was not run because it requires a published GHCR image tag.
 
 ---
 

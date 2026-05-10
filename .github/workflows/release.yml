@@ -3,25 +3,211 @@ name: Release
 on:
   push:
     tags:
-      - "v*"
-      - "sdk/go/v*"
+      - "v[0-9]+.[0-9]+.[0-9]+"
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
+      - "sdk/go/v[0-9]+.[0-9]+.[0-9]+"
+      - "sdk/go/v[0-9]+.[0-9]+.[0-9]+-*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Server release tag to dry-run, for example v0.1.0-rc.1"
+        required: true
+        type: string
+      dry_run:
+        description: "Build artifacts without publishing GHCR image or GitHub Release"
+        required: true
+        default: true
+        type: boolean
 
 permissions:
-  contents: read
+  contents: write
+  packages: write
+
+concurrency:
+  group: release-${{ github.ref_name || inputs.tag }}
+  cancel-in-progress: false
 
 jobs:
-  release-skeleton:
-    if: startsWith(github.ref_name, 'v')
+  validate-server-tag:
+    if: startsWith(github.ref_name, 'v') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+      prerelease: ${{ steps.meta.outputs.prerelease }}
+      dry-run: ${{ steps.meta.outputs.dry-run }}
+    steps:
+      - id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          INPUT_DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          dry_run="false"
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            tag="${INPUT_TAG}"
+            dry_run="${INPUT_DRY_RUN}"
+          fi
+          if ! [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            printf 'Invalid server release tag: %s\n' "$tag" >&2
+            exit 1
+          fi
+          version="${tag#v}"
+          prerelease="false"
+          if [[ "$version" == *-* ]]; then prerelease="true"; fi
+          {
+            printf 'tag=%s\n' "$tag"
+            printf 'version=%s\n' "$version"
+            printf 'prerelease=%s\n' "$prerelease"
+            printf 'dry-run=%s\n' "$dry_run"
+          } >> "$GITHUB_OUTPUT"
+
+  build-server-binaries:
+    needs: validate-server-tag
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.11
+      - name: Build dashboard assets
+        run: |
+          bun install --frozen-lockfile
+          cd dashboard && bun run build
+      - name: Build cypra binary
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ needs.validate-server-tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          out="cypra-${VERSION}-${GOOS}-${GOARCH}"
+          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION} -X main.commit=${GITHUB_SHA}" -o "dist/${out}" ./cmd/cypra
+          tar -C dist -czf "dist/${out}.tar.gz" "${out}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cypra-${{ needs.validate-server-tag.outputs.version }}-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  build-server-image:
+    needs: validate-server-tag
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: needs.validate-server-tag.outputs.dry-run != 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Docker metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=raw,value=${{ needs.validate-server-tag.outputs.version }}
+            type=raw,value=latest,enable=${{ needs.validate-server-tag.outputs.prerelease == 'false' }}
+      - id: build
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ needs.validate-server-tag.outputs.dry-run != 'true' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: false
+          outputs: ${{ needs.validate-server-tag.outputs.dry-run == 'true' && 'type=oci,dest=/tmp/cypra-image.tar' || '' }}
+      - name: Record dry-run image artifact
+        if: needs.validate-server-tag.outputs.dry-run == 'true'
+        run: |
+          mkdir -p image-artifact
+          sha256sum /tmp/cypra-image.tar > image-artifact/cypra-image-oci.sha256
+      - name: Record published image digest
+        if: needs.validate-server-tag.outputs.dry-run != 'true'
+        env:
+          IMAGE: ghcr.io/${{ github.repository }}:${{ needs.validate-server-tag.outputs.version }}
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p image-artifact
+          printf '%s@%s\n' "$IMAGE" "$DIGEST" > image-artifact/image-digests.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cypra-image-${{ needs.validate-server-tag.outputs.version }}
+          path: image-artifact/*
+
+  github-release:
+    needs:
+      - validate-server-tag
+      - build-server-binaries
+      - build-server-image
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Record release skeleton
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: cypra-${{ needs.validate-server-tag.outputs.version }}-*
+          merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          pattern: cypra-image-${{ needs.validate-server-tag.outputs.version }}
+          merge-multiple: true
+      - name: Generate checksums
         run: |
-          printf 'Release packaging lands in Phase 14 for %s\n' "${GITHUB_REF_NAME}"
+          cd dist
+          sha256sum *.tar.gz > checksums.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cypra-${{ needs.validate-server-tag.outputs.version }}-release-assets
+          path: |
+            dist/*.tar.gz
+            dist/checksums.txt
+            dist/image-digests.txt
+            dist/cypra-image-oci.sha256
+          if-no-files-found: ignore
+      - name: Create GitHub Release
+        if: needs.validate-server-tag.outputs.dry-run != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.validate-server-tag.outputs.tag }}
+          PRERELEASE: ${{ needs.validate-server-tag.outputs.prerelease }}
+        run: |
+          shopt -s nullglob
+          assets=(dist/*.tar.gz dist/checksums.txt dist/image-digests.txt)
+          args=("$TAG" "${assets[@]}" --title "$TAG" --notes-file CHANGELOG.md)
+          if [ "$PRERELEASE" = "true" ]; then args+=(--prerelease); fi
+          gh release create "${args[@]}"
 
   sdk-go:
     if: startsWith(github.ref_name, 'sdk/go/v')
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5

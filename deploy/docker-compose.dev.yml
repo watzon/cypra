@@ -6,6 +6,7 @@ services:
     environment:
       DATABASE_URL: ${CYPRA_CONTAINER_DATABASE_URL:-postgres://cypra:cypra@postgres:5432/cypra?sslmode=disable}
       MIGRATE_DATABASE_URL: ${CYPRA_CONTAINER_MIGRATE_DATABASE_URL:-postgres://cypra:cypra@postgres:5432/cypra?sslmode=disable}
+      CYPRA_DEV_INSECURE_HTTP: ${CYPRA_DEV_INSECURE_HTTP:-true}
       TRUSTED_PROXY_HEADERS: ${TRUSTED_PROXY_HEADERS:-none}
 
   postgres:
