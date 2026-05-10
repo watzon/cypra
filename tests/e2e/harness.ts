@@ -816,15 +816,17 @@ export async function configureEmailProvider(harness: CypraHarness) {
 }
 
 export async function configureUpstream(harness: CypraHarness) {
-  await harness.page.goto(`${harness.tenantURL}/dashboard/tenants/acme/settings/upstream`);
-  await expect(harness.page.getByRole("heading", { name: "Google upstream" })).toBeVisible();
+  await harness.page.goto(
+    `${harness.tenantURL}/dashboard/tenants/acme/auth-providers/social/google`,
+  );
+  await expect(harness.page.getByRole("heading", { name: "Google", exact: true })).toBeVisible();
   await harness.page
-    .getByLabel("Google client ID")
+    .getByLabel("Client ID")
     .fill(process.env.CYPRA_GOOGLE_CLIENT_ID ?? "stub.apps.googleusercontent.com");
   await harness.page
-    .getByLabel("Google client secret")
+    .getByLabel("Client secret")
     .fill(process.env.CYPRA_GOOGLE_CLIENT_SECRET ?? "stub-secret");
-  const enabled = harness.page.getByRole("switch", { name: "Google enabled" });
+  const enabled = harness.page.getByRole("switch", { name: "Enabled" });
   if (!(await enabled.isChecked())) {
     await enabled.click();
   }
