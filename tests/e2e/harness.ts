@@ -418,7 +418,7 @@ export async function redeemBootstrapToken(harness: CypraHarness, token: string)
   await harness.page.getByLabel("Display name").fill(process.env.CYPRA_ADMIN_NAME ?? "Root Admin");
   await harness.page.getByRole("button", { name: "Continue" }).click();
   await harness.page.getByRole("button", { name: "Enroll passkey" }).click();
-  const savedButton = harness.page.getByRole("button", { name: "I've saved these" });
+  const savedButton = harness.page.getByRole("button", { name: "I have saved these" });
   try {
     await expect(savedButton).toBeVisible();
   } catch (error) {
@@ -426,7 +426,7 @@ export async function redeemBootstrapToken(harness: CypraHarness, token: string)
       `setup passkey enrollment did not reach backup codes\n${await harness.page.locator("body").innerText()}\n${String(error)}`,
     );
   }
-  await harness.page.getByRole("button", { name: "I've saved these" }).click();
+  await savedButton.click();
   await harness.page.getByRole("button", { name: "Go to dashboard" }).click();
   await expect(harness.page.getByText("Next step: create your first tenant")).toBeVisible();
   await harness.page.getByRole("button", { name: "Open dashboard" }).click();
