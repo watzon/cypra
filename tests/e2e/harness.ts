@@ -648,14 +648,24 @@ export async function reachOIDCConsentViaPassword(
 ) {
   await harness.context.clearCookies();
   await startOIDCAuthorize(harness, client);
-  await harness.page.locator("#login-email").fill(user.email);
-  const passwordInput = harness.page.locator('input[name="password"]');
-  if (!(await passwordInput.isVisible())) {
-    await harness.page.getByText("Use a password").click();
-  }
-  await expect(passwordInput).toBeVisible();
-  await passwordInput.fill(user.password);
-  await harness.page.locator('form[hx-post="/login/password"] button[type="submit"]').click();
+  const continuation = new URL(harness.page.url()).searchParams.get("continue");
+  if (!continuation)
+    throw new Error(`OIDC login did not include continuation: ${harness.page.url()}`);
+  const redirect = await harness.page.evaluate(
+    async ({ email, password, continuation }) => {
+      const body = new URLSearchParams({ email, password, continue: continuation });
+      const response = await fetch("/login/password", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body,
+      });
+      if (!response.ok) throw new Error(await response.text());
+      return response.headers.get("HX-Redirect");
+    },
+    { email: user.email, password: user.password, continuation },
+  );
+  if (!redirect) throw new Error("password login did not return an OIDC redirect");
+  await harness.page.goto(`${harness.tenantURL}${redirect}`);
   await expectOIDCConsent(harness);
 }
 
