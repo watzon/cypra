@@ -648,9 +648,14 @@ export async function reachOIDCConsentViaPassword(
 ) {
   await harness.context.clearCookies();
   await startOIDCAuthorize(harness, client);
-  await harness.page.getByLabel("Email").fill(user.email);
-  await harness.page.getByLabel("Password").fill(user.password);
-  await harness.page.getByRole("button", { name: "Continue" }).click();
+  await harness.page.locator("#login-email").fill(user.email);
+  const passwordInput = harness.page.locator('input[name="password"]');
+  if (!(await passwordInput.isVisible())) {
+    await harness.page.getByText("Use a password").click();
+  }
+  await expect(passwordInput).toBeVisible();
+  await passwordInput.fill(user.password);
+  await harness.page.locator('form[hx-post="/login/password"] button[type="submit"]').click();
   await expectOIDCConsent(harness);
 }
 
