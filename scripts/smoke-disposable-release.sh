@@ -91,7 +91,7 @@ start_stack() {
   else
     compose_restore up -d --wait postgres
     compose_restore run --rm cypra migrate
-    printf '%s\n' "$passphrase" | compose_restore run --rm -T -v "${PWD}/${artifact_dir}:/smoke:ro" cypra import --passphrase-from-stdin /smoke/smoke-backup.json
+    printf '%s\n' "$passphrase" | compose_restore run --rm -T --user "$(id -u):$(id -g)" -v "${PWD}/${artifact_dir}:/smoke:ro" cypra import --passphrase-from-stdin /smoke/smoke-backup.json
     compose_restore up -d --wait cypra
   fi
   wait_for_ready "$base_url"
@@ -122,7 +122,7 @@ CYPRA_TENANT_URL="$source_tenant_url" \
 CYPRA_SETUP_TOKEN="$setup_token" \
 bunx playwright test tests/e2e/canonical-demo/canonical-demo.spec.ts --reporter=line
 
-printf '%s\n' "$passphrase" | compose_source run --rm -T -v "${PWD}/${artifact_dir}:/smoke" cypra export --out /smoke/smoke-backup.json --passphrase-from-stdin
+printf '%s\n' "$passphrase" | compose_source run --rm -T --user "$(id -u):$(id -g)" -v "${PWD}/${artifact_dir}:/smoke" cypra export --out /smoke/smoke-backup.json --passphrase-from-stdin
 test -s "$backup_path"
 
 start_stack restore "${artifact_dir}/restore-token.txt" "$restore_base_url"
