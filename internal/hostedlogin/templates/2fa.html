@@ -1,23 +1,161 @@
 {{ define "content" }}
-<form class="stack" hx-post="/2fa" hx-target="#factor-result" hx-swap="innerHTML" method="post">
-  <label
-    >Factor
-    <select name="factor">
-      <option value="totp">TOTP</option>
-      <option value="webauthn">WebAuthn 2FA</option>
-      <option value="backup">Backup code</option>
-    </select>
-  </label>
-  <label>Code <input name="code" autocomplete="one-time-code" required /></label>
-  <button type="submit">Verify</button>
-</form>
-<button
-  class="secondary alt-row"
-  data-passkey-action="2fa"
-  data-passkey-result="factor-result"
-  data-rp-id="{{ .RPID }}"
+<style>
+  .factor-tabs {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0;
+    border: 1px solid var(--border-default);
+    border-radius: var(--radius-md);
+    padding: 4px;
+    background: var(--bg-surface);
+  }
+  .factor-tabs input[type="radio"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+  }
+  .factor-tabs label {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: center;
+  }
+  .factor-tabs input[type="radio"]:checked + label {
+    background: var(--bg-code);
+    color: var(--text-primary);
+  }
+  .factor-tabs input[type="radio"]:focus-visible + label {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+  .factor-panel[hidden] {
+    display: none;
+  }
+  .factor-panel {
+    display: grid;
+    gap: 16px;
+  }
+  .factor-panel p.factor-help {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+  .code-input {
+    font-family: var(--font-krypton);
+    letter-spacing: 0.08em;
+  }
+</style>
+
+<fieldset class="factor-tabs" id="factor-tabs">
+  <legend class="visually-hidden">Choose verification method</legend>
+  <input type="radio" id="factor-tab-totp" name="factor-choice" value="totp" checked />
+  <label for="factor-tab-totp">Authenticator</label>
+  <input type="radio" id="factor-tab-webauthn" name="factor-choice" value="webauthn" />
+  <label for="factor-tab-webauthn">Security key</label>
+  <input type="radio" id="factor-tab-backup" name="factor-choice" value="backup" />
+  <label for="factor-tab-backup">Backup code</label>
+</fieldset>
+
+<section class="factor-panel" data-factor-panel="totp" role="group" aria-label="Authenticator code">
+  <p class="factor-help">Enter the 6-digit code from your authenticator app.</p>
+  <form class="stack" hx-post="/2fa" hx-target="#factor-result" hx-swap="innerHTML" method="post">
+    <input type="hidden" name="factor" value="totp" />
+    <label>
+      Authenticator code
+      <input
+        name="code"
+        class="code-input"
+        inputmode="numeric"
+        autocomplete="one-time-code"
+        pattern="[0-9]{6}"
+        maxlength="6"
+        minlength="6"
+        placeholder="123456"
+        required
+      />
+    </label>
+    <button type="submit">Verify code</button>
+  </form>
+</section>
+
+<section
+  class="factor-panel"
+  data-factor-panel="webauthn"
+  role="group"
+  aria-label="Security key"
+  hidden
 >
-  Verify with WebAuthn 2FA
-</button>
+  <p class="factor-help">Approve the prompt on your security key or device passkey to continue.</p>
+  <button
+    type="button"
+    data-passkey-action="2fa"
+    data-passkey-result="factor-result"
+    data-rp-id="{{ .RPID }}"
+  >
+    Verify with security key
+  </button>
+</section>
+
+<section
+  class="factor-panel"
+  data-factor-panel="backup"
+  role="group"
+  aria-label="Backup code"
+  hidden
+>
+  <p class="factor-help">
+    Use one of the one-time backup codes you saved when you set up two-factor authentication. Each
+    code works only once.
+  </p>
+  <form class="stack" hx-post="/2fa" hx-target="#factor-result" hx-swap="innerHTML" method="post">
+    <input type="hidden" name="factor" value="backup" />
+    <label>
+      Backup code
+      <input
+        name="code"
+        class="code-input"
+        autocomplete="off"
+        autocapitalize="off"
+        spellcheck="false"
+        pattern="[A-Za-z0-9-]+"
+        placeholder="xxxx-xxxx"
+        required
+      />
+    </label>
+    <button type="submit">Use backup code</button>
+  </form>
+</section>
+
 <div id="factor-result" role="status" aria-live="polite"></div>
+
+<script>
+  (function () {
+    var tabs = document.querySelectorAll('#factor-tabs input[type="radio"]');
+    var panels = document.querySelectorAll("[data-factor-panel]");
+    function activate(value) {
+      panels.forEach(function (panel) {
+        panel.hidden = panel.getAttribute("data-factor-panel") !== value;
+      });
+    }
+    tabs.forEach(function (tab) {
+      tab.addEventListener("change", function () {
+        if (tab.checked) activate(tab.value);
+      });
+    });
+    var checked = document.querySelector('#factor-tabs input[type="radio"]:checked');
+    if (checked) activate(checked.value);
+  })();
+</script>
 {{ end }}{{ template "base" . }}

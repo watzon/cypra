@@ -310,37 +310,54 @@ Regression coverage was added in `dashboard/src/App.test.tsx` for the real invit
 
 ## Phase R6: Hosted Login And End-User Polish
 
-**Status:** not started  
+**Status:** complete  
 **Dependencies:** Phase R1  
 **Deliverable:** Hosted login feels production-owned, works without prototype dependencies, and gives users clear recovery paths.
 
 ### Tasks
 
-- [ ] Vendor or bundle HTMX locally, or add pinning/SRI and a documented dependency policy.
-- [ ] Confirm hosted login works without external CDN availability.
-- [ ] Remove production-visible `noop` bot-verifier markup or replace it with neutral state.
-- [ ] Improve passkey error messages for user cancellation.
-- [ ] Improve passkey error messages for unsupported browser or missing authenticator support.
-- [ ] Improve passkey error messages for network/server failure.
-- [ ] Improve passkey error messages for invalid RP ID or origin mismatch without leaking sensitive detail.
-- [ ] Split 2FA UI states so TOTP, WebAuthn, and backup-code flows do not share a confusing single-code interface.
-- [ ] Clarify invite onboarding copy around required vs optional auth methods.
-- [ ] Verify hosted-login dark mode after security and deployment changes.
-- [ ] Verify hosted-login light mode after security and deployment changes.
-- [ ] Verify tenant accent contrast after security and deployment changes.
-- [ ] Add hosted-login tests for affected routes and states.
+- [x] Vendor or bundle HTMX locally, or add pinning/SRI and a documented dependency policy.
+- [x] Confirm hosted login works without external CDN availability.
+- [x] Remove production-visible `noop` bot-verifier markup or replace it with neutral state.
+- [x] Improve passkey error messages for user cancellation.
+- [x] Improve passkey error messages for unsupported browser or missing authenticator support.
+- [x] Improve passkey error messages for network/server failure.
+- [x] Improve passkey error messages for invalid RP ID or origin mismatch without leaking sensitive detail.
+- [x] Split 2FA UI states so TOTP, WebAuthn, and backup-code flows do not share a confusing single-code interface.
+- [x] Clarify invite onboarding copy around required vs optional auth methods.
+- [x] Verify hosted-login dark mode after security and deployment changes.
+- [x] Verify hosted-login light mode after security and deployment changes.
+- [x] Verify tenant accent contrast after security and deployment changes.
+- [x] Add hosted-login tests for affected routes and states.
 
 ### Acceptance
 
-- [ ] Hosted login loads all critical assets from Cypra or with approved integrity guarantees.
-- [ ] Passkey and 2FA errors are actionable without leaking sensitive details.
-- [ ] Browser validation covers login, signup, invite, consent, reset, 2FA, and error states.
-- [ ] axe reports zero new violations on hosted-login routes.
-- [ ] `./bin/agent-ci run --quiet --all` passes.
+- [x] Hosted login loads all critical assets from Cypra or with approved integrity guarantees.
+- [x] Passkey and 2FA errors are actionable without leaking sensitive details.
+- [x] Browser validation covers login, signup, invite, consent, reset, 2FA, and error states.
+- [x] axe reports zero new violations on hosted-login routes.
+- [x] `./bin/agent-ci run --quiet --all` passes.
 
 ### Handoff
 
-Pending.
+Phase R6 made hosted login feel production-owned rather than prototype-owned. HTMX 2.0.4 is now vendored at `internal/hostedlogin/static/htmx.min.js`, embedded into the Go binary, and served from `/static/hostedlogin/htmx.min.js` with a SHA-384 SRI hash in `base.html`. The unpkg.com reference is gone, and a regression test (`TestHostedLoginServesHTMXLocally`) walks every hosted-login route to confirm no external CDN reference returns. The asset-update policy is documented in `docs/playbook/dependencies.md`. `.prettierignore` was extended so prettier does not re-format the minified vendor file (it does, and that breaks SRI; learned the hard way).
+
+`passkey.js` now defines a `PasskeyError` class and a `classifyPasskeyError` mapper. `fetch` failures, server 5xx, 403/404, and the DOM-thrown `NotAllowedError`/`AbortError`/`NotSupportedError`/`InvalidStateError`/`SecurityError` each route to their own user-facing string, none of which leak RP IDs, origins, or server detail. The generic "Sign-in didn't go through" remains as the final fallback. `internal/hostedlogin/static_test.go` asserts each branch and error class is present.
+
+`templates/2fa.html` was rebuilt as a three-panel surface with a radio-fed tablist (Authenticator / Security key / Backup code). Each panel ships factor-appropriate inputs (numeric 6-digit for TOTP, no input for WebAuthn, alphanumeric for backup code) and its own factor-help paragraph; the existing server handler `hostedFactor` already dispatched on the form's hidden `factor` field, so no Go change was needed. `templates/invite.html` now adapts copy to `.PasskeyEnabled` and `.PasswordEnabled`: password is labelled optional when passkey is enabled, the post-redemption passkey step is previewed in a `<details>` panel, and the expired-link error explains how to recover.
+
+The production-visible `<div class="bot-slot" data-verifier="noop">` placeholders were deleted from `login.html` and `signup.html`. The bot-verifier seam itself stays for v1.1; only the prototype scaffolding shipped in the markup is removed.
+
+Visual validation: I rendered the templates without a database via `scripts/render-hostedlogin-fixtures.go` (a `//go:build ignore` helper that uses `hostedlogin.Renderer` directly with fixture `PageData`), served the output at `http://127.0.0.1:5188`, and ran `./bin/agent-browser walk` against 9 surfaces × 2 color schemes = 18 walks (login, signup, 2fa, invite default + expired, consent, reset, error, and a custom-orange-accent login). The first pass surfaced two real issues that I fixed inside this phase rather than deferring: dark-mode `--text-tertiary` (#71717A) was failing AA contrast on `.footer` and the `.divider` "or" span, and the `.new` chip in `consent.html` used the tenant accent directly which fails contrast on dark surfaces. Dark-mode tertiary was raised to `#8B8B93`, and `.new` was restyled as an `--accent-primary-mu` chip with `--text-primary` text. A third axe finding — `aria-prohibited-attr` on `<section aria-labelledby="…">` — was fixed by giving each 2FA panel `role="group"` + `aria-label`. Walk JSON archived under `/tmp/cypra-r6-walks/`. After fixes, all 18 walks report `violations=0, incomplete=0`.
+
+Test coverage: `internal/hostedlogin/static_test.go` (HTMX vendored at the expected SHA-256, passkey.js error-class branches present) and `internal/httpserver/hostedlogin_r6_test.go` (HTMX served locally with SRI; no external script src; bot-slot markup gone; 2FA factor panels split; invite copy adapts to policy) are new. Existing `TestHostedFactorVerifiesTOTPAndBackupCode` continues to pass with the new form shape because the hidden `factor` field stays compatible.
+
+Verification: `./bin/agent-ci run --quiet --all` — `passed`, `make ci-pipeline` exit 0; golangci-lint 0 issues; prettier check clean; `go test -p 1 ./...` passed; dashboard Vitest unchanged; `cold-start readyz: 154ms`; image size 10912958 bytes.
+
+Deferrals / heads-up for downstream phases:
+- The fixture-rendering helper at `scripts/render-hostedlogin-fixtures.go` is a `//go:build ignore` dev tool, not part of the build. It's the most pragmatic way to exercise hosted-login visually without bringing up the dev stack; future phases that change PageData fields should add the new fields to its fixture data.
+- HTMX update policy lives in `docs/playbook/dependencies.md`; bumping HTMX requires updating both `wantSHA` in `internal/hostedlogin/static_test.go` and the SRI hash in `templates/base.html`. The test enforces this.
+- Bot-verifier integration itself remains a v1.1 deferral as recorded in `CHANGELOG.md`. Phase R7 owns deciding whether the verifier seam should be removed entirely or kept dormant.
 
 ---
 

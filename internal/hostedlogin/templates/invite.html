@@ -1,5 +1,5 @@
 {{ define "content" }}
-<p>Finish your invited account setup for {{ .Theme.DisplayName }}.</p>
+<p>Finish setting up your account for {{ .Theme.DisplayName }}.</p>
 {{ if .Error }}
 <p class="error">{{ .Error }}</p>
 {{ end }} {{ if .InviteID }}
@@ -11,13 +11,54 @@
   method="post"
 >
   <input type="hidden" name="continuation_id" value="{{ .InviteID }}" />
-  <label>Display name <input name="display_name" autocomplete="name" required /></label>
-  <label>Password <input name="password" type="password" autocomplete="new-password" /></label>
+  <label>
+    Display name <span aria-hidden="true" class="muted">(required)</span>
+    <input name="display_name" autocomplete="name" required />
+  </label>
+  {{ if .PasswordEnabled }}
+  <label>
+    Password <span aria-hidden="true" class="muted">(optional)</span>
+    <input
+      name="password"
+      type="password"
+      autocomplete="new-password"
+      aria-describedby="invite-password-help"
+    />
+  </label>
+  <p id="invite-password-help" class="factor-help">
+    {{ if .PasskeyEnabled }}You can skip the password and use a passkey instead. Passkeys are
+    stronger and don't require remembering a secret.{{ else }}Choose a password you don't reuse
+    anywhere else.{{ end }}
+  </p>
+  {{ end }}
   <button type="submit">Continue</button>
 </form>
-<p>Passkey enrollment follows after this step.</p>
-{{ else }}
+{{ if .PasskeyEnabled }}
+<details class="alt-row">
+  <summary>What happens after this step?</summary>
+  <div class="inset">
+    <p class="factor-help">
+      After we save your account details, we'll guide you through adding a passkey so you can sign
+      in without a password. You can also enable two-factor authentication later from your account
+      settings.
+    </p>
+  </div>
+</details>
+{{ end }} {{ else }}
 <p class="error">This invite link is invalid or expired.</p>
+<p class="factor-help">Ask the person who invited you to send a new link.</p>
 {{ end }}
 <div id="invite-result" role="status" aria-live="polite"></div>
+<style>
+  .muted {
+    color: var(--text-tertiary);
+    font-weight: 400;
+    font-size: 12px;
+  }
+  .factor-help {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+  }
+</style>
 {{ end }}{{ template "base" . }}

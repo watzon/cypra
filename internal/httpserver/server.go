@@ -116,6 +116,7 @@ func (s *Server) Router() http.Handler {
 		public.Use(s.tenantResolver)
 		public.Get("/static/hostedlogin/passkey.js", s.hostedStaticPasskey)
 		public.Get("/static/hostedlogin/instance-admin-login.js", s.hostedStaticInstanceAdminLogin)
+		public.Get("/static/hostedlogin/htmx.min.js", s.hostedStaticHTMX)
 		public.Get("/setup", s.setupInstructionsPage)
 		public.Get("/login", s.hostedPage("login"))
 		public.Post("/login/password", s.hostedPasswordSignIn)

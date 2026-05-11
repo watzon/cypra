@@ -15,3 +15,4 @@ DESIGN.md
 PLAN.md
 TASKS.md
 docs/archive/*.md
+internal/hostedlogin/static/htmx.min.js

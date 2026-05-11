@@ -82,6 +82,17 @@ func (s *Server) hostedStaticInstanceAdminLogin(w http.ResponseWriter, _ *http.R
 	_, _ = w.Write(content)
 }
 
+func (s *Server) hostedStaticHTMX(w http.ResponseWriter, _ *http.Request) {
+	content, err := hostedlogin.HTMXJS()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "static.unavailable")
+		return
+	}
+	w.Header().Set("Content-Type", "text/javascript; charset=utf-8")
+	w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+	_, _ = w.Write(content)
+}
+
 func (s *Server) renderInstanceAdminLogin(w http.ResponseWriter, r *http.Request) {
 	data := hostedlogin.PageData{
 		Title: "Sign in",

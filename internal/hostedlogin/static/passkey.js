@@ -15,7 +15,7 @@ function bufferToB64url(value) {
 
 function publicKeyFromEnvelope(envelope) {
   const options = envelope.options?.publicKey || envelope.publicKey || envelope.options?.response;
-  if (!options) throw new Error("missing public key options");
+  if (!options) throw new PasskeyError("server", "missing public key options");
   options.challenge = b64urlToBuffer(options.challenge);
   if (options.user?.id) options.user.id = b64urlToBuffer(options.user.id);
   for (const descriptor of options.excludeCredentials || [])
@@ -48,15 +48,69 @@ function credentialToJSON(credential) {
   return payload;
 }
 
+class PasskeyError extends Error {
+  constructor(kind, message) {
+    super(message);
+    this.name = "PasskeyError";
+    this.kind = kind;
+  }
+}
+
+// classifyPasskeyError maps any error thrown during a passkey ceremony to a
+// user-facing string. The classification is intentionally coarse so we never
+// echo RP IDs, origins, or server detail back to an end user.
+function classifyPasskeyError(err) {
+  if (err instanceof PasskeyError) {
+    switch (err.kind) {
+      case "unsupported":
+        return "Passkeys aren't supported on this browser yet. Try a different browser or sign-in method.";
+      case "cancelled":
+        return "Sign-in was cancelled. Tap the passkey button to try again.";
+      case "origin":
+        return "This sign-in link can't be used here. Contact your administrator.";
+      case "network":
+        return "We couldn't reach the sign-in service. Check your connection and try again.";
+      case "server":
+        return "Sign-in didn't go through. Try again, or use another method.";
+      default:
+        return "Sign-in didn't go through. Try again, or use another method.";
+    }
+  }
+  if (err && typeof err === "object" && typeof err.name === "string") {
+    if (err.name === "NotAllowedError" || err.name === "AbortError") {
+      return "Sign-in was cancelled. Tap the passkey button to try again.";
+    }
+    if (err.name === "NotSupportedError" || err.name === "InvalidStateError") {
+      return "Passkeys aren't available on this device. Try another sign-in method.";
+    }
+    if (err.name === "SecurityError") {
+      return "This sign-in link can't be used here. Contact your administrator.";
+    }
+  }
+  return "Sign-in didn't go through. Try again, or use another method.";
+}
+
 async function postJSON(path, body) {
-  const response = await window.fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    credentials: "same-origin",
-    body: JSON.stringify(body),
-  });
+  let response;
+  try {
+    response = await window.fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify(body),
+    });
+  } catch (err) {
+    throw new PasskeyError("network", "fetch failed");
+  }
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.detail || data.error || "passkey request failed");
+  if (!response.ok) {
+    // We do not surface server-supplied detail to the user — it can leak
+    // tenant/RP information. We use the status to pick a class only.
+    if (response.status >= 500) throw new PasskeyError("server", "server rejected");
+    if (response.status === 403 || response.status === 404)
+      throw new PasskeyError("origin", "rejected by origin/policy");
+    throw new PasskeyError("server", "server rejected");
+  }
   return data;
 }
 
@@ -73,10 +127,10 @@ function emailFor(target) {
 
 async function cypraPasskey(action, target) {
   if (!window.PublicKeyCredential || !navigator.credentials)
-    throw new Error("passkeys unavailable");
+    throw new PasskeyError("unsupported", "WebAuthn not available");
   if (action === "register-account") {
     const email = emailFor(target);
-    if (!email) throw new Error("missing email");
+    if (!email) throw new PasskeyError("server", "missing email");
     const begin = await postJSON("/signup/passkey", { email });
     const credential = await navigator.credentials.create({
       publicKey: publicKeyFromEnvelope(begin),
@@ -90,7 +144,7 @@ async function cypraPasskey(action, target) {
   }
   if (action === "create") {
     const userId = userIDFor(target);
-    if (!userId) throw new Error("missing user id");
+    if (!userId) throw new PasskeyError("server", "missing user id");
     const begin = await postJSON("/api/v1/auth/passkey/register", { user_id: userId });
     const credential = await navigator.credentials.create({
       publicKey: publicKeyFromEnvelope(begin),
@@ -137,7 +191,13 @@ document.addEventListener("click", (event) => {
       }
       if (result) result.textContent = message;
     })
-    .catch(() => {
-      if (result) result.textContent = "Sign in didn't work. Check your details and try again.";
+    .catch((err) => {
+      if (result) result.textContent = classifyPasskeyError(err);
     });
 });
+
+// Export for tests in environments that load this as a module-like context. The
+// no-op assignment is harmless in plain browser execution.
+if (typeof window !== "undefined") {
+  window.__cypraPasskeyInternals = { classifyPasskeyError, PasskeyError };
+}

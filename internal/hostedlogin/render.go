@@ -115,3 +115,11 @@ func PasskeyJS() ([]byte, error) {
 func InstanceAdminLoginJS() ([]byte, error) {
 	return files.ReadFile("static/instance-admin-login.js")
 }
+
+// HTMXJS returns the vendored htmx.org runtime served from the Cypra origin so
+// hosted-login does not depend on a third-party CDN. The version is pinned by
+// the file in internal/hostedlogin/static/htmx.min.js. See
+// docs/playbook/dependencies.md for the update procedure.
+func HTMXJS() ([]byte, error) {
+	return files.ReadFile("static/htmx.min.js")
+}
