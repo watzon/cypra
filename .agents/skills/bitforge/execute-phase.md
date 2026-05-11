@@ -18,7 +18,7 @@
 2. **You MUST keep TASKS.md current.** Mark tasks in-progress when you start them and complete when you finish them. Update the phase Status line.
 3. **You MUST mirror the phase task list with OpenCode's todo tool.** Both lists end the phase ticked. The internal list is a copy of the file list, not a different list.
 4. **You MUST run every Acceptance gate before marking the phase complete.** A green CI run is necessary but not sufficient — every Acceptance criterion is binding.
-5. **You MUST load the `agent-ci` skill before running the CI gate.** Then run the command the skill prescribes for `agent-ci run --quiet --all`. Do not roll your own.
+5. **You MUST load the `agent-ci` skill before running the CI gate.** Then run the repository's canonical CI command from `PLAN.md`, `TASKS.md`, `CONTRIBUTING.md`, or workspace rules. If the repository does not define one, use the command the skill prescribes for `agent-ci run --quiet --all`. Do not roll your own.
 6. **For any phase that ships UI, you MUST load the `agent-browser` skill before browser validation.** Then use `agent-browser` against the running app and record what you saw in the Handoff block.
 7. **You MUST fill the Handoff block before closing the phase.** Free-form prose is fine; emptiness is not.
 8. **You MUST NOT skip phases or tasks.** If a task is impossible, surface why and add a new task or new phase.
@@ -42,7 +42,7 @@ Before any code change:
 - Verify the working tree is clean **and** on the right branch. Standard branch hygiene applies: if you're on a stale feature branch, switch to `main` (or the repo's default), pull, and create a fresh branch unless the user explicitly says to continue on the current one. If the workspace or repo has its own branch-hygiene rules in `AGENTS.md` (or legacy `CLAUDE.md`), those win.
 - Read the relevant slice of PLAN.md and (if visual) DESIGN.md. The phase Tasks should make sense against them.
 - Read the prior phase's Handoff block if it exists. It will tell you what's already done and what was deferred.
-- Load the `agent-ci` skill, then run the skill-prescribed `agent-ci run --quiet --all` command to confirm the codebase is green *before* you change anything. CI was green when the prior phase closed. If it isn't now, fix that first — it's not your phase's problem yet, but it will be.
+- Load the `agent-ci` skill, then run the repository's canonical CI command to confirm the codebase is green *before* you change anything. CI was green when the prior phase closed. If it isn't now, fix that first — it's not your phase's problem yet, but it will be.
 
 ### Step 3 — Open the phase
 
@@ -80,7 +80,7 @@ Before running the Acceptance gates:
 
 For each Acceptance line in the phase:
 
-- **CI gate** — load the `agent-ci` skill, then run the skill-prescribed `agent-ci run --quiet --all` command. It returns green. Quote the exit status in the Handoff.
+- **CI gate** — load the `agent-ci` skill, then run the repository's canonical CI command. It returns green. Quote the exit status in the Handoff.
 - **Hygiene gate** — record the lint/format/typecheck outputs (or "clean").
 - **Test gate** — record the test run output. New tests are visible in it.
 - **Visual validation gate (UI phases)** — load the `agent-browser` skill, then run `agent-browser`. For each screen the phase touched:

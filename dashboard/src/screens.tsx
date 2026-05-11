@@ -1818,7 +1818,7 @@ function ProjectList({ tenant }: { tenant: TenantRecord }) {
         />
       ) : (
         <div className="overflow-hidden rounded-[var(--radius-md)] border border-border-subtle">
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full text-left text-[13px]" data-responsive="stack">
             <thead className="bg-bg-code text-text-secondary">
               <tr>
                 <th className="px-4 py-3 font-medium">Project</th>
@@ -1842,10 +1842,11 @@ function ProjectList({ tenant }: { tenant: TenantRecord }) {
                     <IdentifierPill value={project.slug} label="Project slug" />
                   </td>
                   <td className="px-4 py-3">
-                    <IdentifierPill
-                      value={project.client_id ?? `client_${project.slug}`}
-                      label="Client ID"
-                    />
+                    {project.client_id ? (
+                      <IdentifierPill value={project.client_id} label="Client ID" />
+                    ) : (
+                      <Tag variant="warn">Not configured</Tag>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     {project.rotation_in_progress ? (
@@ -1932,6 +1933,8 @@ function ProjectDetail({ tenant, projectSlug }: { tenant: TenantRecord; projectS
     })
     ? "Redirect URIs must be valid absolute URLs and cannot contain fragments."
     : undefined;
+  const issuerURL = project.issuer_url;
+  const clientID = project.client_id;
   const saveProject = async () => {
     if (redirectError) return;
     setBusy(true);
@@ -2002,12 +2005,13 @@ function ProjectDetail({ tenant, projectSlug }: { tenant: TenantRecord; projectS
           <SettingsRow
             flush
             label="Issuer URL"
-            helper="Use this as the provider issuer."
+            helper="Use this as the provider issuer once the project is configured."
             control={
-              <IdentifierPill
-                value={project.issuer_url ?? `https://${tenant.slug}.cypra.localhost`}
-                label="Issuer URL"
-              />
+              project.issuer_url ? (
+                <IdentifierPill value={project.issuer_url} label="Issuer URL" />
+              ) : (
+                <Tag variant="warn">Not configured</Tag>
+              )
             }
           />
           <SettingsRow
@@ -2015,10 +2019,11 @@ function ProjectDetail({ tenant, projectSlug }: { tenant: TenantRecord; projectS
             label="Client ID"
             helper="Public identifier for downstream apps."
             control={
-              <IdentifierPill
-                value={project.client_id ?? `client_${project.slug}`}
-                label="Client ID"
-              />
+              project.client_id ? (
+                <IdentifierPill value={project.client_id} label="Client ID" />
+              ) : (
+                <Tag variant="warn">Not configured</Tag>
+              )
             }
           />
           <SettingsRow
@@ -2026,7 +2031,11 @@ function ProjectDetail({ tenant, projectSlug }: { tenant: TenantRecord; projectS
             label="Client secret"
             helper="Reveal before copying. It auto-hides after 30 seconds."
             control={
-              <MaskedSecret name="client_secret" value={clientSecret ?? "client_secret_hidden"} />
+              clientSecret ? (
+                <MaskedSecret name="client_secret" value={clientSecret} />
+              ) : (
+                <Tag variant="warn">Not available</Tag>
+              )
             }
           />
           <SettingsRow
@@ -2077,14 +2086,18 @@ function ProjectDetail({ tenant, projectSlug }: { tenant: TenantRecord; projectS
           </Button>
         </div>
       </Card>
-      <div className="grid gap-4 lg:grid-cols-2">
-        <CodeBlock
-          code={`AUTH_CYPRA_ISSUER=${project.issuer_url ?? `https://${tenant.slug}.cypra.localhost`} AUTH_CYPRA_ID=${project.client_id ?? `client_${project.slug}`}`}
+      {issuerURL && clientID ? (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <CodeBlock code={`AUTH_CYPRA_ISSUER=${issuerURL} AUTH_CYPRA_ID=${clientID}`} />
+          <CodeBlock code={`go run ./cmd/app -issuer ${issuerURL}`} />
+        </div>
+      ) : (
+        <InlineAlert
+          variant="info"
+          title="Configuration snippets unavailable"
+          message="Issuer URL and client ID are not configured yet. Create or save the project before copying app setup commands."
         />
-        <CodeBlock
-          code={`go run ./cmd/app -issuer ${project.issuer_url ?? `https://${tenant.slug}.cypra.localhost`}`}
-        />
-      </div>
+      )}
       <Modal
         title="Rotate client secret"
         open={rotateOpen}
@@ -2193,7 +2206,7 @@ function UserList({ tenant }: { tenant: TenantRecord }) {
           />
         ) : (
           <div className="overflow-hidden rounded-[var(--radius-md)] border border-border-subtle">
-            <table className="w-full text-left text-[13px]">
+            <table className="w-full text-left text-[13px]" data-responsive="stack">
               <thead className="bg-bg-code text-text-secondary">
                 <tr>
                   <th className="px-4 py-3 font-medium">User</th>
@@ -2239,22 +2252,17 @@ function UserList({ tenant }: { tenant: TenantRecord }) {
           </div>
         )}
       </div>
-      <Modal
-        title="Invite user"
+      <InviteUserModal
         open={inviteOpen}
         onClose={() => setInviteOpen(false)}
-        footer={
-          <Button variant="primary" onClick={() => setInviteOpen(false)}>
-            Send invite
-          </Button>
-        }
-      >
-        <TextInput label="Email" type="email" placeholder="user@example.com" />
-      </Modal>
+        title="Invite user"
+        roleLock="member"
+      />
       <Modal title="Import users via CLI" open={importOpen} onClose={() => setImportOpen(false)}>
         <CodeBlock code={`cypra import --tenant ${tenant.slug} --file users.json`} />
         <div className="mt-4 rounded-[var(--radius-md)] border border-border-subtle bg-bg-code p-4 text-[13px] text-text-secondary">
-          Screencast placeholder lands in v1.1 docs.
+          Use the CLI import path for bulk onboarding. The command validates users before writing
+          tenant records.
         </div>
       </Modal>
     </Card>
@@ -4228,7 +4236,7 @@ function SigningKeysScreen() {
       </Card>
       <Card title="Key list">
         <div className="overflow-hidden rounded-[var(--radius-md)] border border-border-subtle">
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full text-left text-[13px]" data-responsive="stack">
             <thead className="bg-bg-code text-text-secondary">
               <tr>
                 <th className="px-4 py-3 font-medium">KID</th>
@@ -4608,7 +4616,7 @@ export function InstanceAdminsScreen() {
               body="Invite an admin to recover access."
             />
           ) : null}
-          <table className="w-full text-left text-[13px]">
+          <table className="w-full text-left text-[13px]" data-responsive="stack">
             <thead className="bg-bg-code text-text-secondary">
               <tr>
                 <th className="px-4 py-3 font-medium">Email</th>
@@ -6446,86 +6454,58 @@ export function CommandOverlay({
     }
   };
   return (
-    <div
-      className="fixed inset-0 z-30 grid place-items-start justify-center bg-[var(--bg-overlay)] p-20"
-      role="dialog"
-      aria-modal="true"
-    >
-      <Card
-        className="w-[560px]"
-        title="Command palette"
-        actions={
-          <Button variant="ghost" onClick={onClose}>
-            Close
-          </Button>
-        }
-      >
-        <TextInput
-          label="Search"
-          autoFocus
-          placeholder="Jump to route"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && filtered[0]) {
-              event.preventDefault();
-              run(filtered[0]);
-            } else if (event.key === "Escape") {
-              event.preventDefault();
-              onClose();
-            }
-          }}
-        />
-        <div className="mt-4 grid gap-2">
-          {filtered.length === 0 ? (
-            <p className="px-2 py-1 text-[13px] text-text-secondary">No matches.</p>
-          ) : (
-            filtered.map((item) => (
-              <Button key={item.label} variant="ghost" onClick={() => run(item)}>
-                {item.label}
-              </Button>
-            ))
-          )}
-        </div>
-      </Card>
-    </div>
+    <Modal title="Command palette" open={open} onClose={onClose} size="md">
+      <TextInput
+        label="Search"
+        autoFocus
+        data-autofocus="true"
+        placeholder="Jump to route"
+        value={query}
+        onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && filtered[0]) {
+            event.preventDefault();
+            run(filtered[0]);
+          } else if (event.key === "Escape") {
+            event.preventDefault();
+            onClose();
+          }
+        }}
+      />
+      <div className="mt-4 grid gap-2">
+        {filtered.length === 0 ? (
+          <p className="px-2 py-1 text-[13px] text-text-secondary">No matches.</p>
+        ) : (
+          filtered.map((item) => (
+            <Button key={item.label} variant="ghost" onClick={() => run(item)}>
+              {item.label}
+            </Button>
+          ))
+        )}
+      </div>
+    </Modal>
   );
 }
 
 export function ShortcutOverlay({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
   return (
-    <div
-      className="fixed inset-0 z-30 grid place-items-center bg-[var(--bg-overlay)] p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Keyboard shortcuts"
-    >
-      <Card
-        className="w-[520px]"
-        title="Keyboard shortcuts"
-        actions={
-          <Button variant="ghost" onClick={onClose}>
-            Close
-          </Button>
-        }
-      >
-        <dl className="grid grid-cols-2 gap-3 text-[13px]">
-          <dt>cmd/ctrl + k</dt>
-          <dd>Open command palette</dd>
-          <dt>cmd/ctrl + /</dt>
-          <dd>Open shortcuts</dd>
-          <dt>g then o / u / p / t / m / a / s / n</dt>
-          <dd>Go to overview, users, projects, auth methods, members, audit, settings, account</dd>
-          <dt>/</dt>
-          <dd>Focus search</dd>
-          <dt>c</dt>
-          <dd>Primary create</dd>
-          <dt>escape</dt>
-          <dd>Close overlay</dd>
-        </dl>
-      </Card>
-    </div>
+    <Modal title="Keyboard shortcuts" open={open} onClose={onClose} size="md">
+      <dl className="grid grid-cols-2 gap-3 text-[13px]">
+        <dt>cmd/ctrl + k</dt>
+        <dd>Open command palette</dd>
+        <dt>cmd/ctrl + /</dt>
+        <dd>Open shortcuts</dd>
+        <dt>g then o / u / p / t / m / a / s / n</dt>
+        <dd>Go to overview, users, projects, auth methods, members, audit, settings, account</dd>
+        <dt>/</dt>
+        <dd>Focus search</dd>
+        <dt>c</dt>
+        <dd>Primary create</dd>
+        <dt>escape</dt>
+        <dd>Close overlay</dd>
+      </dl>
+    </Modal>
   );
 }
 

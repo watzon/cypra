@@ -13,6 +13,7 @@ import {
   type SelectHTMLAttributes,
   type SVGProps,
 } from "react";
+import { createPortal } from "react-dom";
 
 import { useQuery } from "@tanstack/react-query";
 
@@ -931,25 +932,20 @@ export function Modal({
   size?: "sm" | "md" | "lg";
   onClose: () => void;
 }>) {
-  useEffect(() => {
-    if (!open) return;
-    const handler = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  const dialogRef = useDialogBehavior(open, onClose);
   if (!open) {
     return null;
   }
   const widthClass =
     size === "sm" ? "max-w-[400px]" : size === "lg" ? "max-w-[720px]" : "max-w-[560px]";
-  return (
+  return createPortal(
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-40 grid place-items-center bg-[var(--bg-overlay)] p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="modal-title"
+      tabIndex={-1}
     >
       <section
         className={cn(
@@ -977,7 +973,8 @@ export function Modal({
           </footer>
         ) : null}
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -995,21 +992,16 @@ export function Drawer({
   footer?: ReactNode;
   onClose: () => void;
 }>) {
-  useEffect(() => {
-    if (!open) return;
-    const handler = (event: globalThis.KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
+  const dialogRef = useDialogBehavior(open, onClose);
   if (!open) return null;
-  return (
+  return createPortal(
     <div
+      ref={dialogRef}
       className="fixed inset-0 z-40 flex"
       role="dialog"
       aria-modal="true"
       aria-labelledby="drawer-title"
+      tabIndex={-1}
     >
       <button
         type="button"
@@ -1038,7 +1030,87 @@ export function Drawer({
           </footer>
         ) : null}
       </section>
-    </div>
+    </div>,
+    document.body,
+  );
+}
+
+function useDialogBehavior(open: boolean, onClose: () => void) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const previousActive =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const appRoot = document.getElementById("root");
+    const previousInert = appRoot?.getAttribute("inert") ?? null;
+    const previousAriaHidden = appRoot?.getAttribute("aria-hidden") ?? null;
+
+    appRoot?.setAttribute("inert", "");
+    appRoot?.setAttribute("aria-hidden", "true");
+
+    const focusFirst = () => {
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = getDialogFocusable(dialog);
+      const preferred = dialog.querySelector<HTMLElement>('[data-autofocus="true"]');
+      (preferred ?? focusable.at(0) ?? dialog).focus();
+    };
+    focusFirst();
+
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab") return;
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = getDialogFocusable(dialog);
+      if (focusable.length === 0) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable.at(0);
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      if (previousInert === null) appRoot?.removeAttribute("inert");
+      else appRoot?.setAttribute("inert", previousInert);
+      if (previousAriaHidden === null) appRoot?.removeAttribute("aria-hidden");
+      else appRoot?.setAttribute("aria-hidden", previousAriaHidden);
+      previousActive?.focus();
+    };
+  }, [open]);
+
+  return dialogRef;
+}
+
+function getDialogFocusable(container: HTMLElement): HTMLElement[] {
+  return Array.from(
+    container.querySelectorAll<HTMLElement>(
+      'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    ),
+  ).filter(
+    (element) => !element.hasAttribute("hidden") && element.getAttribute("aria-hidden") !== "true",
   );
 }
 

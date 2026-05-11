@@ -25,6 +25,7 @@ Set at least:
 - `PUBLIC_BASE_URL=https://auth.example.com`
 - `MASTER_KEY=<32-byte key as base64, hex, or raw 32-byte value>`
 - `DATABASE_URL` and `MIGRATE_DATABASE_URL` if not using the bundled Postgres service
+- `TRUSTED_PROXY_HEADERS=x-forwarded` when Cypra sits behind the production Caddy service
 
 ## with-tls Profile
 
@@ -34,7 +35,9 @@ Runs Cypra, Postgres, and Caddy. In this profile Caddy is the only public entryp
 docker compose --env-file .env.production -f deploy/docker-compose.yml --profile with-tls up -d
 ```
 
-Copy `.env.production.example` to `.env.production`, set `CYPRA_INSTALL_DOMAIN`, `CADDY_ACME_EMAIL`, `PUBLIC_BASE_URL`, `TRUSTED_PROXY_HEADERS=x-forwarded`, and DNS records before using this outside local testing. For wildcard tenant certificates, use `CADDY_IMAGE` with a DNS-provider-enabled Caddy build and add that provider's DNS-01 `tls` block to `Caddyfile.example`. Caddy terminates TLS and forwards requests to Cypra on the internal compose network.
+Copy `.env.production.example` to `.env.production`, set `CYPRA_INSTALL_DOMAIN`, `CADDY_ACME_EMAIL`, `PUBLIC_BASE_URL`, `TRUSTED_PROXY_HEADERS=x-forwarded`, and DNS records before using this outside local testing. Create both the install host record, for example `auth.example.com`, and wildcard tenant DNS, for example `*.auth.example.com`.
+
+For wildcard tenant certificates, use `CADDY_IMAGE` with a DNS-provider-enabled Caddy build and add that provider's DNS-01 `tls` block to `Caddyfile.example`. Caddy terminates TLS, forwards `Host` plus `X-Forwarded-*` headers to Cypra on the internal compose network, and should be the only service receiving public traffic. Do not add client-controlled trust headers or publish Cypra directly to make proxy behavior work.
 
 Never expose these services directly to the internet:
 
@@ -49,4 +52,6 @@ Only Caddy should receive public traffic in the production TLS profile.
 
 ## Storage
 
-Local disk storage is suitable for local testing and small single-host installs. Use S3-compatible storage for PaaS or hosts where local files are ephemeral.
+Local disk storage is suitable for local testing and small single-host installs when the `cypra-storage` volume is backed up. Use S3-compatible storage for PaaS, hosts where local files are ephemeral, or operators who already rely on bucket versioning and lifecycle policies.
+
+The full day-one deployment, backup, restore, upgrade, rollback, monitoring, and deployed smoke checklist lives in [`../docs/deploy/vps.md`](../docs/deploy/vps.md).

@@ -3,14 +3,17 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import axe from "axe-core";
 import { readFileSync } from "node:fs";
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { App } from "./App";
 import {
   BackupCodeGrid,
   Button,
+  Drawer,
   IdentifierPill,
   MaskedSecret,
+  Modal,
   MobileBlockedBanner,
   PrimitiveGallery,
   Skeleton,
@@ -1033,6 +1036,56 @@ describe("App", () => {
     expect(screen.getByText("Reset password")).toBeInTheDocument();
   });
 
+  it("sends tenant user invites and avoids production placeholder copy", async () => {
+    const baseFetch = dashboardFetchMock();
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (url === "/api/v1/tenants/") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              {
+                id: "00000000-0000-0000-0000-00000000acme",
+                slug: "acme",
+                name: "Acme Operations",
+                branding: { display_name: "Acme Login", powered_by: true },
+                email_provider_required: false,
+              },
+            ]),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url === "/api/v1/admin/invite" && init?.method === "POST") {
+        return Promise.resolve(new Response("", { status: 201 }));
+      }
+      return baseFetch(input, init);
+    });
+    renderApp("/dashboard/tenants/acme/users", fetchMock);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Invite user" }));
+    const inviteDialog = screen.getByRole("dialog", { name: "Invite user" });
+    await userEvent.type(within(inviteDialog).getByLabelText("Email"), "new-user@example.com");
+    await userEvent.click(within(inviteDialog).getByRole("button", { name: "Send invite" }));
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/v1/admin/invite",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          email: "new-user@example.com",
+          role: "member",
+        }),
+      }),
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: "Import via CLI" }));
+    expect(
+      screen.queryByText("Screencast placeholder lands in v1.1 docs."),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText(/validates users before writing tenant records/)).toBeInTheDocument();
+  });
+
   it("renders members, signing keys, and audit surfaces", async () => {
     const fetchMock = dashboardFetchMock();
     renderApp("/dashboard/tenants/acme/settings/members", fetchMock);
@@ -1304,6 +1357,68 @@ describe("primitives", () => {
     );
 
     expect(screen.getAllByText("Permission matrix").length).toBeGreaterThan(0);
+  });
+
+  it("traps modal focus, inerts the app root, closes on Escape, and restores focus", async () => {
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <Button onClick={() => setOpen(true)}>Open modal</Button>
+          <Modal
+            title="Keyboard modal"
+            open={open}
+            onClose={() => setOpen(false)}
+            footer={<Button>Save</Button>}
+          >
+            <TextInput label="Modal field" data-autofocus="true" />
+          </Modal>
+        </>
+      );
+    }
+    const root = document.createElement("div");
+    root.id = "root";
+    document.body.appendChild(root);
+    render(<Harness />, { container: root });
+
+    const opener = screen.getByRole("button", { name: "Open modal" });
+    opener.focus();
+    await userEvent.click(opener);
+
+    const dialog = screen.getByRole("dialog", { name: "Keyboard modal" });
+    expect(root).toHaveAttribute("inert");
+    expect(within(dialog).getByLabelText("Modal field")).toHaveFocus();
+
+    within(dialog).getByRole("button", { name: "Save" }).focus();
+    await userEvent.tab();
+    expect(within(dialog).getByRole("button", { name: "Close" })).toHaveFocus();
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Keyboard modal" })).not.toBeInTheDocument();
+    expect(root).not.toHaveAttribute("inert");
+    expect(opener).toHaveFocus();
+    root.remove();
+  });
+
+  it("applies the same keyboard close behavior to drawers", async () => {
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <Button onClick={() => setOpen(true)}>Open drawer</Button>
+          <Drawer title="Keyboard drawer" open={open} onClose={() => setOpen(false)}>
+            <Button>Drawer action</Button>
+          </Drawer>
+        </>
+      );
+    }
+    render(<Harness />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Open drawer" }));
+    expect(screen.getByRole("dialog", { name: "Keyboard drawer" })).toBeInTheDocument();
+
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Keyboard drawer" })).not.toBeInTheDocument();
   });
 });
 

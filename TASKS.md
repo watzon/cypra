@@ -217,82 +217,94 @@ Smoke failure reporting was verified before the final green run: failed workflow
 
 ## Phase R4: Operator Documentation And Recovery Playbooks
 
-**Status:** not started  
+**Status:** complete
 **Dependencies:** Phase R2, can run in parallel with Phase R3 after deployment shape is settled  
 **Deliverable:** A tester can deploy, operate, back up, restore, upgrade, rollback, and smoke-test Cypra without source-code-only guidance.
 
 ### Tasks
 
-- [ ] Expand VPS docs from first boot into complete day-one operation.
-- [ ] Document DNS requirements for install and wildcard tenant hosts.
-- [ ] Document TLS and reverse proxy setup, including trusted proxy mode and header expectations.
-- [ ] Document required and optional env vars with production-safe examples.
-- [ ] Document secret generation, storage, rotation expectations, and master-key handling.
-- [ ] Document local-disk and S3-compatible storage tradeoffs for VPS testers.
-- [ ] Document database role expectations and what the bundled Postgres service is for.
-- [ ] Add backup cadence guidance.
-- [ ] Add restore drill instructions.
-- [ ] Add export/import expectations and limitations.
-- [ ] Add storage backup expectations for local disk and S3-compatible storage.
-- [ ] Add upgrade procedure.
-- [ ] Add rollback procedure.
-- [ ] Add certificate renewal checks.
-- [ ] Add first-24-hours monitoring checklist.
-- [ ] Add deployed smoke-test checklist.
-- [ ] Make known limitations explicit and non-alarming in docs and changelog.
-- [ ] Update operator playbook sections carried forward from the legacy task plan.
+- [x] Expand VPS docs from first boot into complete day-one operation.
+- [x] Document DNS requirements for install and wildcard tenant hosts.
+- [x] Document TLS and reverse proxy setup, including trusted proxy mode and header expectations.
+- [x] Document required and optional env vars with production-safe examples.
+- [x] Document secret generation, storage, rotation expectations, and master-key handling.
+- [x] Document local-disk and S3-compatible storage tradeoffs for VPS testers.
+- [x] Document database role expectations and what the bundled Postgres service is for.
+- [x] Add backup cadence guidance.
+- [x] Add restore drill instructions.
+- [x] Add export/import expectations and limitations.
+- [x] Add storage backup expectations for local disk and S3-compatible storage.
+- [x] Add upgrade procedure.
+- [x] Add rollback procedure.
+- [x] Add certificate renewal checks.
+- [x] Add first-24-hours monitoring checklist.
+- [x] Add deployed smoke-test checklist.
+- [x] Make known limitations explicit and non-alarming in docs and changelog.
+- [x] Update operator playbook sections carried forward from the legacy task plan.
 
 ### Acceptance
 
-- [ ] A tester can deploy from docs alone on a new VPS.
-- [ ] Docs include exact commands for health, readiness, metrics, logs, backup, restore, upgrade, rollback, and smoke testing.
-- [ ] Docs state what not to expose publicly.
-- [ ] Docs state which features are beta or deferred.
-- [ ] A human dry-run records missing steps as follow-up tasks.
-- [ ] `./bin/agent-ci run --quiet --all` passes, or `bun run format` passes if this phase is docs-only and the owner accepts that gate.
+- [x] A tester can deploy from docs alone on a new VPS.
+- [x] Docs include exact commands for health, readiness, metrics, logs, backup, restore, upgrade, rollback, and smoke testing.
+- [x] Docs state what not to expose publicly.
+- [x] Docs state which features are beta or deferred.
+- [x] A human dry-run records missing steps as follow-up tasks.
+- [x] `./bin/agent-ci run --quiet --all` passes, or `bun run format` passes if this phase is docs-only and the owner accepts that gate.
 
 ### Handoff
 
-Pending.
+Phase R4 expanded the operator documentation from first-boot notes into a day-one VPS operating guide. `docs/deploy/vps.md` now covers host prerequisites, DNS, TLS/Caddy, trusted proxy headers, production env setup, secret generation and rotation expectations, storage and database choices, health/readiness/log/metrics checks, first boot, backup cadence, restore drills, export/import limits, upgrade, rollback, certificate renewal, first-24-hours monitoring, deployed smoke testing, and beta limitations. Supporting docs now align: `deploy/README.md`, `.env.production.example`, `docs/deploy/observability.md`, `docs/playbook/*`, and `CHANGELOG.md`.
+
+No PLAN.md or DESIGN.md conflict was found. This was a docs/operator phase, so no UI browser validation was required. The operator read-through dry-run found one missing restore-verification detail: the restore drill tried to use a restore HTTPS host without starting Caddy. The docs now verify the restored stack with the Cypra container healthcheck and `version --json`; no follow-up task was needed.
+
+Pre-flight root cause: the external `agent-ci` skill currently prescribes `npx @redwoodjs/agent-ci`, which failed in its container before project checks because `make` was unavailable. This repo's source of truth is consistently `./bin/agent-ci run --quiet --all` via `PLAN.md`, `TASKS.md`, and `CONTRIBUTING.md`; Bitforge local instructions were updated to prefer the repository's canonical CI command after loading the `agent-ci` skill. Verification used the repo-local gate.
+
+Verification: `bun run format` passed; `git diff --check` passed; `make lint` passed; `make typecheck` passed; final `./bin/agent-ci run --quiet --all` passed, including build, lint, format, typecheck, Go tests, coverage floors, dashboard tests, performance, image-size, and cold-start (`cold-start readyz: 145ms`).
 
 ---
 
 ## Phase R5: Dashboard UX Completion
 
-**Status:** not started  
+**Status:** complete
 **Dependencies:** Phase R1 for security-sensitive dashboard flows  
 **Deliverable:** Operator workflows contain no no-op primary actions, placeholder copy, or avoidable accessibility traps.
 
 ### Tasks
 
-- [ ] Wire the tenant user invite modal to the real invite flow, or remove it if the real flow is not meant to exist there.
-- [ ] Remove production-visible placeholder copy such as "Screencast placeholder lands in v1.1 docs."
-- [ ] Replace dev-looking project fallback values with explicit loading, empty, error, or not-configured states.
-- [ ] Ensure project tables use responsive behavior comparable to tenant tables.
-- [ ] Ensure user tables use responsive behavior comparable to tenant tables.
-- [ ] Ensure signing-key tables use responsive behavior comparable to tenant tables.
-- [ ] Ensure instance-admin tables use responsive behavior comparable to tenant tables.
-- [ ] Add modal focus trap, focus restoration, inert background behavior, and reliable Escape handling.
-- [ ] Review drawers and overlays for the same keyboard behavior.
-- [ ] Fix fixed-width command overlays for narrow screens.
-- [ ] Fix fixed-width shortcut overlays for narrow screens.
-- [ ] Ensure every destructive dashboard action has accurate copy and real backend persistence or is hidden.
-- [ ] Add regression tests for no-op primary actions and production placeholder copy.
-- [ ] Add keyboard-only tests or browser assertions for modal/drawer behavior.
+- [x] Wire the tenant user invite modal to the real invite flow, or remove it if the real flow is not meant to exist there.
+- [x] Remove production-visible placeholder copy such as "Screencast placeholder lands in v1.1 docs."
+- [x] Replace dev-looking project fallback values with explicit loading, empty, error, or not-configured states.
+- [x] Ensure project tables use responsive behavior comparable to tenant tables.
+- [x] Ensure user tables use responsive behavior comparable to tenant tables.
+- [x] Ensure signing-key tables use responsive behavior comparable to tenant tables.
+- [x] Ensure instance-admin tables use responsive behavior comparable to tenant tables.
+- [x] Add modal focus trap, focus restoration, inert background behavior, and reliable Escape handling.
+- [x] Review drawers and overlays for the same keyboard behavior.
+- [x] Fix fixed-width command overlays for narrow screens.
+- [x] Fix fixed-width shortcut overlays for narrow screens.
+- [x] Ensure every destructive dashboard action has accurate copy and real backend persistence or is hidden.
+- [x] Add regression tests for no-op primary actions and production placeholder copy.
+- [x] Add keyboard-only tests or browser assertions for modal/drawer behavior.
 
 ### Acceptance
 
-- [ ] No primary-action dashboard button silently closes a modal without doing the advertised work.
-- [ ] No placeholder copy is visible in production routes.
-- [ ] Modal and drawer behavior passes keyboard-only tests.
-- [ ] Responsive validation covers dashboard tables and overlays.
-- [ ] Dashboard tests assert no demo/fallback data appears outside explicit demo routes.
-- [ ] Visual validation observations are recorded.
-- [ ] `./bin/agent-ci run --quiet --all` passes.
+- [x] No primary-action dashboard button silently closes a modal without doing the advertised work.
+- [x] No placeholder copy is visible in production routes.
+- [x] Modal and drawer behavior passes keyboard-only tests.
+- [x] Responsive validation covers dashboard tables and overlays.
+- [x] Dashboard tests assert no demo/fallback data appears outside explicit demo routes.
+- [x] Visual validation observations are recorded.
+- [x] `./bin/agent-ci run --quiet --all` passes.
 
 ### Handoff
 
-Pending.
+Phase R5 completed the dashboard UX hardening pass. The tenant user invite action now reuses the real invite modal and posts to `/api/v1/admin/invite` instead of silently closing. Production-visible placeholder copy was removed, project issuer/client/secret fallbacks now show explicit not-configured/not-available states, and app setup snippets are hidden until both issuer URL and client ID exist. Project, user, signing-key, and instance-admin tables now opt into the existing responsive stacked-table behavior.
+
+Shared modal and drawer behavior now uses a portal-backed dialog behavior helper with Escape close, focus trap, focus restoration, `data-autofocus="true"`, and inert/`aria-hidden` background handling. The command palette and shortcut overlay now use the shared modal path, removing their fixed-width overlay shells for narrow screens. Destructive dashboard actions were reviewed against existing persistence paths and copy; no hidden no-op destructive primary action remained in scope.
+
+Visual validation used `agent-browser` against the local Vite dashboard at `http://127.0.0.1:5174` with explicit `?state=demo` fixture routes because no live backend was running for the browser pass. Narrow viewport `390x844` observations covered `/dashboard/tenants/acme/users?state=demo`, `/dashboard/tenants/acme/projects?state=demo`, `/dashboard/tenants/acme/signing-keys?state=demo`, and `/dashboard/instance/admins?state=demo`; the affected tables remained reachable and usable with the mobile navigation/banner present. The command palette opened with `Control+k`, focused the search field, displayed in the shared modal shell, and closed with Escape. The shortcut overlay opened from the floating shortcuts button, displayed in the shared modal shell, and closed with Escape. Screenshots were captured under `/var/folders/41/0kyhddh92xnfbg8nqmytvb8r0000gn/T/opencode/` for users, projects, signing keys, and instance admins. Browser axe on the active route returned `[]` violations.
+
+Regression coverage was added in `dashboard/src/App.test.tsx` for the real invite POST, absence of the removed placeholder copy, modal focus trap/inert/Escape/focus restoration behavior, drawer Escape behavior, production error/empty states without demo records, and no axe violations on the covered dashboard routes. Verification: `bun run format`, `make lint`, `make typecheck`, `go test -p 1 ./...`, and `bun run --filter dashboard test` passed; dashboard Vitest reported `44 passed` with the existing jsdom canvas/navigation warnings. Final phase gate: `./bin/agent-ci run --quiet --all` passed, including build, lint, format, typecheck, Go tests, coverage floors, dashboard tests, p99 performance, Docker image-size, and cold-start (`cold-start readyz: 215ms`).
 
 ---
 

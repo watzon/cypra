@@ -2,7 +2,7 @@
 
 ## v0.1.0 - Unreleased
 
-Cypra v0.1 is the first locally runnable release candidate of the self-hosted, multi-tenant auth platform.
+Cypra v0.1 is the first controlled external-tester release candidate of the self-hosted, multi-tenant auth platform. It is intended for technical operators who can run Docker Compose on a VPS and follow the deployment playbook.
 
 ### Added
 
@@ -11,7 +11,7 @@ Cypra v0.1 is the first locally runnable release candidate of the self-hosted, m
 - Hosted login, passkeys, password, magic-link, TOTP, backup codes, and Google upstream OAuth primitives.
 - Per-tenant OIDC provider with discovery, JWKS, authorize, token, userinfo, revoke, consent, refresh-token rotation, and reuse detection.
 - Instance-admin bootstrap, recovery, dashboard diagnostics, provider config, audit log, GDPR export/delete, backup export/import, PATs, and Go SDK.
-- Local canonical demo, Lighthouse-style baseline, critical coverage floor, and operator docs.
+- Local canonical demo, Lighthouse-style baseline, critical coverage floor, VPS deployment guide, backup/restore procedure, upgrade/rollback guidance, and operator playbooks.
 
 ### Known Limitations
 
@@ -21,4 +21,6 @@ Cypra v0.1 is the first locally runnable release candidate of the self-hosted, m
 - No built-in CNAME management.
 - No SMS/Twilio.
 - No bundled Turnstile/hCaptcha provider; the verifier seam exists for v1.1.
-- Published multi-arch image, Railway template, release tag, and deployed smoke tests are deployment-phase work.
+- Dashboard is desktop-optimized for technical operators in this tester wave.
+- Railway one-click template publication is approved as a post-tester deferral.
+- Fresh-VPS release-candidate trial evidence, including deployed smoke, metrics, tracing, and human stopwatch timing, is tracked in the readiness plan before external tester rollout.

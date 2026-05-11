@@ -6,10 +6,10 @@ These are the non-negotiables that apply across every phase of every bitforge pr
 
 ## 1. CI is the gate
 
-- **Tool:** load the `agent-ci` skill first, then run the command it prescribes for `agent-ci run --quiet --all`. Use `--pause-on-failure` when iterating locally.
+- **Tool:** load the `agent-ci` skill first, then run the repository's canonical CI command from `PLAN.md`, `TASKS.md`, `CONTRIBUTING.md`, or workspace rules. If the repository does not define one, use the command the skill prescribes for `agent-ci run --quiet --all`. Use `--pause-on-failure` when iterating locally if the selected command supports it.
 - **Rule:** every phase's Acceptance includes a CI-green check. A red CI is a stop, not a footnote.
 - **Rationale:** CI was green at the start of every phase (the previous phase's closure proved it). Any new red is caused by changes in this phase. Fix it before moving on.
-- **Anti-pattern:** rolling your own one-off "I'll just run the tests" command. Use `agent-ci`. It runs the same pipeline GitHub Actions runs, so a green local result mirrors a green push.
+- **Anti-pattern:** rolling your own one-off "I'll just run the tests" command. Use the repo's `agent-ci` gate. It runs the same pipeline GitHub Actions runs, so a green local result mirrors a green push.
 
 ## 2. Manual e2e testing
 
