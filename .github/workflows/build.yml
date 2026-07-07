@@ -108,9 +108,6 @@ jobs:
           go-version-file: go.mod
           cache: true
 
-      - name: Pull OpenID conformance suite
-        run: docker pull openid/conformance-suite:latest
-
       - name: Run seeded tenant OpenID conformance smoke
         run: |
           go test ./tests/openidconformance -run TestSeededTenantOIDCConformanceSmoke -count=1 -v
